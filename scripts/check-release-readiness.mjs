@@ -25,6 +25,16 @@ if (packageJson.license !== "MIT" || !existsSync(resolve(root, "LICENSE"))) {
 if (!existsSync(resolve(root, "README.md"))) {
   fail("README.md is required");
 }
+const requiredBundledDependencies = ["ignore", "typescript"];
+if (
+  !Array.isArray(packageJson.bundledDependencies) ||
+  packageJson.bundledDependencies.length !== requiredBundledDependencies.length ||
+  requiredBundledDependencies.some(
+    (dependency) => !packageJson.bundledDependencies.includes(dependency),
+  )
+) {
+  fail("all local-only runtime dependencies must be bundled");
+}
 
 const directDependencies = {
   ...(packageJson.dependencies ?? {}),
@@ -99,14 +109,27 @@ for (const path of expectedFiles) {
     fail(`required file missing from package: ${path}`);
   }
 }
+for (const dependency of requiredBundledDependencies) {
+  if (!packedFiles.includes(`node_modules/${dependency}/package.json`)) {
+    fail("a bundled runtime dependency is missing from the package");
+  }
+}
 for (const path of packedFiles) {
-  const allowed = path === "package.json" || path === "README.md" || path === "LICENSE" || path.startsWith("dist/");
+  const allowed =
+    path === "package.json" ||
+    path === "README.md" ||
+    path === "LICENSE" ||
+    path.startsWith("dist/") ||
+    requiredBundledDependencies.some((dependency) =>
+      path.startsWith(`node_modules/${dependency}/`),
+    );
   if (!allowed) {
     fail(`unexpected package file: ${path}`);
   }
   if (
     path.startsWith("src/") ||
     path.startsWith("test/") ||
+    path.includes("/test/") ||
     path.includes("fixture") ||
     path.includes("cache") ||
     path.endsWith(".map")
@@ -124,8 +147,18 @@ const prohibitedRuntimeSyntax = [
 ];
 for (const path of packedFiles.filter((item) => item.endsWith(".js"))) {
   const text = readFileSync(resolve(root, path), "utf8");
-  if (prohibitedRuntimeSyntax.some((pattern) => pattern.test(text))) {
+  const isConstrainedLocalViewer =
+    path === "dist/viewer/server.js" &&
+    text.includes('const LOOPBACK_HOST = "127.0.0.1";') &&
+    text.includes("server.listen({ host: LOOPBACK_HOST, port });");
+  const applicableSyntax = isConstrainedLocalViewer
+    ? prohibitedRuntimeSyntax.filter((pattern) => !pattern.test('from "node:http"'))
+    : prohibitedRuntimeSyntax;
+  if (applicableSyntax.some((pattern) => pattern.test(text))) {
     fail(`network-capable runtime syntax found in package file: ${path}`);
+  }
+  if (path === "dist/viewer/server.js" && !isConstrainedLocalViewer) {
+    fail("local viewer must bind its HTTP server to fixed IPv4 loopback");
   }
 }
 

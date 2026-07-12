@@ -22,6 +22,7 @@ import {
   parseClosedProvisioningModel,
   parseInventorySnapshot,
 } from "../src/binding-adapters/parser.js";
+import { MAX_PROVISIONING_RAW_ENTRIES } from "../src/safety/provisioning-budget.js";
 import { resolveParsedBindingCandidates } from "../src/binding-adapters/resolution-port.js";
 
 interface CapturedFacts {
@@ -387,4 +388,142 @@ test("Core bridge preserves expected coverage input IDs for closed-model complet
   assert.equal(expectedInput?.inputId, "kubernetes-production-binding-input");
   assert.equal(expectedInput?.domain, "binding");
   assert.deepEqual(expectedInput?.extensions, ["extension-yaml"]);
+});
+
+test("oversized binding candidates stop before indexed entries and retain one unknown-scope gap", () => {
+  const candidates = new Array<unknown>(MAX_PROVISIONING_RAW_ENTRIES + 1);
+  Object.defineProperty(candidates, MAX_PROVISIONING_RAW_ENTRIES, {
+    enumerable: true,
+    get() {
+      throw new Error("must not read an out-of-budget candidate");
+    },
+  });
+  const { builder, captured } = createBuilder();
+
+  const result = parseBindingManifest(
+    {
+      schemaVersion: BINDING_MANIFEST_SCHEMA_VERSION,
+      inputId: "oversized-binding-input",
+      adapterId: "manifest-adapter",
+      candidates,
+    },
+    builder,
+  );
+
+  assert.deepEqual(result.diagnostics, [{ code: "input-entry-limit-exceeded", path: [] }]);
+  assert.equal(result.candidates.length, 0);
+  assert.equal(result.coverageGaps.length, 1);
+  assert.deepEqual(result.coverageGaps[0]?.potentiallyAffects, {
+    stage: { kind: "unknown" },
+    condition: { kind: "unknown" },
+  });
+  assert.equal(captured.candidates.length, 0);
+  assert.equal(captured.gaps.length, 1);
+});
+
+test("oversized inventory items retain no snapshot and emit one fixed incomplete gap", () => {
+  const { builder, captured } = createBuilder();
+  const result = parseInventorySnapshot(
+    {
+      schemaVersion: INVENTORY_SNAPSHOT_SCHEMA_VERSION,
+      inputId: "oversized-inventory-input",
+      authorityId: "aws-account-123-us-east-1",
+      asOf: "2026-07-12T00:00:00Z",
+      items: new Array(MAX_PROVISIONING_RAW_ENTRIES + 1),
+    },
+    builder,
+  );
+
+  assert.equal(result.snapshot, undefined);
+  assert.deepEqual(result.diagnostics, [{ code: "input-entry-limit-exceeded", path: [] }]);
+  assert.equal(result.coverageGaps.length, 1);
+  assert.equal(result.coverageGaps[0]?.domain, "inventory");
+  assert.equal(captured.snapshots.length, 0);
+});
+
+test("a nested closed-model selector flood is discarded before any model materialization", () => {
+  const { builder, captured } = createBuilder();
+  const oversizedStages = new Array<unknown>(MAX_PROVISIONING_RAW_ENTRIES + 1);
+  Object.defineProperty(oversizedStages, MAX_PROVISIONING_RAW_ENTRIES, {
+    enumerable: true,
+    get() {
+      throw new Error("must not read an out-of-budget nested selector entry");
+    },
+  });
+  const result = parseClosedProvisioningModel(
+    {
+      ...closedModelWithExpectedInputs([]),
+      scopes: [
+        {
+          scope: {
+            ...runtimeScope(),
+            stage: { kind: "exact", values: oversizedStages },
+          },
+          declaredStages: ["production"],
+          closed: true,
+          approvedFirstPartyRoots: ["apps-api"],
+          bindingRoots: ["deploy"],
+          expectedAdapterInputs: [],
+          permittedExclusions: [],
+          inventoryAuthorities: [
+            { authorityId: "aws-account-123-us-east-1", inventoryInputId: "aws-production-export" },
+          ],
+          allowedExternalMechanisms: [],
+          outsideRootImports: "out-of-scope",
+        },
+      ],
+    },
+    builder,
+  );
+
+  assert.equal(result.model, undefined);
+  assert.deepEqual(result.diagnostics, [{ code: "input-entry-limit-exceeded", path: [] }]);
+  assert.equal(result.coverageGaps.length, 1);
+  assert.equal(captured.models.length, 0);
+});
+
+test("raw entry accounting is shared across nested arrays and stops before the next getter", () => {
+  const stages = Array.from(
+    { length: MAX_PROVISIONING_RAW_ENTRIES - 1 },
+    (_, index) => "stage" + String(index),
+  );
+  const executionUnitIds = new Array<unknown>(1);
+  Object.defineProperty(executionUnitIds, 0, {
+    enumerable: true,
+    get() {
+      throw new Error("must not read beyond the shared raw-entry budget");
+    },
+  });
+  const candidate = {
+    ...validCandidate(),
+    scope: { ...runtimeScope(), stage: { kind: "exact", values: stages } },
+    appliesWhen: { ...runtimeSelector(), executionUnitIds },
+  };
+  const { builder, captured } = createBuilder();
+
+  const result = parseBindingManifest(
+    {
+      schemaVersion: BINDING_MANIFEST_SCHEMA_VERSION,
+      inputId: "nested-entry-budget-binding-input",
+      adapterId: "manifest-adapter",
+      candidates: [candidate],
+    },
+    builder,
+  );
+
+  assert.deepEqual(result.diagnostics, [{ code: "input-entry-limit-exceeded", path: [] }]);
+  assert.equal(result.coverageGaps.length, 1);
+  assert.equal(captured.candidates.length, 0);
+});
+
+test("closed models cap finite key domains at 100 before Core materialization", () => {
+  const { builder, captured } = createBuilder();
+  const result = parseClosedProvisioningModel(
+    { ...closedModelWithExpectedInputs([]), maxFiniteKeyDomain: 101 },
+    builder,
+  );
+
+  assert.equal(result.model, undefined);
+  assert.equal(result.diagnostics.some(({ code }) => code === "model-domain-over-budget"), true);
+  assert.equal(captured.models.length, 0);
 });

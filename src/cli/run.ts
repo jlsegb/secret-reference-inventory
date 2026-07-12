@@ -5,8 +5,10 @@ const HELP_TEXT = `secret-usage — local static secret-reference inventory
 
 Usage:
   secret-usage scan <root> [--format terminal|json|sarif] [--out <path>] [--require-complete]
-  secret-usage reconcile (--root <root> | --scan-report <file>) --inventory <file> --bindings <file> [--closed-model <file>] [--require-complete]
+  secret-usage reconcile (--root <root> | --scan-report <file>) --inventory <file> --bindings <file> [--closed-model <file> --verification-base <absolute-directory>] [--require-complete]
   secret-usage explain <logical-key> [--scan-report <file>]
+  secret-usage workspace scan --manifest <file> [--format terminal|json] [--out <path>] [--require-complete]
+  secret-usage ui --manifest <file> [--port <0-65535>] [--require-complete]
 `;
 
 const DEFAULT_IO: CliIo = {

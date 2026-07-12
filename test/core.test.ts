@@ -154,6 +154,10 @@ test("typed demand/binding/inventory joins preserve provisioned-but-unread resou
   );
   assert.equal(databaseDemand?.binding, "exact-declared");
   assert.equal(databaseDemand?.inventory, "bound");
+  assert.equal(
+    databaseDemand?.kind === "demand" && "items" in databaseDemand.inventorySnapshot!,
+    false,
+  );
 
   const legacyInventory = result.records.find(
     (record) =>
@@ -162,6 +166,52 @@ test("typed demand/binding/inventory joins preserve provisioned-but-unread resou
   );
   assert.equal(legacyInventory?.inventory, "inventory-listed-no-static-read");
   assert.equal(legacyInventory?.disposition, "review");
+});
+
+test("Core indexes 10k distinct slots and matching/nonmatching inventory without pairwise scans", () => {
+  const api = scope();
+  const count = 10_000;
+  const matching = Array.from({ length: count / 2 }, (_, index) =>
+    candidate(api, key("MATCHING_KEY_" + String(index)), "matching-resource-" + String(index)),
+  );
+  const legacy = Array.from({ length: count / 2 }, (_, index) =>
+    candidate(api, key("LEGACY_KEY_" + String(index)), "legacy-resource-" + String(index)),
+  );
+  const references = matching.map((entry, index) =>
+    reference(String(entry.destination.name), "reference-matching-" + String(index)),
+  );
+  const demandEdges = references.map((entry) => demand(api, String(entry.id)));
+  const started = Date.now();
+  const result = reconcileFacts({
+    references,
+    demandEdges,
+    candidates: [...matching, ...legacy],
+    snapshots: [inventory(...matching, ...legacy)],
+  });
+  const elapsed = Date.now() - started;
+
+  assert.equal(
+    result.records.filter((record) => record.kind === "demand").length,
+    matching.length,
+  );
+  assert.equal(
+    result.records.filter((record) => record.kind === "inventory").length,
+    count,
+  );
+  const firstMatchingDemand = result.records.find(
+    (record) => record.kind === "demand" && record.key.name === "MATCHING_KEY_0",
+  );
+  assert.equal(firstMatchingDemand?.binding, "exact-declared");
+  assert.equal(firstMatchingDemand?.inventory, "bound");
+  const firstLegacyInventory = result.records.find(
+    (record) =>
+      record.kind === "inventory" &&
+      record.providerResourceId.canonicalId === "legacy-resource-0",
+  );
+  assert.equal(firstLegacyInventory?.inventory, "inventory-listed-no-static-read");
+  // This catches a regression to the former 10k × 10k candidate/item walk
+  // without making timing the source of correctness.
+  assert.ok(elapsed < 5_000, "expected indexed reconciliation, received " + String(elapsed) + "ms");
 });
 
 test("finite dynamic keys block only their own inventory candidates", () => {

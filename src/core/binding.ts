@@ -1,7 +1,6 @@
 import {
   logicalKeyEquals,
   scopeCovers,
-  scopesEquivalent,
   stagesMayOverlap,
 } from "./equality.js";
 import type {
@@ -17,7 +16,7 @@ import type {
 } from "./types.js";
 
 /** Bound symbolic partitioning prevents an adapter manifest from exploding work. */
-const MAX_CONDITION_PARTITIONS = 256;
+export const MAX_CONDITION_PARTITIONS = 256;
 
 interface ConditionDomain {
   readonly key: SafeIdentifier;
@@ -34,24 +33,54 @@ type ConditionAssignment = ReadonlyMap<SafeIdentifier, SafeIdentifier | undefine
 export function resolveBindingCandidates(
   candidates: readonly BindingCandidate[],
 ): readonly BindingResolution[] {
-  const slots: BindingCandidate[][] = [];
+  // `scopesEquivalent` and `logicalKeyEquals` make unknown dimensions opaque,
+  // so only fully comparable candidates enter a shared Map slot. This retains
+  // the old first-seen slot and candidate ordering while avoiding a quadratic
+  // `slots.find(...)` walk for large manifests with distinct destinations.
+  const slots = new Map<string, BindingCandidate[]>();
 
-  for (const candidate of candidates) {
-    const slot = slots.find(
-      (existing) =>
-        existing[0] !== undefined &&
-        scopesEquivalent(existing[0].scope, candidate.scope) &&
-        logicalKeyEquals(existing[0].destination, candidate.destination),
-    );
-
+  for (const [index, candidate] of candidates.entries()) {
+    const key = bindingSlotKey(candidate, index);
+    const slot = slots.get(key);
     if (slot === undefined) {
-      slots.push([candidate]);
+      slots.set(key, [candidate]);
     } else {
       slot.push(candidate);
     }
   }
 
-  return slots.flatMap((slot) => resolveSlot(slot));
+  return [...slots.values()].flatMap((slot) => resolveSlot(slot));
+}
+
+/**
+ * A Map key only groups candidates that the old equality predicate could
+ * group. Any opaque component gets a distinct slot: Core must not infer that
+ * two unknown scopes or opaque logical-key names are equal.
+ */
+function bindingSlotKey(candidate: BindingCandidate, index: number): string {
+  const { scope, destination } = candidate;
+  if (
+    typeof destination.name !== "string" ||
+    scope.phase === "unknown" ||
+    scope.channel === "unknown" ||
+    scope.stage.kind === "unknown"
+  ) {
+    return `opaque:${index}`;
+  }
+
+  const stage = scope.stage.kind === "all"
+    ? ["all"]
+    : ["exact", ...new Set(scope.stage.values)].sort();
+  // JSON encoding avoids a delimiter ambiguity if safe-identifier grammar is
+  // widened in a future schema revision.
+  return JSON.stringify([
+    scope.id,
+    scope.phase,
+    scope.channel,
+    stage,
+    destination.namespace,
+    destination.name,
+  ]);
 }
 
 /** Returns every exact, selected candidate whose resolution covers a demand scope. */
@@ -249,19 +278,104 @@ function resolveFiniteConditionPartition(
 function resolveOverlappingSelectorGroups(
   slot: readonly BindingCandidate[],
 ): readonly BindingResolution["partitions"][number][] {
-  const groups: BindingCandidate[][] = [];
+  interface SelectorGroup {
+    readonly candidates: BindingCandidate[];
+    readonly order: number;
+    /** Present only for a selector whose equality relation is symmetric. */
+    readonly canonicalKey?: string;
+  }
+  const groups: SelectorGroup[] = [];
+  const canonicalGroups = new Map<string, SelectorGroup>();
+  const nonCanonicalGroups: SelectorGroup[] = [];
   for (const candidate of slot) {
-    const group = groups.find(
-      (existing) =>
-        existing[0] !== undefined && selectorsEquivalent(existing[0].appliesWhen, candidate.appliesWhen),
-    );
-    if (group === undefined) {
-      groups.push([candidate]);
+    const canonical = selectorIsCanonical(candidate.appliesWhen);
+    const key = canonical ? selectorGroupKey(candidate.appliesWhen) : undefined;
+    const indexed = key === undefined ? undefined : canonicalGroups.get(key);
+    let group: SelectorGroup | undefined;
+    if (key === undefined) {
+      // The public Core API accepts normalized facts directly. Preserve the
+      // legacy asymmetric duplicate-array behavior for malformed direct facts
+      // rather than changing a grouping result in the name of optimization.
+      group = groups.find(
+        (existing) =>
+          existing.candidates[0] !== undefined &&
+          selectorsEquivalent(existing.candidates[0].appliesWhen, candidate.appliesWhen),
+      );
     } else {
-      group.push(candidate);
+      // A canonical selector can only equal the identically keyed canonical
+      // group, but an earlier duplicate-bearing group may directionally match
+      // it under the historical predicate. Check those exceptional groups in
+      // declaration order before taking the O(1) canonical bucket.
+      for (const existing of nonCanonicalGroups) {
+        if (indexed !== undefined && existing.order > indexed.order) break;
+        if (
+          existing.candidates[0] !== undefined &&
+          selectorsEquivalent(existing.candidates[0].appliesWhen, candidate.appliesWhen)
+        ) {
+          group = existing;
+          break;
+        }
+      }
+      group ??= indexed;
+    }
+    if (group === undefined) {
+      const next: SelectorGroup = {
+        candidates: [candidate],
+        order: groups.length,
+        ...(key === undefined ? {} : { canonicalKey: key }),
+      };
+      groups.push(next);
+      if (key !== undefined) {
+        canonicalGroups.set(key, next);
+      } else {
+        nonCanonicalGroups.push(next);
+      }
+    } else {
+      group.candidates.push(candidate);
     }
   }
-  return groups.map((group) => resolvePartition(group, slot));
+  return groups.map((group) => resolvePartition(group.candidates, slot));
+}
+
+function selectorGroupKey(selector: ScopeSelector): string {
+  const values = (input: readonly string[] | undefined): readonly string[] | undefined =>
+    input === undefined ? undefined : [...input].sort();
+  const stage = selector.stage.kind === "exact"
+    ? ["exact", ...[...selector.stage.values].sort()]
+    : [selector.stage.kind];
+  const condition = selector.condition.kind === "all"
+    ? [
+        "all",
+        ...selector.condition.clauses
+          .map((clause) => [clause.key, clause.operator, clause.value])
+          .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right))),
+      ]
+    : [selector.condition.kind];
+  return JSON.stringify([
+    values(selector.executionUnitIds),
+    values(selector.phases),
+    stage,
+    values(selector.channels),
+    condition,
+  ]);
+}
+
+function selectorIsCanonical(selector: ScopeSelector): boolean {
+  const unique = (values: readonly string[] | undefined): boolean =>
+    values === undefined || new Set(values).size === values.length;
+  if (
+    !unique(selector.executionUnitIds) ||
+    !unique(selector.phases) ||
+    !unique(selector.channels) ||
+    (selector.stage.kind === "exact" && !unique(selector.stage.values))
+  ) {
+    return false;
+  }
+  if (selector.condition.kind !== "all") return true;
+  const clauses = selector.condition.clauses.map(
+    (clause) => JSON.stringify([clause.key, clause.operator, clause.value]),
+  );
+  return new Set(clauses).size === clauses.length;
 }
 
 function resolvePartition(

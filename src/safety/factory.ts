@@ -48,6 +48,10 @@ import {
   type SafeTimestamp,
   type SanitizedDiagnostic,
 } from "./types.js";
+import {
+  MAX_CLOSED_MODEL_FINITE_KEYS,
+  provisioningInputFitsBudget,
+} from "./provisioning-budget.js";
 
 /**
  * Version included by callers in cache identity.  Changes to a grammar,
@@ -127,7 +131,11 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     }
 
     const maxFiniteKeyDomain = options.maxFiniteKeyDomain ?? 100;
-    if (!Number.isSafeInteger(maxFiniteKeyDomain) || maxFiniteKeyDomain < 1) {
+    if (
+      !Number.isSafeInteger(maxFiniteKeyDomain) ||
+      maxFiniteKeyDomain < 1 ||
+      maxFiniteKeyDomain > MAX_CLOSED_MODEL_FINITE_KEYS
+    ) {
       throw new SafetyConfigurationError("INVALID_MAX_FINITE_KEY_DOMAIN");
     }
 
@@ -271,6 +279,9 @@ export class SafeFactFactory implements FullCoreFactBuilder {
   public materializeBindingCandidate(
     input: unknown,
   ): FactMaterialization<BindingCandidate> {
+    if (!provisioningInputFitsBudget(input)) {
+      return materializationFailure(this, "PROVISIONING_INPUT_ENTRY_LIMIT_EXCEEDED");
+    }
     const record = asRecord(input);
     if (record === undefined) {
       return materializationFailure(this, "INVALID_BINDING_CANDIDATE");
@@ -338,6 +349,9 @@ export class SafeFactFactory implements FullCoreFactBuilder {
   public materializeInventorySnapshot(
     input: unknown,
   ): FactMaterialization<InventorySnapshot> {
+    if (!provisioningInputFitsBudget(input)) {
+      return materializationFailure(this, "PROVISIONING_INPUT_ENTRY_LIMIT_EXCEEDED");
+    }
     const record = asRecord(input);
     if (record === undefined || !Array.isArray(record.items)) {
       return materializationFailure(this, "INVALID_INVENTORY_SNAPSHOT");
@@ -351,7 +365,8 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     }
 
     const items: InventoryItem[] = [];
-    for (const itemInput of record.items) {
+    for (let index = 0; index < record.items.length; index += 1) {
+      const itemInput = record.items[index];
       const item = asRecord(itemInput);
       const providerResourceId = item === undefined
         ? undefined
@@ -387,6 +402,9 @@ export class SafeFactFactory implements FullCoreFactBuilder {
    * intentionally has only demand/binding/inventory coverage domains.
    */
   public materializeCoverageGap(input: unknown): FactMaterialization<CoverageGap> {
+    if (!provisioningInputFitsBudget(input)) {
+      return materializationFailure(this, "PROVISIONING_INPUT_ENTRY_LIMIT_EXCEEDED");
+    }
     const record = asRecord(input);
     if (record === undefined) {
       return materializationFailure(this, "INVALID_COVERAGE_GAP");
@@ -434,6 +452,9 @@ export class SafeFactFactory implements FullCoreFactBuilder {
   public materializeClosedModel(
     input: unknown,
   ): FactMaterialization<ClosedProvisioningModel> {
+    if (!provisioningInputFitsBudget(input)) {
+      return materializationFailure(this, "PROVISIONING_INPUT_ENTRY_LIMIT_EXCEEDED");
+    }
     const record = asRecord(input);
     if (record === undefined || !Array.isArray(record.scopes)) {
       return materializationFailure(this, "INVALID_CLOSED_MODEL");
@@ -450,13 +471,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
       modelInputId === undefined ||
       typeof maxFiniteKeyDomain !== "number" ||
       !Number.isSafeInteger(maxFiniteKeyDomain) ||
-      maxFiniteKeyDomain < 1
+      maxFiniteKeyDomain < 1 ||
+      maxFiniteKeyDomain > this.#maxFiniteKeyDomain
     ) {
       return materializationFailure(this, "INVALID_CLOSED_MODEL");
     }
 
     const scopes: ClosedScope[] = [];
-    for (const scopeInput of record.scopes) {
+    for (let index = 0; index < record.scopes.length; index += 1) {
+      const scopeInput = record.scopes[index];
       const scopeRecord = asRecord(scopeInput);
       if (
         scopeRecord === undefined ||

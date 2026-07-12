@@ -7,6 +7,7 @@ import {
   SafeFactFactory,
   SafetyConfigurationError,
 } from "../src/safety/index.js";
+import { MAX_PROVISIONING_RAW_ENTRIES } from "../src/safety/provisioning-budget.js";
 
 const SENTINEL = "sk_live_SENTINEL_DO_NOT_EMIT_123456789";
 
@@ -191,4 +192,31 @@ test("closed models retain coverage metadata but never promote unproven dynamic 
   const missingInputId = structuredClone(closedModel);
   delete (missingInputId.scopes[0]!.expectedAdapterInputs[0] as { inputId?: string }).inputId;
   assert.equal(factory.materializeClosedModel(missingInputId).ok, false);
+});
+
+test("public provisioning materializers reject an oversized sparse inventory before getters run", () => {
+  const items = new Array<unknown>(MAX_PROVISIONING_RAW_ENTRIES + 1);
+  Object.defineProperty(items, MAX_PROVISIONING_RAW_ENTRIES, {
+    enumerable: true,
+    get() {
+      throw new Error("must not materialize an out-of-budget inventory item");
+    },
+  });
+  const factory = new SafeFactFactory();
+  const result = factory.materializeInventorySnapshot({
+    inputId: "oversized-inventory-input",
+    authorityId: "aws-prod",
+    asOf: "2026-07-12T00:00:00Z",
+    items,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(JSON.stringify(result).includes(SENTINEL), false);
+});
+
+test("SafeFactFactory never accepts a finite-domain cap above the provisioning maximum", () => {
+  assert.throws(
+    () => new SafeFactFactory({ maxFiniteKeyDomain: 101 }),
+    (error: unknown) => error instanceof SafetyConfigurationError,
+  );
 });

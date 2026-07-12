@@ -1,12 +1,10 @@
 import {
   bindingResolutionStatusFor,
-  effectiveBindingCandidatesFor,
 } from "./binding.js";
 import { validateDynamicLookupEdge, type DynamicValidationResult } from "./dynamic.js";
 import {
   logicalKeyEquals,
   logicalKeySortKey,
-  providerResourceEquals,
   safeKeyPatternMatches,
   selectorCoversScope,
   selectorMayAffectScope,
@@ -56,6 +54,29 @@ interface CoverageAssessment {
   readonly gapIds: readonly SafeIdentifier[];
 }
 
+/**
+ * Invocation-local relation indexes. They deliberately retain insertion order
+ * inside each bucket so record ordering remains byte-for-byte compatible with
+ * the previous linear scans.
+ */
+interface ReconciliationIndexes {
+  readonly candidateById: ReadonlyMap<SafeIdentifier, BindingCandidate>;
+  readonly candidatesByDestination: ReadonlyMap<string, readonly BindingCandidate[]>;
+  readonly bindingResolutionsByDestination: ReadonlyMap<
+    string,
+    readonly ReconciliationInput["bindingResolutions"][number][]
+  >;
+  readonly bindingResolutionsByScopeDestination: ReadonlyMap<
+    string,
+    readonly ReconciliationInput["bindingResolutions"][number][]
+  >;
+  readonly inventoryByResource: ReadonlyMap<string, readonly InventoryMatch[]>;
+  readonly demandsByScopeAndKey: ReadonlyMap<string, readonly InternalDemand[]>;
+  readonly demandsByKey: ReadonlyMap<string, readonly InternalDemand[]>;
+  readonly scopeCoverageByScope: ReadonlyMap<string, ScopeCoverage>;
+  readonly targetStatusesByScope: ReadonlyMap<string, TargetDiscoveryStatus>;
+}
+
 const DIRECT_DEMANDS = new Set(["direct-read", "eager-validation"] as const);
 
 /**
@@ -83,10 +104,16 @@ export function reconcile(
   const demands = collectDemands(input, normalizedDynamic);
   const knownScopes = collectScopes(input, demands, normalizedDynamic);
   const scopeCoverage = knownScopes.map((scope) => buildScopeCoverage(scope, input.coverageGaps ?? []));
+  const indexes = buildReconciliationIndexes(input, demands, scopeCoverage);
   const demandRecords = demands.map((demand) =>
-    reconcileDemand(demand, input, normalizedDynamic, scopeCoverage),
+    reconcileDemand(demand, input, normalizedDynamic, scopeCoverage, indexes),
   );
-  const inventoryRecords = reconcileInventory(input, demands, normalizedDynamic, scopeCoverage);
+  const inventoryRecords = reconcileInventory(
+    input,
+    normalizedDynamic,
+    scopeCoverage,
+    indexes,
+  );
   const dynamicRecords = normalizedDynamic.map((dynamic) =>
     reconcileDynamic(dynamic, input, scopeCoverage),
   );
@@ -95,12 +122,229 @@ export function reconcile(
   return { records, scopeCoverage };
 }
 
+function buildReconciliationIndexes(
+  input: ReconciliationInput,
+  demands: readonly InternalDemand[],
+  scopeCoverage: readonly ScopeCoverage[],
+): ReconciliationIndexes {
+  const candidateById = new Map<SafeIdentifier, BindingCandidate>();
+  const candidatesByDestination = new Map<string, BindingCandidate[]>();
+  for (const candidate of input.bindingCandidates) {
+    candidateById.set(candidate.id, candidate);
+    const destination = logicalKeyIndexKey(candidate.destination);
+    if (destination !== undefined) {
+      appendIndex(candidatesByDestination, destination, candidate);
+    }
+  }
+
+  const bindingResolutionsByDestination = new Map<
+    string,
+    ReconciliationInput["bindingResolutions"][number][]
+  >();
+  const bindingResolutionsByScopeDestination = new Map<
+    string,
+    ReconciliationInput["bindingResolutions"][number][]
+  >();
+  for (const resolution of input.bindingResolutions) {
+    const destination = logicalKeyIndexKey(resolution.destination);
+    if (destination === undefined) continue;
+    appendIndex(bindingResolutionsByDestination, destination, resolution);
+    const scopeDestination = scopeAndLogicalKey(resolution.scope, resolution.destination);
+    if (scopeDestination !== undefined) {
+      appendIndex(bindingResolutionsByScopeDestination, scopeDestination, resolution);
+    }
+  }
+
+  const inventoryByResource = new Map<string, InventoryMatch[]>();
+  for (const snapshot of input.inventorySnapshots) {
+    for (const item of snapshot.items) {
+      appendIndex(inventoryByResource, providerResourceKey(item.providerResourceId), {
+        snapshot: { authorityId: snapshot.authorityId, asOf: snapshot.asOf },
+        sourceSnapshot: snapshot,
+        item,
+      });
+    }
+  }
+
+  const demandsByScopeAndKey = new Map<string, InternalDemand[]>();
+  const demandsByKey = new Map<string, InternalDemand[]>();
+  for (const demand of demands) {
+    const key = logicalKeyIndexKey(demand.key);
+    if (key !== undefined) {
+      appendIndex(demandsByKey, key, demand);
+    }
+    const scoped = scopeAndLogicalKey(demand.scope, demand.key);
+    if (scoped !== undefined) {
+      appendIndex(demandsByScopeAndKey, scoped, demand);
+    }
+  }
+
+  const scopeCoverageByScope = new Map<string, ScopeCoverage>();
+  for (const coverage of scopeCoverage) {
+    const key = executionScopeIndexKey(coverage.scope);
+    if (key !== undefined && !scopeCoverageByScope.has(key)) {
+      scopeCoverageByScope.set(key, coverage);
+    }
+  }
+
+  const targetStatusesByScope = new Map<string, TargetDiscoveryStatus>();
+  for (const status of input.targetStatuses ?? []) {
+    const key = executionScopeIndexKey(status.scope);
+    // `.find(...)` previously selected the first equivalent status.
+    if (key !== undefined && !targetStatusesByScope.has(key)) {
+      targetStatusesByScope.set(key, status.status);
+    }
+  }
+
+  return {
+    candidateById,
+    candidatesByDestination,
+    bindingResolutionsByDestination,
+    bindingResolutionsByScopeDestination,
+    inventoryByResource,
+    demandsByScopeAndKey,
+    demandsByKey,
+    scopeCoverageByScope,
+    targetStatusesByScope,
+  };
+}
+
+function appendIndex<T>(map: Map<string, T[]>, key: string, value: T): void {
+  const values = map.get(key);
+  if (values === undefined) {
+    map.set(key, [value]);
+  } else {
+    values.push(value);
+  }
+}
+
+function logicalKeyIndexKey(key: LogicalKey): string | undefined {
+  return typeof key.name === "string" ? JSON.stringify([key.namespace, key.name]) : undefined;
+}
+
+function executionScopeIndexKey(scope: ExecutionScope): string | undefined {
+  if (
+    scope.phase === "unknown" ||
+    scope.channel === "unknown" ||
+    scope.stage.kind === "unknown"
+  ) {
+    return undefined;
+  }
+  const stage = scope.stage.kind === "all"
+    ? ["all"]
+    : ["exact", ...new Set(scope.stage.values)].sort();
+  // Component identity intentionally does not participate: Core's
+  // `scopeCovers`/`scopesEquivalent` relation is defined by execution ID,
+  // phase, channel, and stage coverage only.
+  return JSON.stringify([scope.id, scope.phase, scope.channel, stage]);
+}
+
+function scopeAndLogicalKey(scope: ExecutionScope, key: LogicalKey): string | undefined {
+  const scopeKey = executionScopeIndexKey(scope);
+  const logicalKey = logicalKeyIndexKey(key);
+  return scopeKey === undefined || logicalKey === undefined
+    ? undefined
+    : JSON.stringify([scopeKey, logicalKey]);
+}
+
+function providerResourceKey(resource: {
+  readonly authorityId: SafeIdentifier;
+  readonly canonicalId: SafeIdentifier;
+}): string {
+  return JSON.stringify([resource.authorityId, resource.canonicalId]);
+}
+
+function candidatesForDemand(
+  demand: InternalDemand,
+  indexes: ReconciliationIndexes,
+): readonly BindingCandidate[] {
+  const key = logicalKeyIndexKey(demand.key);
+  return key === undefined ? [] : indexes.candidatesByDestination.get(key) ?? [];
+}
+
+function resolutionsForDemand(
+  demand: InternalDemand,
+  indexes: ReconciliationIndexes,
+): readonly ReconciliationInput["bindingResolutions"][number][] {
+  const destination = logicalKeyIndexKey(demand.key);
+  if (destination === undefined) return [];
+  const all = indexes.bindingResolutionsByDestination.get(destination) ?? [];
+  const scoped = scopeAndLogicalKey(demand.scope, demand.key);
+  const exact = scoped === undefined
+    ? undefined
+    : indexes.bindingResolutionsByScopeDestination.get(scoped);
+  // The exact bucket can replace the destination bucket only when it contains
+  // every possible resolution. Otherwise a broader-stage resolution may still
+  // cover the demand and the original declaration order must be retained.
+  return exact !== undefined && exact.length === all.length ? exact : all;
+}
+
+function effectiveCandidatesForDemand(
+  demand: InternalDemand,
+  indexes: ReconciliationIndexes,
+): readonly BindingCandidate[] {
+  const selected: BindingCandidate[] = [];
+  const seen = new Set<SafeIdentifier>();
+  for (const resolution of resolutionsForDemand(demand, indexes)) {
+    if (
+      !scopeCovers(resolution.scope, demand.scope) ||
+      !logicalKeyEquals(resolution.destination, demand.key)
+    ) {
+      continue;
+    }
+    for (const partition of resolution.partitions) {
+      if (partition.outcome !== "effective" || !selectorCoversScope(partition.appliesWhen, demand.scope)) {
+        continue;
+      }
+      const effective = partition.selections.filter(
+        (selection) => selection.status === "effective",
+      );
+      if (effective.length !== 1 || effective[0] === undefined) {
+        continue;
+      }
+      const candidate = indexes.candidateById.get(effective[0].candidateId);
+      if (
+        candidate !== undefined &&
+        candidate.resolution === "exact" &&
+        !seen.has(candidate.id)
+      ) {
+        seen.add(candidate.id);
+        selected.push(candidate);
+      }
+    }
+  }
+  return selected;
+}
+
+function matchingDemandForCandidate(
+  candidate: BindingCandidate,
+  indexes: ReconciliationIndexes,
+): InternalDemand | undefined {
+  const destination = logicalKeyIndexKey(candidate.destination);
+  if (destination === undefined) return undefined;
+  // Every InternalDemand has a string environment key, so a missing indexed
+  // destination proves there is no matching demand; do not rescan all demands
+  // for every provisioned-but-unread inventory candidate.
+  const all = indexes.demandsByKey.get(destination) ?? [];
+  const scoped = scopeAndLogicalKey(candidate.scope, candidate.destination);
+  const exact = scoped === undefined
+    ? undefined
+    : indexes.demandsByScopeAndKey.get(scoped);
+  const candidates = exact !== undefined && exact.length === all.length ? exact : all;
+  return candidates.find(
+    (demand) =>
+      scopeCovers(candidate.scope, demand.scope) &&
+      logicalKeyEquals(candidate.destination, demand.key),
+  );
+}
+
 function collectDemands(
   input: ReconciliationInput,
   dynamic: readonly DynamicValidationResult[],
 ): readonly InternalDemand[] {
   const referenceById = new Map(input.references.map((reference) => [reference.id, reference]));
   const demands: InternalDemand[] = [];
+  const demandIndexes = new Map<string, number>();
 
   for (const edge of input.demandEdges) {
     const reference = referenceById.get(edge.referenceId);
@@ -112,7 +356,7 @@ function collectDemands(
       continue;
     }
 
-    addDemand(demands, {
+    addDemand(demands, demandIndexes, {
       scope: edge.scope,
       key: reference.requested,
       demand: "present",
@@ -137,7 +381,7 @@ function collectDemands(
       if (key.namespace !== "env" || typeof key.name !== "string") {
         continue;
       }
-      addDemand(demands, {
+      addDemand(demands, demandIndexes, {
         scope: edge.scope,
         key,
         demand,
@@ -150,19 +394,28 @@ function collectDemands(
   return demands;
 }
 
-function addDemand(target: InternalDemand[], next: InternalDemand): void {
-  const existing = target.find(
-    (item) => scopesEquivalent(item.scope, next.scope) && logicalKeyEquals(item.key, next.key),
-  );
-  if (existing === undefined) {
+function addDemand(
+  target: InternalDemand[],
+  indexes: Map<string, number>,
+  next: InternalDemand,
+): void {
+  const key = scopeAndLogicalKey(next.scope, next.key);
+  // The old equality predicates cannot match opaque names or unknown scope
+  // dimensions, so treating every one as distinct preserves the conservative
+  // behavior while allowing the common comparable case to be O(1).
+  const index = key === undefined ? undefined : indexes.get(key);
+  const existing = index === undefined ? undefined : target[index];
+  if (existing === undefined || index === undefined) {
     target.push(next);
+    if (key !== undefined) {
+      indexes.set(key, target.length - 1);
+    }
     return;
   }
 
   const mergedDemand = priorityDemand(existing.demand, next.demand);
   const mergedTarget = priorityTarget(existing.targetDiscovery, next.targetDiscovery);
   const mergedReferences = uniqueIdentifiers([...existing.referenceIds, ...next.referenceIds]);
-  const index = target.indexOf(existing);
   target[index] = {
     ...existing,
     demand: mergedDemand,
@@ -176,18 +429,25 @@ function reconcileDemand(
   input: ReconciliationInput,
   dynamic: readonly DynamicValidationResult[],
   scopeCoverage: readonly ScopeCoverage[],
+  indexes: ReconciliationIndexes,
 ): DemandReconciliation {
-  const effective = effectiveBindingCandidatesFor(
+  const effective = effectiveCandidatesForDemand(demand, indexes);
+  const bindingStatus = bindingStatusFor(
+    demand,
+    effective,
+    candidatesForDemand(demand, indexes),
+    resolutionsForDemand(demand, indexes),
+  );
+  const coverage = coverageFor(
     demand.scope,
     demand.key,
-    input.bindingCandidates,
-    input.bindingResolutions,
+    input.coverageGaps ?? [],
+    scopeCoverage,
+    indexes.scopeCoverageByScope,
   );
-  const bindingStatus = bindingStatusFor(demand, effective, input.bindingCandidates, input.bindingResolutions);
-  const coverage = coverageFor(demand.scope, demand.key, input.coverageGaps ?? [], scopeCoverage);
   const dynamicUncertainty = dynamicUncertaintyFor(demand.scope, demand.key, dynamic);
   const strong = canMakeStrongConclusion(demand.scope, coverage, dynamicUncertainty, input);
-  const inventoryMatch = matchingInventory(effective, input.inventorySnapshots);
+  const inventoryMatch = matchingInventory(effective, indexes.inventoryByResource);
   const inventory = inventoryStatusForDemand(bindingStatus, effective, inventoryMatch, strong, dynamicUncertainty);
   const disposition = dispositionFor({
     binding: bindingStatus,
@@ -201,7 +461,12 @@ function reconcileDemand(
     scope: demand.scope,
     key: demand.key,
     referenceIds: demand.referenceIds,
-    targetDiscovery: targetForScope(demand.scope, demand.targetDiscovery, input),
+    targetDiscovery: targetForScope(
+      demand.scope,
+      demand.targetDiscovery,
+      input,
+      indexes.targetStatusesByScope,
+    ),
     demand: demand.demand,
     binding: bindingStatus,
     inventory,
@@ -215,31 +480,33 @@ function reconcileDemand(
 
 function reconcileInventory(
   input: ReconciliationInput,
-  demands: readonly InternalDemand[],
   dynamic: readonly DynamicValidationResult[],
   scopeCoverage: readonly ScopeCoverage[],
+  indexes: ReconciliationIndexes,
 ): readonly InventoryReconciliation[] {
   const records: InventoryReconciliation[] = [];
-  const candidateById = new Map(input.bindingCandidates.map((candidate) => [candidate.id, candidate]));
-  const effective = effectiveCandidates(input.bindingResolutions, candidateById);
+  const effective = effectiveCandidates(input.bindingResolutions, indexes.candidateById);
   const representedItems = new Set<string>();
 
   for (const candidate of effective) {
-    if (candidate.providerResourceId === undefined) {
+    const resource = candidate.providerResourceId;
+    if (resource === undefined) {
       continue;
     }
 
-    for (const snapshot of input.inventorySnapshots) {
-      for (const item of snapshot.items) {
-        if (!providerResourceEquals(candidate.providerResourceId, item.providerResourceId)) {
-          continue;
-        }
-
-        representedItems.add(inventoryItemKey(snapshot, item));
-        records.push(
-          reconcileBoundInventory(candidate, snapshot, item, demands, dynamic, input, scopeCoverage),
-        );
-      }
+    for (const match of indexes.inventoryByResource.get(providerResourceKey(resource)) ?? []) {
+      representedItems.add(inventoryItemKey(match.sourceSnapshot, match.item));
+      records.push(
+        reconcileBoundInventory(
+          candidate,
+          match.sourceSnapshot,
+          match.item,
+          dynamic,
+          input,
+          scopeCoverage,
+          indexes,
+        ),
+      );
     }
   }
 
@@ -266,20 +533,18 @@ function reconcileBoundInventory(
   candidate: BindingCandidate,
   snapshot: InventorySnapshot,
   item: InventoryItem,
-  demands: readonly InternalDemand[],
   dynamic: readonly DynamicValidationResult[],
   input: ReconciliationInput,
   scopeCoverage: readonly ScopeCoverage[],
+  indexes: ReconciliationIndexes,
 ): InventoryReconciliation {
-  const matchingDemand = demands.find(
-    (demand) =>
-      scopeCovers(candidate.scope, demand.scope) && logicalKeyEquals(candidate.destination, demand.key),
-  );
+  const matchingDemand = matchingDemandForCandidate(candidate, indexes);
   const coverage = coverageFor(
     candidate.scope,
     candidate.destination,
     input.coverageGaps ?? [],
     scopeCoverage,
+    indexes.scopeCoverageByScope,
   );
   const dynamicUncertainty = dynamicUncertaintyFor(candidate.scope, candidate.destination, dynamic);
   const noStaticRead = matchingDemand === undefined;
@@ -295,7 +560,12 @@ function reconcileBoundInventory(
     scope: candidate.scope,
     destination: candidate.destination,
     providerResourceId: item.providerResourceId,
-    targetDiscovery: targetForScope(candidate.scope, "deployable", input),
+    targetDiscovery: targetForScope(
+      candidate.scope,
+      "deployable",
+      input,
+      indexes.targetStatusesByScope,
+    ),
     demand,
     binding: "exact-declared",
     inventory,
@@ -428,12 +698,14 @@ function inventoryStatusForDemand(
 
 interface InventoryMatch {
   readonly snapshot: Pick<InventorySnapshot, "authorityId" | "asOf">;
+  /** Private lookup context; never attached to a demand reconciliation. */
+  readonly sourceSnapshot: InventorySnapshot;
   readonly item: InventoryItem;
 }
 
 function matchingInventory(
   candidates: readonly BindingCandidate[],
-  snapshots: readonly InventorySnapshot[],
+  inventoryByResource: ReadonlyMap<string, readonly InventoryMatch[]>,
 ): InventoryMatch | undefined {
   if (candidates.length !== 1) {
     return undefined;
@@ -443,17 +715,7 @@ function matchingInventory(
     return undefined;
   }
 
-  for (const snapshot of snapshots) {
-    for (const item of snapshot.items) {
-      if (providerResourceEquals(resource, item.providerResourceId)) {
-        return {
-          snapshot: { authorityId: snapshot.authorityId, asOf: snapshot.asOf },
-          item,
-        };
-      }
-    }
-  }
-  return undefined;
+  return inventoryByResource.get(providerResourceKey(resource))?.[0];
 }
 
 function effectiveCandidates(
@@ -461,6 +723,7 @@ function effectiveCandidates(
   candidateById: ReadonlyMap<SafeIdentifier, BindingCandidate>,
 ): readonly BindingCandidate[] {
   const result: BindingCandidate[] = [];
+  const seen = new Set<SafeIdentifier>();
   for (const resolution of resolutions) {
     for (const partition of resolution.partitions) {
       if (partition.outcome !== "effective") {
@@ -471,7 +734,8 @@ function effectiveCandidates(
         continue;
       }
       const candidate = candidateById.get(selected[0].candidateId);
-      if (candidate !== undefined && !result.some((item) => item.id === candidate.id)) {
+      if (candidate !== undefined && !seen.has(candidate.id)) {
+        seen.add(candidate.id);
         result.push(candidate);
       }
     }
@@ -485,9 +749,14 @@ function collectScopes(
   dynamic: readonly DynamicValidationResult[],
 ): readonly ExecutionScope[] {
   const scopes: ExecutionScope[] = [];
+  const indexes = new Set<string>();
   const add = (scope: ExecutionScope): void => {
-    if (!scopes.some((existing) => scopesEquivalent(existing, scope))) {
+    const key = executionScopeIndexKey(scope);
+    // Unknown dimensions are not equivalent under Core's scope relation and
+    // therefore remain independently visible exactly as before.
+    if (key === undefined || !indexes.has(key)) {
       scopes.push(scope);
+      if (key !== undefined) indexes.add(key);
     }
   };
   for (const demand of demands) add(demand.scope);
@@ -514,12 +783,16 @@ function coverageFor(
   key: LogicalKey | undefined,
   gaps: readonly CoverageGap[],
   scopeCoverage: readonly ScopeCoverage[],
+  scopeCoverageByScope?: ReadonlyMap<string, ScopeCoverage>,
 ): CoverageAssessment {
   const matching = gaps.filter(
     (gap) =>
       selectorMayAffectScope(gap.potentiallyAffects, scope) && gapAffectsKey(gap, key),
   );
-  const known = scopeCoverage.find((coverage) => scopesEquivalent(coverage.scope, scope));
+  const scopeKey = executionScopeIndexKey(scope);
+  const known =
+    (scopeKey === undefined ? undefined : scopeCoverageByScope?.get(scopeKey)) ??
+    scopeCoverage.find((coverage) => scopesEquivalent(coverage.scope, scope));
   // ScopeCoverage is intentionally broad for reporting. Per-key conclusions
   // must retain the gap's key domain so a finite/pattern gap cannot suppress an
   // unrelated legacy candidate in the same execution scope.
@@ -625,8 +898,11 @@ function targetForScope(
   scope: ExecutionScope,
   fallback: TargetDiscoveryStatus,
   input: ReconciliationInput,
+  targetStatusesByScope?: ReadonlyMap<string, TargetDiscoveryStatus>,
 ): TargetDiscoveryStatus {
+  const scopeKey = executionScopeIndexKey(scope);
   return (
+    (scopeKey === undefined ? undefined : targetStatusesByScope?.get(scopeKey)) ??
     input.targetStatuses?.find((status) => scopesEquivalent(status.scope, scope))?.status ?? fallback
   );
 }

@@ -33,11 +33,20 @@ import {
   type RawStagePredicate,
 } from "./contracts.js";
 import { isSecretLikeToken } from "../safety/factory.js";
+import {
+  MAX_CLOSED_MODEL_FINITE_KEYS,
+  createProvisioningBudget,
+  reserveProvisioningArray,
+  reserveProvisioningNormalizedEntries,
+  reserveProvisioningRawEntries,
+  type ProvisioningBudget,
+} from "../safety/provisioning-budget.js";
 
 type JsonRecord = Record<string, unknown>;
 
 interface ParseState {
   readonly diagnostics: BindingAdapterDiagnostic[];
+  readonly budget: ProvisioningBudget;
 }
 
 interface CandidateAttempt {
@@ -70,6 +79,8 @@ const COVERAGE_DOMAINS = new Set<RawExpectedAdapterInput["domain"]>([
   "inventory",
 ]);
 const SAFE_COVERAGE_INPUT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$/;
+const OVERFLOW_INPUT_ID = "provisioning-input-overflow";
+const OVERFLOW_ADAPTER_ID = "provisioning-parser";
 
 const UNKNOWN_SELECTOR: RawScopeSelector = Object.freeze({
   stage: Object.freeze({ kind: "unknown" }),
@@ -102,6 +113,10 @@ export function parseBindingManifest<
   const coverageGaps: TCoverageGap[] = [];
   const candidates: TBindingCandidate[] = [];
 
+  if (isOverflowed(state)) {
+    return bindingOverflowResult(builder);
+  }
+
   if (
     root === undefined ||
     !validateObjectFields(
@@ -120,7 +135,9 @@ export function parseBindingManifest<
       fallbackGap(inputId, adapterId, "binding", "invalid-input-shape", 0),
       [],
     );
-    return { candidates, coverageGaps, diagnostics: state.diagnostics };
+    return isOverflowed(state)
+      ? bindingOverflowResult(builder)
+      : { candidates, coverageGaps, diagnostics: state.diagnostics };
   }
 
   const rawCandidates = readArray(root, "candidates", ["candidates"], state);
@@ -132,13 +149,22 @@ export function parseBindingManifest<
       fallbackGap(inputId, adapterId, "binding", "invalid-array", 0),
       ["candidates"],
     );
-    return { candidates, coverageGaps, diagnostics: state.diagnostics };
+    return isOverflowed(state)
+      ? bindingOverflowResult(builder)
+      : { candidates, coverageGaps, diagnostics: state.diagnostics };
   }
 
   const ids = new Set<string>();
-  for (const [index, rawCandidate] of rawCandidates.entries()) {
+  for (let index = 0; index < rawCandidates.length; index += 1) {
+    if (isOverflowed(state)) {
+      return bindingOverflowResult(builder);
+    }
+    const rawCandidate = rawCandidates[index];
     const path: BindingAdapterPath = ["candidates", index];
     const attempt = parseBindingCandidate(rawCandidate, path, state);
+    if (isOverflowed(state)) {
+      return bindingOverflowResult(builder);
+    }
     const candidate = attempt.candidate;
 
     if (candidate === undefined) {
@@ -149,6 +175,9 @@ export function parseBindingManifest<
         fallbackGap(inputId, adapterId, "binding", "invalid-input-shape", index + 1, attempt.selector),
         path,
       );
+      if (isOverflowed(state)) {
+        return bindingOverflowResult(builder);
+      }
       continue;
     }
 
@@ -161,10 +190,16 @@ export function parseBindingManifest<
         fallbackGap(inputId, adapterId, "binding", "duplicate-candidate", index + 1, attempt.selector),
         path,
       );
+      if (isOverflowed(state)) {
+        return bindingOverflowResult(builder);
+      }
       continue;
     }
     ids.add(candidate.id);
 
+    if (!reserveNormalized(state)) {
+      return bindingOverflowResult(builder);
+    }
     const materialized = builder.bindingCandidate(candidate);
     if (materialized.ok) {
       candidates.push(materialized.value);
@@ -179,6 +214,9 @@ export function parseBindingManifest<
       fallbackGap(inputId, adapterId, "binding", materialized.code, index + 1, attempt.selector),
       path,
     );
+    if (isOverflowed(state)) {
+      return bindingOverflowResult(builder);
+    }
   }
 
   return { candidates, coverageGaps, diagnostics: state.diagnostics };
@@ -205,6 +243,10 @@ export function parseInventorySnapshot<
   const authorityId = readStringOrFallback(root, "authorityId", "inventory-authority", [], state);
   const coverageGaps: TCoverageGap[] = [];
 
+  if (isOverflowed(state)) {
+    return inventoryOverflowResult(builder);
+  }
+
   if (
     root === undefined ||
     !validateObjectFields(
@@ -223,7 +265,9 @@ export function parseInventorySnapshot<
       fallbackGap(inputId, authorityId, "inventory", "invalid-input-shape", 0),
       [],
     );
-    return { coverageGaps, diagnostics: state.diagnostics };
+    return isOverflowed(state)
+      ? inventoryOverflowResult(builder)
+      : { coverageGaps, diagnostics: state.diagnostics };
   }
 
   const asOf = readString(root, "asOf", ["asOf"], state);
@@ -238,7 +282,9 @@ export function parseInventorySnapshot<
       fallbackGap(inputId, authorityId, "inventory", "invalid-timestamp", 0),
       ["asOf"],
     );
-    return { coverageGaps, diagnostics: state.diagnostics };
+    return isOverflowed(state)
+      ? inventoryOverflowResult(builder)
+      : { coverageGaps, diagnostics: state.diagnostics };
   }
 
   const rawItems = readArray(root, "items", ["items"], state);
@@ -250,14 +296,23 @@ export function parseInventorySnapshot<
       fallbackGap(inputId, authorityId, "inventory", "invalid-array", 0),
       ["items"],
     );
-    return { coverageGaps, diagnostics: state.diagnostics };
+    return isOverflowed(state)
+      ? inventoryOverflowResult(builder)
+      : { coverageGaps, diagnostics: state.diagnostics };
   }
 
   const items: RawInventoryItem[] = [];
   const resourceIds = new Set<string>();
-  for (const [index, rawItem] of rawItems.entries()) {
+  for (let index = 0; index < rawItems.length; index += 1) {
+    if (isOverflowed(state)) {
+      return inventoryOverflowResult(builder);
+    }
+    const rawItem = rawItems[index];
     const path: BindingAdapterPath = ["items", index];
     const item = parseInventoryItem(rawItem, path, state);
+    if (isOverflowed(state)) {
+      return inventoryOverflowResult(builder);
+    }
     if (item === undefined) {
       appendCoverageGap(
         builder,
@@ -266,6 +321,9 @@ export function parseInventorySnapshot<
         fallbackGap(inputId, authorityId, "inventory", "invalid-input-shape", index + 1),
         path,
       );
+      if (isOverflowed(state)) {
+        return inventoryOverflowResult(builder);
+      }
       continue;
     }
 
@@ -278,6 +336,9 @@ export function parseInventorySnapshot<
         fallbackGap(inputId, authorityId, "inventory", "invalid-provider-resource", index + 1),
         path,
       );
+      if (isOverflowed(state)) {
+        return inventoryOverflowResult(builder);
+      }
       continue;
     }
 
@@ -291,9 +352,15 @@ export function parseInventorySnapshot<
         fallbackGap(inputId, authorityId, "inventory", "duplicate-candidate", index + 1),
         path,
       );
+      if (isOverflowed(state)) {
+        return inventoryOverflowResult(builder);
+      }
       continue;
     }
     resourceIds.add(resourceKey);
+    if (!reserveNormalized(state)) {
+      return inventoryOverflowResult(builder);
+    }
     items.push(item);
   }
 
@@ -314,7 +381,9 @@ export function parseInventorySnapshot<
       fallbackGap(inputId, authorityId, "inventory", materialized.code, 0),
       [],
     );
-    return { coverageGaps, diagnostics: state.diagnostics };
+    return isOverflowed(state)
+      ? inventoryOverflowResult(builder)
+      : { coverageGaps, diagnostics: state.diagnostics };
   }
 
   return { snapshot: materialized.value, coverageGaps, diagnostics: state.diagnostics };
@@ -353,6 +422,10 @@ export function parseClosedProvisioningModel<
     );
   };
 
+  if (isOverflowed(state)) {
+    return closedModelOverflowResult(builder);
+  }
+
   if (
     root === undefined ||
     !validateObjectFields(
@@ -365,7 +438,9 @@ export function parseClosedProvisioningModel<
     !hasSchemaVersion(root, CLOSED_MODEL_SCHEMA_VERSION, [], state)
   ) {
     modelGap("invalid-closed-model", 0);
-    return { coverageGaps, diagnostics: state.diagnostics };
+    return isOverflowed(state)
+      ? closedModelOverflowResult(builder)
+      : { coverageGaps, diagnostics: state.diagnostics };
   }
 
   const maxFiniteKeyDomain = readPositiveSafeInteger(
@@ -381,35 +456,64 @@ export function parseClosedProvisioningModel<
 
   if (maxFiniteKeyDomain === undefined || rawScopes === undefined) {
     modelGap("invalid-closed-model", 0);
-    return { coverageGaps, diagnostics: state.diagnostics };
+    return isOverflowed(state)
+      ? closedModelOverflowResult(builder)
+      : { coverageGaps, diagnostics: state.diagnostics };
+  }
+  if (maxFiniteKeyDomain > MAX_CLOSED_MODEL_FINITE_KEYS) {
+    diagnostic(state, "model-domain-over-budget", ["maxFiniteKeyDomain"]);
+    modelGap("model-domain-over-budget", 0);
+    return isOverflowed(state)
+      ? closedModelOverflowResult(builder)
+      : { coverageGaps, diagnostics: state.diagnostics };
   }
   if (rawScopes.length === 0) {
     diagnostic(state, "invalid-closed-model", ["scopes"]);
     modelGap("invalid-closed-model", 0);
-    return { coverageGaps, diagnostics: state.diagnostics };
+    return isOverflowed(state)
+      ? closedModelOverflowResult(builder)
+      : { coverageGaps, diagnostics: state.diagnostics };
   }
 
   const scopes: RawClosedModelScope[] = [];
   const scopeIds = new Set<string>();
-  for (const [index, rawScope] of rawScopes.entries()) {
+  for (let index = 0; index < rawScopes.length; index += 1) {
+    if (isOverflowed(state)) {
+      return closedModelOverflowResult(builder);
+    }
+    const rawScope = rawScopes[index];
     const path: BindingAdapterPath = ["scopes", index];
     const scope = parseClosedModelScope(rawScope, path, state);
+    if (isOverflowed(state)) {
+      return closedModelOverflowResult(builder);
+    }
     if (scope === undefined) {
       modelGap("invalid-closed-model", index + 1);
+      if (isOverflowed(state)) {
+        return closedModelOverflowResult(builder);
+      }
       continue;
     }
     const scopeKey = closedScopeKey(scope);
     if (scopeIds.has(scopeKey)) {
       diagnostic(state, "invalid-closed-model", path);
       modelGap("invalid-closed-model", index + 1);
+      if (isOverflowed(state)) {
+        return closedModelOverflowResult(builder);
+      }
       continue;
     }
     scopeIds.add(scopeKey);
+    if (!reserveNormalized(state)) {
+      return closedModelOverflowResult(builder);
+    }
     scopes.push(scope);
   }
 
   if (scopes.length !== rawScopes.length) {
-    return { coverageGaps, diagnostics: state.diagnostics };
+    return isOverflowed(state)
+      ? closedModelOverflowResult(builder)
+      : { coverageGaps, diagnostics: state.diagnostics };
   }
 
   // A closed model names a potential domain but cannot prove the code-side
@@ -421,18 +525,31 @@ export function parseClosedProvisioningModel<
     diagnostic(state, "unproven-dynamic-domain", ["dynamicDomains"]);
   } else {
     const patternIds = new Set<string>();
-    for (const [index, rawDomain] of rawDomains.entries()) {
+    for (let index = 0; index < rawDomains.length; index += 1) {
+      if (isOverflowed(state)) {
+        return closedModelOverflowResult(builder);
+      }
+      const rawDomain = rawDomains[index];
       const path: BindingAdapterPath = ["dynamicDomains", index];
       const domain = parseClosedModelDomain(rawDomain, maxFiniteKeyDomain, path, state);
+      if (isOverflowed(state)) {
+        return closedModelOverflowResult(builder);
+      }
       if (domain === undefined || patternIds.has(domain.patternId)) {
         if (domain !== undefined) {
           diagnostic(state, "invalid-closed-model", path);
         }
         diagnostic(state, "unproven-dynamic-domain", path);
+        if (isOverflowed(state)) {
+          return closedModelOverflowResult(builder);
+        }
         continue;
       }
       patternIds.add(domain.patternId);
       diagnostic(state, "unproven-dynamic-domain", path);
+      if (isOverflowed(state)) {
+        return closedModelOverflowResult(builder);
+      }
     }
   }
 
@@ -448,7 +565,9 @@ export function parseClosedProvisioningModel<
   if (!materialized.ok) {
     diagnostic(state, materialized.code, []);
     modelGap(materialized.code, 0);
-    return { coverageGaps, diagnostics: state.diagnostics };
+    return isOverflowed(state)
+      ? closedModelOverflowResult(builder)
+      : { coverageGaps, diagnostics: state.diagnostics };
   }
 
   return { model: materialized.value, coverageGaps, diagnostics: state.diagnostics };
@@ -557,9 +676,13 @@ function parseInventoryItem(
       return undefined;
     }
     declaredScopes = [];
-    for (const [index, rawScope] of rawScopes.entries()) {
+    for (let index = 0; index < rawScopes.length; index += 1) {
+      if (isOverflowed(state)) {
+        return undefined;
+      }
+      const rawScope = rawScopes[index];
       const scope = parseExecutionScope(rawScope, [...path, "declaredScopes", index], state);
-      if (scope === undefined) {
+      if (isOverflowed(state) || scope === undefined) {
         return undefined;
       }
       declaredScopes.push(scope);
@@ -731,7 +854,11 @@ function parseExpectedAdapterInputs(
   }
   const result: RawExpectedAdapterInput[] = [];
   const inputIds = new Set<string>();
-  for (const [index, value] of values.entries()) {
+  for (let index = 0; index < values.length; index += 1) {
+    if (isOverflowed(state)) {
+      return undefined;
+    }
+    const value = values[index];
     const itemPath = [...path, index];
     const record = objectAt(value, itemPath, state);
     if (
@@ -767,6 +894,9 @@ function parseExpectedAdapterInputs(
       return undefined;
     }
     inputIds.add(inputId);
+    if (!reserveNormalized(state)) {
+      return undefined;
+    }
     result.push({
       inputId,
       domain,
@@ -787,7 +917,11 @@ function parsePermittedExclusions(
     return undefined;
   }
   const result: RawPermittedExclusion[] = [];
-  for (const [index, value] of values.entries()) {
+  for (let index = 0; index < values.length; index += 1) {
+    if (isOverflowed(state)) {
+      return undefined;
+    }
+    const value = values[index];
     const itemPath = [...path, index];
     const record = objectAt(value, itemPath, state);
     if (
@@ -799,6 +933,9 @@ function parsePermittedExclusions(
     const selector = parseScopeSelector(record.selector, [...itemPath, "selector"], state);
     const rationaleCode = readString(record, "rationaleCode", [...itemPath, "rationaleCode"], state);
     if (selector === undefined || rationaleCode === undefined) {
+      return undefined;
+    }
+    if (!reserveNormalized(state)) {
       return undefined;
     }
     result.push({ selector, rationaleCode });
@@ -819,7 +956,11 @@ function parseInventoryAuthorities(
     return undefined;
   }
   const result: RawInventoryAuthority[] = [];
-  for (const [index, value] of values.entries()) {
+  for (let index = 0; index < values.length; index += 1) {
+    if (isOverflowed(state)) {
+      return undefined;
+    }
+    const value = values[index];
     const itemPath = [...path, index];
     const record = objectAt(value, itemPath, state);
     if (
@@ -831,6 +972,9 @@ function parseInventoryAuthorities(
     const authorityId = readString(record, "authorityId", [...itemPath, "authorityId"], state);
     const inventoryInputId = readString(record, "inventoryInputId", [...itemPath, "inventoryInputId"], state);
     if (authorityId === undefined || inventoryInputId === undefined) {
+      return undefined;
+    }
+    if (!reserveNormalized(state)) {
       return undefined;
     }
     result.push({ authorityId, inventoryInputId });
@@ -848,7 +992,11 @@ function parseExternalMechanisms(
     return undefined;
   }
   const result: RawExternalMechanism[] = [];
-  for (const [index, value] of values.entries()) {
+  for (let index = 0; index < values.length; index += 1) {
+    if (isOverflowed(state)) {
+      return undefined;
+    }
+    const value = values[index];
     const itemPath = [...path, index];
     const record = objectAt(value, itemPath, state);
     if (
@@ -860,6 +1008,9 @@ function parseExternalMechanisms(
     const selector = parseScopeSelector(record.selector, [...itemPath, "selector"], state);
     const mechanismId = readString(record, "mechanismId", [...itemPath, "mechanismId"], state);
     if (selector === undefined || mechanismId === undefined) {
+      return undefined;
+    }
+    if (!reserveNormalized(state)) {
       return undefined;
     }
     result.push({ selector, mechanismId });
@@ -885,6 +1036,9 @@ function parseExecutionScope(
   const stage = parseStagePredicate(record.stage, [...path, "stage"], state);
   const channel = readEnum(record, "channel", DELIVERY_CHANNELS, [...path, "channel"], state);
   if (id === undefined || componentId === undefined || phase === undefined || stage === undefined || channel === undefined) {
+    return undefined;
+  }
+  if (!reserveNormalized(state)) {
     return undefined;
   }
   return { id, componentId, phase, stage, channel };
@@ -926,6 +1080,9 @@ function parseScopeSelector(
     (record.channels !== undefined && channels === undefined) ||
     condition === undefined
   ) {
+    return undefined;
+  }
+  if (!reserveNormalized(state)) {
     return undefined;
   }
   return {
@@ -993,7 +1150,11 @@ function parseConditionPredicate(
   }
   const clauses: RawConditionClause[] = [];
   const clauseIds = new Set<string>();
-  for (const [index, rawClause] of rawClauses.entries()) {
+  for (let index = 0; index < rawClauses.length; index += 1) {
+    if (isOverflowed(state)) {
+      return undefined;
+    }
+    const rawClause = rawClauses[index];
     const clausePath = [...path, "clauses", index];
     const clause = parseConditionClause(rawClause, clausePath, state);
     if (clause === undefined) {
@@ -1005,6 +1166,9 @@ function parseConditionPredicate(
       return undefined;
     }
     clauseIds.add(clauseKey);
+    if (!reserveNormalized(state)) {
+      return undefined;
+    }
     clauses.push(clause);
   }
   return { kind: "all", clauses };
@@ -1132,6 +1296,9 @@ function appendCoverageGap<
   input: RawCoverageGap,
   path: BindingAdapterPath,
 ): void {
+  if (!reserveNormalized(state)) {
+    return;
+  }
   const materialized = builder.coverageGap(input);
   if (materialized.ok) {
     coverageGaps.push(materialized.value);
@@ -1141,7 +1308,7 @@ function appendCoverageGap<
 }
 
 function createState(): ParseState {
-  return { diagnostics: [] };
+  return { diagnostics: [], budget: createProvisioningBudget() };
 }
 
 function diagnostic(
@@ -1149,7 +1316,105 @@ function diagnostic(
   code: BindingAdapterDiagnosticCode,
   path: BindingAdapterPath,
 ): void {
+  if (!reserveNormalized(state)) {
+    return;
+  }
   state.diagnostics.push({ code, path });
+}
+
+function reserveNormalized(state: ParseState): boolean {
+  return reserveProvisioningNormalizedEntries(state.budget);
+}
+
+function isOverflowed(state: ParseState): boolean {
+  return state.budget.overflowed;
+}
+
+function overflowGap<
+  TBindingCandidate,
+  TInventorySnapshot,
+  TClosedModel,
+  TCoverageGap,
+>(
+  builder: BindingAdapterFactBuilder<
+    TBindingCandidate,
+    TInventorySnapshot,
+    TClosedModel,
+    TCoverageGap
+  >,
+  domain: RawCoverageGap["domain"],
+): readonly TCoverageGap[] {
+  const materialized = builder.coverageGap({
+    idHint: "provisioning-input-entry-limit-exceeded",
+    domain,
+    inputId: OVERFLOW_INPUT_ID,
+    pathOrAdapterId: OVERFLOW_ADAPTER_ID,
+    potentiallyAffects: UNKNOWN_SELECTOR,
+    reason: "input-entry-limit-exceeded",
+  });
+  return materialized.ok ? Object.freeze([materialized.value]) : Object.freeze([]);
+}
+
+function overflowDiagnostics(): readonly BindingAdapterDiagnostic[] {
+  return Object.freeze([{ code: "input-entry-limit-exceeded", path: Object.freeze([]) }]);
+}
+
+function bindingOverflowResult<
+  TBindingCandidate,
+  TInventorySnapshot,
+  TClosedModel,
+  TCoverageGap,
+>(
+  builder: BindingAdapterFactBuilder<
+    TBindingCandidate,
+    TInventorySnapshot,
+    TClosedModel,
+    TCoverageGap
+  >,
+): BindingManifestParseResult<TBindingCandidate, TCoverageGap> {
+  return {
+    candidates: Object.freeze([]),
+    coverageGaps: overflowGap(builder, "binding"),
+    diagnostics: overflowDiagnostics(),
+  };
+}
+
+function inventoryOverflowResult<
+  TBindingCandidate,
+  TInventorySnapshot,
+  TClosedModel,
+  TCoverageGap,
+>(
+  builder: BindingAdapterFactBuilder<
+    TBindingCandidate,
+    TInventorySnapshot,
+    TClosedModel,
+    TCoverageGap
+  >,
+): InventorySnapshotParseResult<TInventorySnapshot, TCoverageGap> {
+  return {
+    coverageGaps: overflowGap(builder, "inventory"),
+    diagnostics: overflowDiagnostics(),
+  };
+}
+
+function closedModelOverflowResult<
+  TBindingCandidate,
+  TInventorySnapshot,
+  TClosedModel,
+  TCoverageGap,
+>(
+  builder: BindingAdapterFactBuilder<
+    TBindingCandidate,
+    TInventorySnapshot,
+    TClosedModel,
+    TCoverageGap
+  >,
+): ClosedModelParseResult<TClosedModel, TCoverageGap> {
+  return {
+    coverageGaps: overflowGap(builder, "binding"),
+    diagnostics: overflowDiagnostics(),
+  };
 }
 
 function parseRootObject(input: unknown, state: ParseState): JsonRecord | undefined {
@@ -1169,7 +1434,8 @@ function arrayAt(input: unknown, path: BindingAdapterPath, state: ParseState): u
     diagnostic(state, "invalid-array", path);
     return undefined;
   }
-  return input;
+  const array = reserveProvisioningArray(input, state.budget);
+  return array === undefined ? undefined : array as unknown[];
 }
 
 function validateObjectFields(
@@ -1181,12 +1447,18 @@ function validateObjectFields(
 ): boolean {
   let valid = true;
   const allowedSet = new Set(allowed);
-  for (const key of Object.keys(record)) {
+  for (const key in record) {
+    if (!Object.prototype.hasOwnProperty.call(record, key)) {
+      continue;
+    }
     if (!allowedSet.has(key)) {
       // Never expose a user-controlled property spelling in a diagnostic path.
       diagnostic(state, "unknown-field", path);
-      valid = false;
+      return false;
     }
+  }
+  if (isOverflowed(state)) {
+    return false;
   }
   for (const field of required) {
     if (!(field in record)) {
@@ -1344,13 +1616,20 @@ function parseEnumArray<T extends string>(
   }
   const result: T[] = [];
   const seen = new Set<T>();
-  for (const [index, value] of input.entries()) {
+  for (let index = 0; index < input.length; index += 1) {
+    if (isOverflowed(state)) {
+      return undefined;
+    }
+    const value = input[index];
     if (typeof value !== "string" || !values.has(value as T) || seen.has(value as T)) {
       diagnostic(state, "invalid-enum", [...path, index]);
       return undefined;
     }
     const parsed = value as T;
     seen.add(parsed);
+    if (!reserveNormalized(state)) {
+      return undefined;
+    }
     result.push(parsed);
   }
   return result;
@@ -1371,12 +1650,19 @@ function parseNonEmptyUniqueStrings(
   }
   const result: string[] = [];
   const seen = new Set<string>();
-  for (const [index, value] of input.entries()) {
+  for (let index = 0; index < input.length; index += 1) {
+    if (isOverflowed(state)) {
+      return undefined;
+    }
+    const value = input[index];
     if (typeof value !== "string" || value.length === 0 || value.trim().length === 0 || seen.has(value)) {
       diagnostic(state, "invalid-array", [...path, index]);
       return undefined;
     }
     seen.add(value);
+    if (!reserveNormalized(state)) {
+      return undefined;
+    }
     result.push(value);
   }
   return result;

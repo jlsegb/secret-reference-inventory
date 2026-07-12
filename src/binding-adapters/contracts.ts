@@ -29,7 +29,8 @@ export type BindingAdapterDiagnosticCode =
   | "invalid-closed-model"
   | "model-domain-over-budget"
   | "unproven-dynamic-domain"
-  | "unsafe-identifier";
+  | "unsafe-identifier"
+  | "input-entry-limit-exceeded";
 
 /**
  * Paths intentionally contain only parser-authored field names and numeric
