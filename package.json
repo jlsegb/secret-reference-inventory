@@ -1,0 +1,66 @@
+{
+  "name": "secret-reference-inventory",
+  "version": "0.1.0",
+  "description": "Local-only static inventory of secret references in first-party code.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/cli/index.js",
+  "types": "./dist/cli/index.d.ts",
+  "keywords": [
+    "secrets",
+    "environment-variables",
+    "static-analysis",
+    "security",
+    "typescript",
+    "local-first"
+  ],
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "secret-usage": "./dist/cli/main.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/cli/index.d.ts",
+      "import": "./dist/cli/index.js"
+    },
+    "./cli": {
+      "types": "./dist/cli/index.d.ts",
+      "import": "./dist/cli/index.js"
+    },
+    "./discovery": {
+      "types": "./dist/discovery/index.d.ts",
+      "import": "./dist/discovery/index.js"
+    },
+    "./safety": {
+      "types": "./dist/safety/index.d.ts",
+      "import": "./dist/safety/index.js"
+    }
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit",
+    "test": "tsx --test test/*.test.ts",
+    "test:coverage": "tsx --test --experimental-test-coverage test/*.test.ts",
+    "verify": "npm run typecheck && npm test && npm run build",
+    "release:check": "npm run build && node ./scripts/check-release-readiness.mjs"
+  },
+  "dependencies": {
+    "ignore": "^7.0.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3"
+  }
+}
