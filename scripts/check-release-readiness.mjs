@@ -160,12 +160,14 @@ for (const dependency of requiredBundledDependencies) {
   }
 }
 const packagedDocumentationPath = /^docs\/(?:[a-z0-9][a-z0-9.-]*\/)*[a-z0-9][a-z0-9.-]*\.md$/u;
+const explicitlyPackagedDocumentationPaths = new Set(["docs/DOCUMENTATION_CONTRACT.md"]);
 for (const path of packedFiles) {
   const allowed =
     path === "package.json" ||
     path === "README.md" ||
     path === "LICENSE" ||
     packagedDocumentationPath.test(path) ||
+    explicitlyPackagedDocumentationPaths.has(path) ||
     path.startsWith("dist/") ||
     requiredBundledDependencies.some(
       /**
