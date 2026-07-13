@@ -12,13 +12,35 @@ Usage:
 `;
 
 const DEFAULT_IO: CliIo = {
-  stdout: (text) => process.stdout.write(text),
-  stderr: (text) => process.stderr.write(text),
+  stdout:
+    /**
+     * Writes one CLI success or help fragment to the process standard-output stream.
+     *
+     * Inputs: Text already selected by the CLI layer.
+     * Outputs: Node's synchronous write return value.
+     * Does not handle: Awaiting stream backpressure or catching write failures.
+     * Side effects: Writes to the host process standard output.
+     */
+    (text) => process.stdout.write(text),
+  stderr:
+    /**
+     * Writes one fixed CLI diagnostic fragment to the process standard-error stream.
+     *
+     * Inputs: Text already selected by the CLI layer.
+     * Outputs: Node's synchronous write return value.
+     * Does not handle: Awaiting stream backpressure or catching write failures.
+     * Side effects: Writes to the host process standard error.
+     */
+    (text) => process.stderr.write(text),
 };
 
 /**
- * A handler-only shell. Parsing and usage output are safe and local; W5 adds
- * analysis/reconciliation handlers without changing command semantics.
+ * Parses local CLI input, routes supported commands to injected handlers, and maps handler failures.
+ *
+ * Inputs: Raw argv tokens, optional command handlers, and synchronous output callbacks.
+ * Outputs: A conventional numeric exit status after direct invocation or awaited handler completion.
+ * Does not handle: Filesystem analysis itself, validation of handler contracts, or awaited thenables from I/O callbacks.
+ * Side effects: Calls the selected handler and invokes stdout/stderr synchronously; synchronous I/O throws escape.
  */
 export async function runCli(
   argv: readonly string[],

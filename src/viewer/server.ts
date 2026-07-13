@@ -18,9 +18,12 @@ import {
 const LOOPBACK_HOST = "127.0.0.1" as const;
 
 /**
- * Starts a self-contained report viewer. The socket is deliberately bound to
- * IPv4 loopback and the process never opens repository paths or makes network
- * requests. Callers own the returned close lifecycle.
+ * Starts a self-contained viewer from an issued opaque request and binds it only to IPv4 loopback.
+ *
+ * Inputs: An opaque request previously issued by the local viewer builder.
+ * Outputs: A frozen outer local-viewer handle with a frozen loopback address, mutable URL object, and idempotent close method. Mutating the URL object does not reconfigure the listener.
+ * Does not handle: Reading repository paths, requesting remote data, accepting raw model objects, or launching a browser.
+ * Side effects: Allocates randomness, opens an HTTP listener, and must be closed by the caller.
  */
 export async function startLocalReportViewer(
   request: unknown,
@@ -35,14 +38,34 @@ export async function startLocalReportViewer(
   const port = issued.port;
   const nonce = randomBytes(16).toString("base64");
   const document = renderDocument(model, nonce);
-  const server = createServer((request, response) => {
-    serveDocument(request, response, document, nonce);
-  });
+  const server = createServer(
+    /**
+     * Serves the pre-rendered document for one accepted local HTTP request.
+     *
+     * Inputs: Node's incoming request and response objects.
+     * Outputs: Nothing after the response helper sends a terminal response.
+     * Does not handle: Request-body parsing, routing beyond root, or remote callers.
+     * Side effects: Writes HTTP headers and body to the supplied response.
+     */
+    (request, response) => {
+      serveDocument(request, response, document, nonce);
+    }
+  );
 
-  server.on("clientError", (_error, socket) => {
-    // Do not expose malformed request data or parser errors to terminal output.
-    socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
-  });
+  server.on(
+    "clientError",
+    /**
+     * Terminates malformed HTTP clients with a fixed response without inspecting their parser error.
+     *
+     * Inputs: Node's parser error, deliberately ignored, and the client socket.
+     * Outputs: Nothing after ending the socket.
+     * Does not handle: Logging malformed request details, retries, or protocol recovery.
+     * Side effects: Writes a fixed 400 response and closes the supplied socket.
+     */
+    (_error, socket) => {
+      socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
+    }
+  );
 
   try {
     await listenOnLoopback(server, port);
@@ -69,6 +92,14 @@ export async function startLocalReportViewer(
   return Object.freeze({
     address: Object.freeze({ host: LOOPBACK_HOST, port: address.port }),
     url: new URL("http://" + LOOPBACK_HOST + ":" + String(address.port) + "/"),
+    /**
+     * Closes this handle's server at most once, setting its terminal closed state before awaiting Node's close result.
+     *
+     * Inputs: None; the handle closes over its server and lifecycle flag.
+     * Outputs: The first call resolves after server closure or rejects with its non-ignored close failure; every later call resolves immediately, including after that first failure.
+     * Does not handle: Reopening the listener, aborting in-flight requests, swallowing close failures, or retrying a failed first close.
+     * Side effects: Sets the closure's `closed` flag before awaiting `closeServer` and invokes the HTTP server close operation once.
+     */
     async close(): Promise<void> {
       if (closed) {
         return;
@@ -79,6 +110,14 @@ export async function startLocalReportViewer(
   });
 }
 
+/**
+ * Restricts HTTP handling to GET/HEAD requests for the root document and returns a fixed 404 otherwise.
+ *
+ * Inputs: A Node request/response pair plus pre-rendered document and nonce strings.
+ * Outputs: Nothing after one HTTP response is sent.
+ * Does not handle: Request bodies, assets, API routes, redirects, or host authorization.
+ * Side effects: Writes response headers and a body to the supplied Node response.
+ */
 function serveDocument(
   request: IncomingMessage,
   response: ServerResponse,
@@ -101,6 +140,14 @@ function serveDocument(
   );
 }
 
+/**
+ * Writes one no-store security-headered HTTP response with an optional precomputed body length.
+ *
+ * Inputs: A Node response, status, body, nonce, content type, and optional byte length.
+ * Outputs: Nothing after ending the response.
+ * Does not handle: Streaming, compression, error recovery, or header negotiation.
+ * Side effects: Calls writeHead and end on the supplied response.
+ */
 function writeResponse(
   response: ServerResponse,
   status: number,
@@ -132,40 +179,120 @@ function writeResponse(
   response.end(body);
 }
 
+/**
+ * Awaits one server listen outcome after constraining the host to the fixed loopback address.
+ *
+ * Inputs: An unstarted Node server and a validated numeric port.
+ * Outputs: A promise resolving on listening or rejecting with Node's listen error.
+ * Does not handle: Retrying ports, binding IPv6/all interfaces, or checking the post-listen address.
+ * Side effects: Registers one-shot listeners and invokes server.listen.
+ */
 async function listenOnLoopback(server: Server, port: number): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const onError = (error: Error): void => {
+  await new Promise<void>(
+    /**
+     * Registers paired one-shot listen listeners and starts the server.
+     *
+     * Inputs: Promise resolve and reject callbacks.
+     * Outputs: Nothing; completion is driven by the registered event callbacks.
+     * Does not handle: Removing both listeners on process shutdown or retrying after an error.
+     * Side effects: Registers server listeners and starts listening on fixed loopback.
+     */
+    (resolve, reject) => {
+      const onError =
+        /**
+         * Rejects the listen promise and removes the success listener after a listen failure.
+         *
+         * Inputs: Node's listen error.
+         * Outputs: Nothing after rejecting the enclosing promise.
+         * Does not handle: Error translation, logging, or server cleanup.
+         * Side effects: Removes one server listener and rejects the promise.
+         */
+        (error: Error): void => {
       server.off("listening", onListening);
       reject(error);
-    };
-    const onListening = (): void => {
+        };
+      const onListening =
+        /**
+         * Resolves the listen promise and removes the error listener after a successful bind.
+         *
+         * Inputs: None; invoked by Node's listening event.
+         * Outputs: Nothing after resolving the enclosing promise.
+         * Does not handle: Verifying the bound address or closing the server.
+         * Side effects: Removes one server listener and resolves the promise.
+         */
+        (): void => {
       server.off("error", onError);
       resolve();
-    };
-    server.once("error", onError);
-    server.once("listening", onListening);
-    server.listen({ host: LOOPBACK_HOST, port });
-  });
+        };
+      server.once("error", onError);
+      server.once("listening", onListening);
+      server.listen({ host: LOOPBACK_HOST, port });
+    }
+  );
 }
 
+/**
+ * Awaits Node server closure while treating an already-stopped server as successfully closed.
+ *
+ * Inputs: A Node HTTP server.
+ * Outputs: A promise resolving after close or rejecting with the original close error other than not-running.
+ * Does not handle: Forcing active connections closed, re-listening, or suppressing genuine close failures.
+ * Side effects: Invokes server.close and registers its completion callback.
+ */
 async function closeServer(server: Server): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    server.close((error) => {
+  await new Promise<void>(
+    /**
+     * Requests close and resolves/rejects the enclosing promise from Node's completion callback.
+     *
+     * Inputs: Promise resolve and reject callbacks.
+     * Outputs: Nothing; completion follows the server close callback and rejects with its original non-ignored error.
+ * Does not handle: Closing individual sockets, translating the original close error, or retrying a rejected close.
+     * Side effects: Calls server.close.
+     */
+    (resolve, reject) => {
+      server.close(
+        /**
+         * Classifies Node's close result, treating the documented not-running code as success.
+         *
+         * Inputs: An optional server-close error.
+         * Outputs: Nothing after resolving or rejecting the enclosing promise with the original non-ignored error.
+         * Does not handle: Retrying close or normalizing other error codes.
+         * Side effects: Resolves or rejects the surrounding promise.
+         */
+        (error) => {
       if (error === undefined || (error as NodeJS.ErrnoException).code === "ERR_SERVER_NOT_RUNNING") {
         resolve();
       } else {
         reject(error);
       }
-    });
-  });
+        }
+      );
+    }
+  );
 }
 
+/**
+ * Places an issued viewer model and random nonce into the immutable local HTML template.
+ *
+ * Inputs: A frozen viewer document model and a nonce generated for this server instance.
+ * Outputs: One complete HTML response body.
+ * Does not handle: Validating model grammar, external template loading, or escaping beyond script serialization.
+ * Side effects: Allocates the rendered HTML string.
+ */
 function renderDocument(model: ViewerDocumentModel, nonce: string): string {
   return DOCUMENT_TEMPLATE
     .replaceAll("__NONCE__", nonce)
     .replace("__MODEL__", serializeForScript(model));
 }
 
+/**
+ * Serializes a vetted viewer model for an application/json script element while escaping HTML-sensitive characters.
+ *
+ * Inputs: A frozen viewer document model.
+ * Outputs: JSON text with less-than, greater-than, ampersand, and line-separator characters escaped.
+ * Does not handle: Accepting unvetted raw request objects or validating model scalar grammar.
+ * Side effects: Allocates JSON and replacement strings.
+ */
 function serializeForScript(model: ViewerDocumentModel): string {
   return JSON.stringify(model)
     .replace(/</gu, "\\u003c")
