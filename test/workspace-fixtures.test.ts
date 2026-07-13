@@ -12,8 +12,26 @@ import {
   writeFixtureLayout,
 } from "./helpers/workspace-fixture.js";
 
-test("multi-repository fixture uses safe sibling roots and explicit deployment layouts", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("multi-repository fixture uses safe sibling roots and explicit deployment layouts",
+  /**
+   * Verifies “multi-repository fixture uses safe sibling roots and explicit deployment layouts”.
+   *
+   * Inputs: no arguments.
+   * Outputs: a promise that settles after its awaited workspace operations and assertions.
+   * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+   * Side effects: runs `withWorkspaceFixture`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “multi-repository fixture uses safe sibling roots and explicit deployment layouts”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `realpath`, `relative(controlRoot, apiRoot).split(sep).join`, `relative(controlRoot, apiRoot).split`, `relative`, `assert.equal`, `readFile`.
+     */
+    async (fixture) => {
     const apiRoot = await realpath(fixture.repositoryRoots.api);
     const controlRoot = await realpath(fixture.controlRoot);
     const sibling = relative(controlRoot, apiRoot).split(sep).join("/");
@@ -24,7 +42,16 @@ test("multi-repository fixture uses safe sibling roots and explicit deployment l
     assert.equal(unrelated.ok, true);
     if (unrelated.ok) {
       assert.deepEqual(
-        unrelated.value.deployments.map((deployment) => deployment.repositories),
+        unrelated.value.deployments.map(
+          /**
+           * Projects a report value from the current deployment.
+           *
+           * Inputs: `deployment`.
+           * Outputs: the `deployment.repositories` result consumed by `unrelated.value.deployments.map`.
+           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+           * Side effects: none; it derives the current-item result.
+           */
+          (deployment) => deployment.repositories),
         [["api"], ["worker"], ["dynamic"], ["broken"]],
       );
     }
@@ -42,15 +69,42 @@ test("multi-repository fixture uses safe sibling roots and explicit deployment l
   });
 });
 
-test("fixture isolates parser failure and user-controlled lookup behavior", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("fixture isolates parser failure and user-controlled lookup behavior",
+  /**
+   * Exercises the “fixture isolates parser failure and user-controlled lookup behavior” scenario through `withWorkspaceFixture`, `all`, `scanLocalRoot`, `equal`, `some`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “fixture isolates parser failure and user-controlled lookup behavior”.
+   * Outputs: Normal completion only after the “fixture isolates parser failure and user-controlled lookup behavior” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither invokes the CLI nor leaves fixture state behind; it creates and examines only the temporary layout owned by `withWorkspaceFixture`.
+   * Side effects: Runs assertions through `withWorkspaceFixture`, `all`, `scanLocalRoot`, `equal`, `some`; assertion failures escape.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “fixture isolates parser failure and user-controlled lookup behavior”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `Promise.all`, `scanLocalRoot`, `assert.equal`, `broken.result.scopeCoverage.some`, `assert.deepEqual`.
+     */
+    async (fixture) => {
     const [broken, dynamic] = await Promise.all([
       scanLocalRoot(fixture.repositoryRoots.broken),
       scanLocalRoot(fixture.repositoryRoots.dynamic),
     ]);
 
     assert.equal(
-      broken.result.scopeCoverage.some((coverage) => coverage.state === "incomplete"),
+      broken.result.scopeCoverage.some(
+        /**
+         * Tests the current coverage against the requested condition.
+         *
+         * Inputs: `coverage`.
+         * Outputs: the `coverage.state === "incomplete"` result consumed by `broken.result.scopeCoverage.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (coverage) => coverage.state === "incomplete"),
       true,
     );
 

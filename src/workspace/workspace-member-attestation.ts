@@ -58,9 +58,12 @@ const MEMBER_SETS = new WeakMap<object, MemberSet>();
 const MEMBERS = new WeakMap<object, WorkspaceRepositoryMemberContext>();
 
 /**
- * Issue all repository identities from one still-verified request before any
- * source scan starts. The capability retains parser-authored IDs and resolved
- * roots only in private identity registries.
+ * Attests every parser-declared repository root and issues request-scoped opaque member identities before scanning source.
+ *
+ * Inputs: An issued scan request whose manifest/base identity still verifies.
+ * Outputs: A member-set capability, or undefined for unissued/changed requests, absent manifests, or unexpected resolution failure.
+ * Does not handle: Source discovery, re-parsing the manifest, or resolving user-supplied roots; the returned opaque member-set hides paths, but internal member contexts intentionally retain successful canonical roots for the runtime.
+ * Side effects: Re-stats request provenance, concurrently realpaths/stats repository candidates, detects canonical-root conflicts, and fills private WeakMaps.
  */
 export async function attestVerifiedWorkspaceRepositoryMembers(
   request: unknown,
@@ -111,14 +114,28 @@ export async function attestVerifiedWorkspaceRepositoryMembers(
   }
 }
 
-/** Identity-only member-set lookup; no caller object is inspected. */
+/**
+ * Retrieves the request-scoped member context for an issued member-set capability.
+ *
+ * Inputs: Any member-set candidate.
+ * Outputs: Frozen parser-ID/resolution contexts, or undefined for an unissued identity.
+ * Does not handle: Handle lookup by ID, path inspection, or caller-provided member data.
+ * Side effects: None; uses a private WeakMap identity lookup.
+ */
 export function workspaceRepositoryMembersContext(
   input: unknown,
 ): WorkspaceRepositoryMembersContext | undefined {
   return MEMBER_SETS.get(input as object)?.context;
 }
 
-/** Identity-only retrieval of a member handle for a parser-authored ID. */
+/**
+ * Retrieves one opaque repository-member handle from a member-set capability.
+ *
+ * Inputs: A member-set candidate and a string parser-authored repository ID.
+ * Outputs: The corresponding handle, or undefined for a non-string/unknown ID or unissued set.
+ * Does not handle: Reading fields from a caller object, resolving repository roots, or matching aliases.
+ * Side effects: None; performs private WeakMap and Map lookups.
+ */
 export function issuedWorkspaceRepositoryMember(
   input: unknown,
   repositoryId: unknown,
@@ -128,14 +145,28 @@ export function issuedWorkspaceRepositoryMember(
     : undefined;
 }
 
-/** Identity-only handle lookup for the app/runtime boundary. */
+/**
+ * Retrieves the private resolution context behind an issued repository-member handle.
+ *
+ * Inputs: Any member-handle candidate.
+ * Outputs: The internal request-bound ID and resolution status (including canonicalRoot on a successful resolution), or undefined when the handle was not issued.
+ * Does not handle: A public capability view, source scanning, or structural handle validation.
+ * Side effects: None; performs a private WeakMap lookup.
+ */
 export function workspaceRepositoryMemberContext(
   input: unknown,
 ): WorkspaceRepositoryMemberContext | undefined {
   return MEMBERS.get(input as object);
 }
 
-/** Identity-only, count-only instrumentation used by the scale regression. */
+/**
+ * Retrieves count-only repository-attestation scale metrics for an issued member-set capability.
+ *
+ * Inputs: Any member-set candidate.
+ * Outputs: Repository, resolution, and root-conflict-check counts, or undefined for an unissued identity.
+ * Does not handle: Exposing IDs, roots, file metadata, or individual conflict decisions.
+ * Side effects: None; reads the private WeakMap.
+ */
 export function workspaceRepositoryMemberAttestationMetrics(
   input: unknown,
 ): WorkspaceRepositoryMemberAttestationMetrics | undefined {
@@ -147,6 +178,14 @@ interface ResolvedMember {
   readonly resolution: WorkspaceRepositoryMemberResolution;
 }
 
+/**
+ * Resolves every manifest repository with a bounded concurrency pool before applying canonical-root conflict rules.
+ *
+ * Inputs: A parser-authored manifest and the already attested canonical manifest base.
+ * Outputs: One resolution per declared repository plus the exact number of ancestor-stack conflict checks.
+ * Does not handle: Retrying unavailable roots, source-file discovery, or suppressing conflicting repository declarations.
+ * Side effects: Schedules filesystem realpath/stat work through a 32-worker bounded mapper and allocates result arrays.
+ */
 async function resolveMembers(
   manifest: WorkspaceManifest,
   manifestBase: InternalPath,
@@ -154,6 +193,14 @@ async function resolveMembers(
   const results = await mapLimited(
     manifest.repositories,
     32,
+    /**
+     * Resolves one parser-authored repository declaration for the bounded member-resolution batch.
+     *
+     * Inputs: One manifest repository declaration.
+     * Outputs: A frozen declaration/resolution pair, including unavailable or not-directory status.
+     * Does not handle: Cross-repository conflict detection or source scans.
+     * Side effects: Awaits filesystem resolution/stat work for that repository.
+     */
     async (repository): Promise<ResolvedMember> => Object.freeze({
       repository,
       resolution: await resolveRepositoryDirectory(manifestBase, repository.root),
@@ -162,6 +209,14 @@ async function resolveMembers(
   return applyCanonicalRootConflicts(results);
 }
 
+/**
+ * Resolves and validates one manifest-relative repository directory without accepting arbitrary path forms.
+ *
+ * Inputs: The canonical manifest base and one parser-authored manifest-relative root descriptor.
+ * Outputs: A frozen canonical-root success, unavailable failure, or not-directory failure.
+ * Does not handle: Relative-path normalization beyond parser validation, retries, symlink reporting, or conflict detection.
+ * Side effects: Resolves a local candidate then performs filesystem realpath and stat I/O; all I/O errors collapse to unavailable.
+ */
 async function resolveRepositoryDirectory(
   manifestBase: InternalPath,
   descriptor: ManifestRelativeDescriptor,
@@ -182,16 +237,36 @@ async function resolveRepositoryDirectory(
 }
 
 /**
- * A sorted ancestor stack detects equal/ancestor roots in O(n log n) time.
- * In contrast to pairwise comparison, it does not repeatedly scan every
- * resolved root as a 10,000-member manifest grows.
+ * Marks equal or ancestor/descendant canonical roots as conflicting with a segment-ordered ancestor stack.
+ *
+ * Inputs: One ordered-by-declaration list of repository resolutions, including unavailable/non-directory entries.
+ * Outputs: The same-order member list with conflicting valid roots replaced by conflict status and a conflict-check count.
+ * Does not handle: Filesystem revalidation, raw path disclosure, duplicate parser IDs, or conflict repair.
+ * Side effects: Allocates sorted/filter/map result collections and a temporary ancestor stack; it does not perform I/O.
  */
 function applyCanonicalRootConflicts(
   members: readonly ResolvedMember[],
 ): { readonly members: readonly ResolvedMember[]; readonly rootConflictChecks: number } {
-  const valid = members
-    .map((member, index) => ({ member, index }))
+  const valid = members.map(
+    /**
+     * Couples each resolved member with its original declaration index for stable conflict replacement.
+     *
+     * Inputs: One resolved member and its source-array index.
+     * Outputs: An object carrying both values.
+     * Does not handle: Resolution validation or conflict detection.
+     * Side effects: Allocates one transient pairing object.
+     */
+    (member, index) => ({ member, index })
+  )
     .filter(
+      /**
+       * Retains only members whose directory resolution contains a canonical root.
+       *
+       * Inputs: One indexed member/resolution pair.
+       * Outputs: A type-refined true result for successful resolutions and false otherwise.
+       * Does not handle: Detecting equal or nested roots.
+       * Side effects: None.
+       */
       (entry): entry is {
         readonly member: ResolvedMember & {
           readonly resolution: Extract<WorkspaceRepositoryMemberResolution, { readonly ok: true }>;
@@ -199,10 +274,20 @@ function applyCanonicalRootConflicts(
         readonly index: number;
       } => entry.member.resolution.ok,
     )
-    .sort((left, right) => compareCanonicalRoots(
+    .sort(
+      /**
+       * Orders successful roots by path segments so a parent's descendants remain adjacent.
+       *
+       * Inputs: Two successful indexed repository resolutions.
+       * Outputs: The segment-aware lexical comparison result.
+       * Does not handle: Locale ordering, filesystem case folding, or conflict marking.
+       * Side effects: None.
+       */
+      (left, right) => compareCanonicalRoots(
       left.member.resolution.canonicalRoot,
       right.member.resolution.canonicalRoot,
-    ));
+      )
+    );
   const conflicts = new Set<number>();
   const ancestors: Array<typeof valid[number]> = [];
   let rootConflictChecks = 0;
@@ -231,8 +316,17 @@ function applyCanonicalRootConflicts(
     return Object.freeze({ members, rootConflictChecks });
   }
   return Object.freeze({
-    members: members.map((member, index) =>
-      conflicts.has(index)
+    members: members.map(
+      /**
+       * Replaces only marked entries with an opaque conflict status while preserving declaration order.
+       *
+       * Inputs: One original member resolution and its declaration index.
+       * Outputs: The original member or a frozen conflict replacement.
+       * Does not handle: Explaining the conflicting root or mutating the original member.
+       * Side effects: Allocates frozen replacement objects for conflicts.
+       */
+      (member, index) =>
+        conflicts.has(index)
         ? Object.freeze({
             repository: member.repository,
             resolution: Object.freeze({ ok: false as const, code: "conflict" as const }),
@@ -244,9 +338,12 @@ function applyCanonicalRootConflicts(
 }
 
 /**
- * Raw string ordering does not keep descendants contiguous: `/root/a-` sorts
- * before `/root/a/x`, which can pop `/root/a` from an ancestor stack. Compare
- * path segments instead so every parent and its subtree stay adjacent.
+ * Compares canonical roots by path segments so each ancestor and subtree remains contiguous for conflict detection.
+ *
+ * Inputs: Two canonical local path strings.
+ * Outputs: Negative, zero, or positive segment-order comparison.
+ * Does not handle: Canonicalization, case-insensitive filesystem policy, or locale-aware comparison.
+ * Side effects: Splits both paths into transient segment arrays.
  */
 function compareCanonicalRoots(left: string, right: string): number {
   const leftSegments = left.split(sep);
@@ -261,6 +358,14 @@ function compareCanonicalRoots(left: string, right: string): number {
   return leftSegments.length - rightSegments.length;
 }
 
+/**
+ * Resolves a parser-authored manifest-relative descriptor against an attested base after defensive shape checks.
+ *
+ * Inputs: A canonical manifest-base string and an unknown descriptor value.
+ * Outputs: A resolved local candidate path, or undefined for null, wrong-kind, empty, backslash, or absolute descriptors.
+ * Does not handle: Filesystem existence, symlink containment, descriptor normalization, or path diagnostics.
+ * Side effects: None beyond constructing a resolved path string.
+ */
 function resolveManifestRelative(
   manifestBase: string,
   descriptor: ManifestRelativeDescriptor,
@@ -279,6 +384,14 @@ function resolveManifestRelative(
   return resolve(manifestBase, descriptor.path);
 }
 
+/**
+ * Maps values with at most the requested number of concurrently active asynchronous workers.
+ *
+ * Inputs: An input array, positive concurrency limit, and async mapper.
+ * Outputs: Results in original input order after every mapper settles successfully.
+ * Does not handle: Mapper failure recovery, cancellation, adaptive limits, or validation of a nonsensical limit.
+ * Side effects: Allocates a result array and concurrent worker promises; mapper side effects are caller-defined.
+ */
 async function mapLimited<T, TResult>(
   values: readonly T[],
   limit: number,
@@ -286,14 +399,25 @@ async function mapLimited<T, TResult>(
 ): Promise<TResult[]> {
   const results: TResult[] = new Array(values.length);
   let next = 0;
-  const workers = Array.from({ length: Math.min(limit, values.length) }, async () => {
+  const workers = Array.from(
+    { length: Math.min(limit, values.length) },
+    /**
+     * Claims successive input indexes and stores each awaited mapped result in its original slot.
+     *
+     * Inputs: The Array.from worker index, which is intentionally unused.
+     * Outputs: A promise resolving after this worker exhausts the shared index counter.
+     * Does not handle: Catching mapper rejection or synchronizing externally shared mapper state.
+     * Side effects: Increments the enclosing next counter and writes entries into the enclosing results array.
+     */
+    async () => {
     while (true) {
       const index = next;
       next += 1;
       if (index >= values.length) return;
       results[index] = await mapper(values[index] as T);
     }
-  });
+    }
+  );
   await Promise.all(workers);
   return results;
 }

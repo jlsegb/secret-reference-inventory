@@ -14,8 +14,12 @@ const MAX_ISSUED_DEPLOYMENT_MEMBERS = 50_000;
 const ISSUANCES = new WeakMap<object, Issuance>();
 
 /**
- * Create an identity-only issuance after the caller has already materialized
- * and validated its own data.  No caller payload is accepted or retained.
+ * Issues one opaque deployment-preparation capability and one opaque member handle per unique member ID.
+ *
+ * Inputs: A nonempty array of at most 50,000 unique string repository IDs.
+ * Outputs: A preparation token, or undefined for malformed, duplicate, oversized, or trap-throwing input.
+ * Does not handle: Validating deployment facts, retaining caller array identity or values other than the copied repository-ID strings, or recovering after property access throws.
+ * Side effects: Allocates frozen null-prototype handles and a private Map keyed by the supplied repository-ID strings.
  */
 export function issueDeploymentPreparation(memberIds: unknown): IssuedDeploymentPreparation | undefined {
   try {
@@ -37,7 +41,14 @@ export function issueDeploymentPreparation(memberIds: unknown): IssuedDeployment
   }
 }
 
-/** No caller token or handle properties are read before identity lookup. */
+/**
+ * Retrieves an issued member handle from a preparation capability by its parser-authored repository ID.
+ *
+ * Inputs: An arbitrary preparation candidate and repository-ID candidate.
+ * Outputs: The opaque member handle, or undefined for an unknown identity or non-string ID.
+ * Does not handle: Reading token properties, accepting copied capabilities, or validating a deployment declaration.
+ * Side effects: None; uses only private WeakMap and Map lookups.
+ */
 export function issuedDeploymentMember(
   token: unknown,
   repositoryId: unknown,

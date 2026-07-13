@@ -91,9 +91,12 @@ type InternalWorkspaceManifestParseResult =
 const NO_DIAGNOSTICS = Object.freeze([]) as readonly [];
 
 /**
- * Internal-only parser for values created by JSON.parse in
- * parseWorkspaceManifestText. Do not export an object-form parser: arbitrary
- * JavaScript records can contain proxies, accessors, and reflection traps.
+ * Validates a JSON-decoded workspace manifest value into immutable v2 declarations and safe diagnostics.
+ *
+ * Inputs: A plain JSON value plus a SafeFactFactory for identifier materialization.
+ * Outputs: A frozen v2 manifest with no diagnostics, or a frozen diagnostic failure for invalid fields, membership, paths, scopes, or limits.
+ * Does not handle: Arbitrary JavaScript records/proxies, filesystem resolution, provisioning-file parsing, or partial successful manifests.
+ * Side effects: Allocates repository/deployment arrays, sets, a root trie, and diagnostic records; it does not perform I/O.
  */
 function parseTrustedWorkspaceManifestValue(
   input: unknown,
@@ -211,8 +214,12 @@ function parseTrustedWorkspaceManifestValue(
 }
 
 /**
- * Parse JSON or JSONC text without serializing parser errors. Comments and
- * trailing commas are stripped only outside quoted JSON strings.
+ * Parses bounded JSON or JSONC manifest text and issues an opaque manifest capability only after full validation.
+ *
+ * Inputs: Manifest text no longer than one MiB.
+ * Outputs: An issued v2 manifest token with no diagnostics, or a fixed invalid-json/validation diagnostic result without parse-error text.
+ * Does not handle: Arbitrary object-form input, files, JSONC escape repair, provisioning documents, or error-location/source excerpts.
+ * Side effects: Allocates normalized text/JSON structures and stores a successful manifest in the private token registry.
  */
 export function parseWorkspaceManifestText(
   text: string,
@@ -248,6 +255,14 @@ export function parseWorkspaceManifestText(
   }
 }
 
+/**
+ * Parses one repository declaration and rejects unsafe IDs, malformed fields, or unsafe relative roots.
+ *
+ * Inputs: One JSON repository value, its diagnostic path, the safety factory, and shared parse state.
+ * Outputs: A frozen repository declaration, or undefined after recording concrete shape/field/identifier/path diagnostics.
+ * Does not handle: Filesystem root existence, canonical aliases, or duplicate/cross-root checks.
+ * Side effects: Appends diagnostics to parse state and allocates a frozen declaration on success.
+ */
 function parseRepository(
   input: unknown,
   path: WorkspaceManifestPath,
@@ -284,6 +299,14 @@ function parseRepository(
     : Object.freeze({ id, root });
 }
 
+/**
+ * Parses one deployment declaration and its optional v2 provisioning input relation.
+ *
+ * Inputs: One JSON deployment value, diagnostic path, declared repository IDs, safety factory, and parse state.
+ * Outputs: A frozen deployment, or undefined after subordinate membership/input validation records diagnostics.
+ * Does not handle: Duplicate deployment IDs, filesystem reads, provisioning schema validation, or reconciliation.
+ * Side effects: Updates shared deployment-member accounting through subordinate parsing and appends diagnostics.
+ */
 function parseDeployment(
   input: unknown,
   path: WorkspaceManifestPath,
@@ -349,6 +372,14 @@ function parseDeployment(
   });
 }
 
+/**
+ * Validates a nonempty, unique deployment membership list against already declared repositories and global cardinality limits.
+ *
+ * Inputs: A bounded JSON array, its diagnostic path, declared repository IDs, safety factory, and parse state.
+ * Outputs: Safe member IDs in input order, or undefined when any member is unsafe, duplicate, undeclared, empty, or over budget.
+ * Does not handle: Repository-root resolution, member execution scopes, or rollback of the cumulative member counter after a later invalid entry.
+ * Side effects: Increments parseState.totalDeploymentMembers once after local array-size admission and appends diagnostics.
+ */
 function parseDeploymentMembers(
   input: readonly unknown[] | undefined,
   path: WorkspaceManifestPath,
@@ -397,6 +428,14 @@ function parseDeploymentMembers(
   return valid ? members : undefined;
 }
 
+/**
+ * Validates the all-or-nothing provisioning-input declaration and its explicit per-member execution scopes.
+ *
+ * Inputs: The raw inputs value/presence bit, diagnostic path, parsed deployment members, safety factory, and parse state.
+ * Outputs: An absent marker, a frozen bindings/inventory/optional closed-model input relation, or an invalid marker.
+ * Does not handle: Reading descriptors, proving provider delivery, implicit scopes, or legacy v1 provisioning declarations.
+ * Side effects: Appends invalid-deployment-inputs and subordinate descriptor/scope diagnostics to shared state.
+ */
 function parseDeploymentInputs(
   input: unknown,
   present: boolean,
@@ -478,6 +517,14 @@ function parseDeploymentInputs(
   };
 }
 
+/**
+ * Validates a one-to-one repository-to-scope mapping and rejects overlapping execution scopes within a deployment.
+ *
+ * Inputs: The raw scope array, diagnostic path, parsed deployment repository IDs, safety factory, and parse state.
+ * Outputs: Frozen scopes ordered by deployment membership, or undefined after invalid/duplicate/undeclared/overlapping scope diagnostics.
+ * Does not handle: Runtime scheduling, cross-deployment scope relationships, or unknown-stage overlap proof beyond conservative rejection.
+ * Side effects: Allocates expected/by-repository/overlap Map and Set indexes and appends diagnostics.
+ */
 function parseDeploymentMemberScopes(
   input: unknown,
   path: WorkspaceManifestPath,
@@ -556,14 +603,27 @@ function parseDeploymentMemberScopes(
     return undefined;
   }
   return Object.freeze(
-    deploymentRepositories.map((repositoryId) => byRepository.get(repositoryId) as WorkspaceDeploymentMemberScope),
+    deploymentRepositories.map(
+      /**
+       * Restores validated member scopes to the deployment's declared repository order.
+       *
+       * Inputs: One already validated repository ID.
+       * Outputs: Its non-undefined mapped member-scope record.
+       * Does not handle: Missing-map recovery, scope validation, or new allocation beyond the outer map result.
+       * Side effects: Reads the private local byRepository Map.
+       */
+      (repositoryId) => byRepository.get(repositoryId) as WorkspaceDeploymentMemberScope
+    ),
   );
 }
 
 /**
- * `repositoryId -> scope` is the explicit v2 association. Indexing by the
- * dimensions Core uses for scope identity makes overlap validation linear in
- * declared exact-stage values, including a 10k-member manifest.
+ * Detects whether a candidate member scope overlaps an already accepted scope on ID, phase, channel, and stage.
+ *
+ * Inputs: The local overlap index and one validated execution scope.
+ * Outputs: True for all-stage/exact-stage collision or an unknown-stage candidate in the same ID/phase/channel identity bucket; false for a missing/disjoint bucket or exact-stage set.
+ * Does not handle: Cross-deployment conflicts, provider conditions, or treating an unknown stage in a matching identity bucket as safely disjoint.
+ * Side effects: Reads Map/Set indexes without mutation.
  */
 function memberScopeOverlaps(
   index: ReadonlyMap<string, MemberScopeOverlapBucket>,
@@ -579,9 +639,27 @@ function memberScopeOverlaps(
   if (scope.stage.kind === "unknown") {
     return true;
   }
-  return bucket.allStages || scope.stage.values.some((stage) => bucket.exactStages.has(stage));
+  return bucket.allStages || scope.stage.values.some(
+    /**
+     * Checks whether one exact stage has already been admitted to the same scope-identity bucket.
+     *
+     * Inputs: One safe exact-stage identifier.
+     * Outputs: True when the bucket's exact-stage Set contains it.
+     * Does not handle: All-stage or unknown-stage decisions, which are made by the enclosing function.
+     * Side effects: Reads the bucket Set without mutation.
+     */
+    (stage) => bucket.exactStages.has(stage)
+  );
 }
 
+/**
+ * Adds an accepted scope's stage coverage to the local overlap index.
+ *
+ * Inputs: A mutable overlap Map and an execution scope already cleared for overlap.
+ * Outputs: No value; the scope identity bucket thereafter records its all/exact stages.
+ * Does not handle: Unknown-stage insertion, duplicate diagnostics, or validation of the scope fields.
+ * Side effects: Creates/reuses a bucket, mutates its Set/flag, and writes it to the Map.
+ */
 function addMemberScope(
   index: Map<string, MemberScopeOverlapBucket>,
   scope: ExecutionScope,
@@ -598,10 +676,26 @@ function addMemberScope(
   index.set(key, bucket);
 }
 
+/**
+ * Produces the stable scope-identity key used for deployment-local overlap indexing.
+ *
+ * Inputs: A validated execution scope.
+ * Outputs: A NUL-delimited ID/phase/channel key.
+ * Does not handle: Stage identity, display formatting, or validation of strings containing unsafe values.
+ * Side effects: Allocates the joined key string.
+ */
 function memberScopeOverlapKey(scope: ExecutionScope): string {
   return [scope.id, scope.phase, scope.channel].join("\u0000");
 }
 
+/**
+ * Parses one explicit member execution scope with safe IDs, supported phase/channel, and a validated stage predicate.
+ *
+ * Inputs: One JSON scope value, diagnostic path, safety factory, and shared parse state.
+ * Outputs: A frozen ExecutionScope, or undefined after unsafe-member-scope/field diagnostics.
+ * Does not handle: Scope-overlap detection, provider delivery semantics, or runtime component existence.
+ * Side effects: Appends diagnostics and allocates a frozen scope on success.
+ */
 function parseMemberExecutionScope(
   input: unknown,
   path: WorkspaceManifestPath,
@@ -649,6 +743,14 @@ function parseMemberExecutionScope(
   });
 }
 
+/**
+ * Parses an all-stage or bounded exact-stage predicate for a member execution scope.
+ *
+ * Inputs: One JSON stage value, its diagnostic path, safety factory, and parse state.
+ * Outputs: A frozen all/exact StagePredicate, or undefined for malformed, unsafe, duplicate, empty, or oversized stages.
+ * Does not handle: Unknown-stage declarations, stage inference, or environment-specific stage resolution.
+ * Side effects: Appends diagnostics, allocates normalized arrays/Sets, and sorts successful exact-stage identifiers.
+ */
 function parseMemberStage(
   input: unknown,
   path: WorkspaceManifestPath,
@@ -690,10 +792,28 @@ function parseMemberStage(
     seen.add(value);
     normalized.push(value);
   }
-  normalized.sort((left, right) => left.localeCompare(right));
+  normalized.sort(
+    /**
+     * Orders safe stage IDs deterministically before they become an immutable exact-stage predicate.
+     *
+     * Inputs: Two safe stage identifiers.
+     * Outputs: Their locale comparison result using the host default locale behavior.
+     * Does not handle: Case normalization, stage validation, or cross-platform locale equivalence guarantees.
+     * Side effects: Drives in-place sorting of the enclosing normalized array.
+     */
+    (left, right) => left.localeCompare(right)
+  );
   return Object.freeze({ kind: "exact", values: Object.freeze(normalized) });
 }
 
+/**
+ * Converts one validated manifest string into a safe manifest-relative descriptor under root-use policy.
+ *
+ * Inputs: An optional string, whether the root marker is permitted, diagnostic path, and parse state.
+ * Outputs: A frozen descriptor, or undefined for absent/unsafe/root-forbidden input.
+ * Does not handle: Filesystem containment, descriptor existence, or input-document parsing.
+ * Side effects: Appends unsafe-relative-path diagnostics and allocates a descriptor on success.
+ */
 function parseDescriptor(
   value: string | undefined,
   allowRoot: boolean,
@@ -711,6 +831,14 @@ function parseDescriptor(
   return Object.freeze({ kind: "manifest-relative", path: normalized });
 }
 
+/**
+ * Normalizes a slash-delimited relative manifest path while rejecting absolute, control, backslash, unsafe-segment, and overlength forms.
+ *
+ * Inputs: One raw string path from a JSON manifest field.
+ * Outputs: A canonical relative path or the root marker, or undefined for a rejected spelling.
+ * Does not handle: Filesystem resolution, symlink containment, Unicode normalization, or case-insensitive path policy.
+ * Side effects: Allocates a segment array and normalized joined string.
+ */
 function normalizeRelativePath(value: string): WorkspaceRelativePath | undefined {
   if (
     value.length === 0 ||
@@ -749,10 +877,26 @@ function normalizeRelativePath(value: string): WorkspaceRelativePath | undefined
   return (segments.length === 0 ? "." : segments.join("/")) as WorkspaceRelativePath;
 }
 
+/**
+ * Creates an empty segment trie used to reject duplicate and ancestor/descendant repository descriptors.
+ *
+ * Inputs: None.
+ * Outputs: A mutable nonterminal root node with no children.
+ * Does not handle: Populating, querying, or freezing the trie.
+ * Side effects: Allocates one Map-backed trie node.
+ */
 function createRepositoryRootIndex(): RepositoryRootIndexNode {
   return { terminal: false, children: new Map() };
 }
 
+/**
+ * Finds a duplicate or ambiguous prefix relationship before a repository root is inserted into the descriptor trie.
+ *
+ * Inputs: The current mutable root trie and one normalized manifest-relative descriptor.
+ * Outputs: A duplicate/ambiguous diagnostic code, or undefined for a nonconflicting path.
+ * Does not handle: Filesystem aliases, case-preserving display, or trie mutation.
+ * Side effects: Reads trie Maps only.
+ */
 function findRootConflict(
   index: RepositoryRootIndexNode,
   root: ManifestRelativeDescriptor,
@@ -780,6 +924,14 @@ function findRootConflict(
   return node.children.size > 0 ? "ambiguous-repository-root" : undefined;
 }
 
+/**
+ * Inserts a normalized repository descriptor into the segment trie after conflict checks succeed.
+ *
+ * Inputs: A mutable root trie and a nonconflicting normalized descriptor.
+ * Outputs: No value; the descriptor endpoint becomes terminal.
+ * Does not handle: Conflict detection, path normalization, or removal.
+ * Side effects: Allocates missing trie nodes and mutates child Maps/terminal state.
+ */
 function addRepositoryRoot(
   index: RepositoryRootIndexNode,
   root: ManifestRelativeDescriptor,
@@ -796,15 +948,41 @@ function addRepositoryRoot(
   node.terminal = true;
 }
 
+/**
+ * Derives case-folded path segments for deterministic descriptor-trie operations.
+ *
+ * Inputs: A normalized manifest-relative descriptor.
+ * Outputs: An empty array for root or lowercased slash segments otherwise.
+ * Does not handle: Filesystem case-sensitivity detection, Unicode normalization, or path validation.
+ * Side effects: Allocates split/map result arrays.
+ */
 function rootSegments(descriptor: ManifestRelativeDescriptor): readonly string[] {
   if (descriptor.path === ".") {
     return [];
   }
   return String(descriptor.path)
     .split("/")
-    .map((segment) => segment.toLocaleLowerCase("en-US"));
+    .map(
+      /**
+       * Case-folds one already safe descriptor segment for conservative alias conflict matching.
+       *
+       * Inputs: One slash-delimited normalized path segment.
+       * Outputs: Its en-US lowercase representation.
+       * Does not handle: Unicode normalization or filesystem-specific case rules.
+       * Side effects: Allocates a lowercased string.
+       */
+      (segment) => segment.toLocaleLowerCase("en-US")
+    );
 }
 
+/**
+ * Materializes a safe display identifier without allowing arbitrary manifest strings into facts or diagnostics.
+ *
+ * Inputs: An unknown JSON field value and SafeFactFactory.
+ * Outputs: A SafeIdentifier, or undefined when the value is not a safe display segment or factory result.
+ * Does not handle: Identifier coercion, secret-value redaction, or diagnostic emission.
+ * Side effects: Delegates to the safety factory, which may allocate branded identifier state.
+ */
 function materializeIdentifier(
   value: unknown,
   safety: SafeFactFactory,
@@ -816,6 +994,14 @@ function materializeIdentifier(
   return typeof identifier === "string" ? identifier : undefined;
 }
 
+/**
+ * Validates that a trusted JSON object has only allowed keys and every required key.
+ *
+ * Inputs: A plain JSON record, allowed/required key lists, diagnostic path, and parse state.
+ * Outputs: True only when all keys satisfy both lists.
+ * Does not handle: Field type validation, nested shapes, accessor objects, or duplicate JSON keys lost by JSON.parse.
+ * Side effects: Allocates an allowed-key Set and appends unknown-field/missing-field diagnostics.
+ */
 function validateObjectFields(
   record: JsonRecord,
   allowed: readonly string[],
@@ -840,6 +1026,14 @@ function validateObjectFields(
   return valid;
 }
 
+/**
+ * Reads one own data-property string from a trusted JSON record while emitting a typed diagnostic for wrong values.
+ *
+ * Inputs: A plain record, key, diagnostic path, and parse state.
+ * Outputs: The string, or undefined for missing/non-string values.
+ * Does not handle: Coercion, inherited/accessor properties, or required-field diagnostics.
+ * Side effects: Appends invalid-string diagnostics for present non-string values.
+ */
 function readString(
   record: JsonRecord,
   key: string,
@@ -857,6 +1051,14 @@ function readString(
   return value;
 }
 
+/**
+ * Reads and snapshots one own data-property array under a caller-supplied cardinality limit.
+ *
+ * Inputs: A plain record, key/path/state, maximum length, and the applicable too-large diagnostic code.
+ * Outputs: A frozen shallow array snapshot, or undefined for missing/non-array/oversized input.
+ * Does not handle: Deep cloning entries, array element validation, sparse/proxy arrays, or required-field diagnostics.
+ * Side effects: Iterates and allocates a snapshot; appends invalid-array or supplied too-large diagnostics.
+ */
 function readBoundedArray(
   record: JsonRecord,
   key: string,
@@ -889,7 +1091,14 @@ function readBoundedArray(
   return Object.freeze(snapshot);
 }
 
-/** JSON.parse produces ordinary records; this helper is never public-facing. */
+/**
+ * Recognizes the ordinary/null-prototype non-array records produced by trusted JSON parsing.
+ *
+ * Inputs: An unknown parsed JSON value.
+ * Outputs: A JsonRecord view, or undefined for null, primitives, arrays, or unusual prototypes.
+ * Does not handle: Arbitrary JavaScript input, accessors, proxy traps, or recursive validation.
+ * Side effects: Reads the object's prototype; safe only because the caller supplies JSON.parse output.
+ */
 function asTrustedJsonRecord(value: unknown): JsonRecord | undefined {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return undefined;
@@ -900,15 +1109,39 @@ function asTrustedJsonRecord(value: unknown): JsonRecord | undefined {
     : undefined;
 }
 
+/**
+ * Tests whether a trusted JSON record has a given own property.
+ *
+ * Inputs: A plain JSON record and field name.
+ * Outputs: True when the field is own, including an own undefined value.
+ * Does not handle: Inherited properties, value reads, or arbitrary proxy safety.
+ * Side effects: None.
+ */
 function hasOwn(record: JsonRecord, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(record, key);
 }
 
+/**
+ * Reads only an own data-property value from a trusted JSON record and ignores accessors.
+ *
+ * Inputs: A plain JSON record and field name.
+ * Outputs: The data value, or undefined when absent or implemented as an accessor.
+ * Does not handle: Inherited values, invoking getters, or arbitrary Proxy safety.
+ * Side effects: Reads the own property descriptor without invoking a getter.
+ */
 function readOwn(record: JsonRecord, key: string): unknown {
   const descriptor = Object.getOwnPropertyDescriptor(record, key);
   return descriptor !== undefined && "value" in descriptor ? descriptor.value : undefined;
 }
 
+/**
+ * Appends one frozen, path-copied manifest diagnostic to the current parse state.
+ *
+ * Inputs: Mutable parse state, a fixed diagnostic code, and a logical manifest path.
+ * Outputs: No value.
+ * Does not handle: Deduplication, display formatting, source excerpts, or throwing parser errors.
+ * Side effects: Mutates state.diagnostics and allocates frozen diagnostic/path arrays.
+ */
 function diagnostic(
   state: ParseState,
   code: WorkspaceManifestDiagnosticCode,
@@ -917,6 +1150,14 @@ function diagnostic(
   state.diagnostics.push(Object.freeze({ code, path: Object.freeze([...path]) }));
 }
 
+/**
+ * Converts accumulated parser diagnostics into the internal immutable failure result.
+ *
+ * Inputs: Parse state after validation encountered one or more errors.
+ * Outputs: An ok:false result with a frozen shallow diagnostic snapshot.
+ * Does not handle: Adding a fallback diagnostic, clearing parse state, or public token issuance.
+ * Side effects: Allocates the frozen diagnostic array.
+ */
 function failure(state: ParseState): InternalWorkspaceManifestParseResult {
   return {
     ok: false,
@@ -924,6 +1165,14 @@ function failure(state: ParseState): InternalWorkspaceManifestParseResult {
   };
 }
 
+/**
+ * Builds a one-diagnostic public parse failure for pre-parse or exception paths.
+ *
+ * Inputs: A fixed manifest diagnostic code and logical path.
+ * Outputs: An immutable ok:false WorkspaceManifestParseResult.
+ * Does not handle: Error details, multiple diagnostics, parser recovery, or source serialization.
+ * Side effects: Allocates frozen diagnostic and path containers.
+ */
 function fixedFailure(
   code: WorkspaceManifestDiagnosticCode,
   path: WorkspaceManifestPath,
@@ -936,6 +1185,14 @@ function fixedFailure(
   };
 }
 
+/**
+ * Removes line and block JSONC comments while preserving quoted-string bytes and line breaks.
+ *
+ * Inputs: Bounded manifest text after optional BOM removal.
+ * Outputs: Comment-free JSON text, or undefined for unterminated string/block-comment state.
+ * Does not handle: JSON validation, nested block comments, Unicode escapes, or trailing-comma removal.
+ * Side effects: Allocates the output string while scanning every input character.
+ */
 function stripJsonComments(text: string): string | undefined {
   let output = "";
   let inString = false;
@@ -996,6 +1253,14 @@ function stripJsonComments(text: string): string | undefined {
   return inString || blockComment ? undefined : output;
 }
 
+/**
+ * Removes commas immediately followed by a closing JSON array/object outside quoted strings.
+ *
+ * Inputs: Comment-free JSONC text.
+ * Outputs: JSON text with syntactic trailing commas omitted.
+ * Does not handle: JSON validation, comment stripping, malformed escape recovery, or nested parser diagnostics.
+ * Side effects: Allocates an output string and scans whitespace after candidate commas.
+ */
 function stripTrailingCommas(text: string): string {
   let output = "";
   let inString = false;

@@ -36,9 +36,12 @@ export type VerifiedWorkspaceManifestParseResult =
 const ISSUED_SCAN_REQUESTS = new WeakMap<object, WorkspaceScanRequestContext>();
 
 /**
- * Parse exactly the bytes represented by an identity-backed bounded-read
- * result, then issue a scan request bound to that same read's file and base.
- * The initial WeakMap lookup deliberately happens before any property read.
+ * Parses one verified bounded manifest read and issues a request tied to that exact file and base snapshot.
+ *
+ * Inputs: A bounded-read capability issued by the local manifest reader.
+ * Outputs: An issued manifest token and opaque scan request, or read-invalid/manifest-invalid without source paths or text.
+ * Does not handle: Arbitrary strings, copied bounded-read results, malformed manifests, or later filesystem changes.
+ * Side effects: Parses the retained manifest text and registers an opaque request context in a private WeakMap.
  */
 export function parseVerifiedWorkspaceManifestRead(
   input: unknown,
@@ -66,8 +69,12 @@ export function parseVerifiedWorkspaceManifestRead(
 }
 
 /**
- * Identity-only request lookup for the runtime. It does not reflect on or
- * dereference a caller-provided object, including a hostile Proxy.
+ * Looks up the private context for an issued scan request without dereferencing caller input.
+ *
+ * Inputs: Any candidate request value, including a hostile Proxy.
+ * Outputs: Its trusted manifest/read context, or undefined for any unissued identity.
+ * Does not handle: Request-shape validation, manifest parsing, or capability forgery.
+ * Side effects: None; only the private WeakMap is consulted.
  */
 export function workspaceScanRequestContext(
   input: unknown,
@@ -78,9 +85,12 @@ export function workspaceScanRequestContext(
 }
 
 /**
- * Revalidate the exact manifest file and its canonical parent without
- * realpath-ing a caller path. This fails closed if either identity changed
- * since the bounded read that issued the request.
+ * Revalidates the manifest file and canonical parent captured when a request was issued.
+ *
+ * Inputs: A trusted request context containing canonical paths and prior file/directory stat identities.
+ * Outputs: True only when both still exist with the recorded file type, device, inode, size, mtime, and ctime.
+ * Does not handle: Re-reading manifest text, repairing renamed paths, symlink re-resolution, content hashing, or closing the time-of-check/time-of-use window before later repository-root and provisioning reads; matching stat fields are not a proof of immutable filesystem identity/version semantics.
+ * Side effects: Performs asynchronous filesystem stat calls; all I/O or identity failures become false.
  */
 export async function verifyWorkspaceScanRequestContext(
   context: WorkspaceScanRequestContext,

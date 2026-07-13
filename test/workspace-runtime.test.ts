@@ -53,6 +53,14 @@ import {
 } from "./helpers/workspace-fixture.js";
 
 
+/**
+ * Assembles the scanFixture test value.
+ *
+ * Inputs: `fixture`.
+ * Outputs: the fixture value returned by `scanFixture`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: invokes `readLocalWorkspaceManifest`, `assert.fail`, `scanWorkspace`.
+ */
 async function scanFixture(fixture: WorkspaceFixture) {
   const document = await readLocalWorkspaceManifest(fixture.manifestPath);
   if (document.ok === false) {
@@ -61,7 +69,15 @@ async function scanFixture(fixture: WorkspaceFixture) {
   return scanWorkspace(document.request);
 }
 
-/** Test-only lower-layer helper; runtime itself always preflights before input I/O. */
+/*  Test-only lower-layer helper; runtime itself always preflights before input I/O. */
+/**
+ * Assembles the attestDeploymentInputSnapshot test value.
+ *
+ * Inputs: `invocation`, `deploymentId`, `repositoryMembers`.
+ * Outputs: the fixture value returned by `attestDeploymentInputSnapshot`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: invokes `attestVerifiedWorkspaceDeploymentMembers`, `attestVerifiedWorkspaceDeploymentInputs`.
+ */
 async function attestDeploymentInputSnapshot(
   invocation: unknown,
   deploymentId: unknown,
@@ -77,38 +93,114 @@ async function attestDeploymentInputSnapshot(
     : attestVerifiedWorkspaceDeploymentInputs(issuance);
 }
 
+/**
+ * Assembles the repository test value.
+ *
+ * Inputs: `result`, `id`.
+ * Outputs: the fixture value returned by `repository`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: invokes `result.repositories.find`, `assert.notEqual`.
+ */
 function repository(
   result: Awaited<ReturnType<typeof scanWorkspace>>,
   id: string,
 ): Awaited<ReturnType<typeof scanWorkspace>>["repositories"][number] {
-  const entry = result.repositories.find((candidate) => candidate.id === id);
+  const entry = result.repositories.find(
+    /**
+     * Tests the current candidate against the requested condition.
+     *
+     * Inputs: `candidate`.
+     * Outputs: the `candidate.id === id` result consumed by `result.repositories.find`.
+     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+     * Side effects: none; it derives the current-item result.
+     */
+    (candidate) => candidate.id === id);
   assert.notEqual(entry, undefined, "expected repository " + id);
   return entry as Awaited<ReturnType<typeof scanWorkspace>>["repositories"][number];
 }
 
+/**
+ * Assembles the deployment test value.
+ *
+ * Inputs: `result`, `id`.
+ * Outputs: the fixture value returned by `deployment`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: invokes `result.deployments.find`, `assert.notEqual`.
+ */
 function deployment(
   result: Awaited<ReturnType<typeof scanWorkspace>>,
   id: string,
 ): Awaited<ReturnType<typeof scanWorkspace>>["deployments"][number] {
-  const entry = result.deployments.find((candidate) => candidate.id === id);
+  const entry = result.deployments.find(
+    /**
+     * Tests the current candidate against the requested condition.
+     *
+     * Inputs: `candidate`.
+     * Outputs: the `candidate.id === id` result consumed by `result.deployments.find`.
+     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+     * Side effects: none; it derives the current-item result.
+     */
+    (candidate) => candidate.id === id);
   assert.notEqual(entry, undefined, "expected deployment " + id);
   return entry as Awaited<ReturnType<typeof scanWorkspace>>["deployments"][number];
 }
 
+/**
+ * Assembles the deploymentMember test value.
+ *
+ * Inputs: `entry`, `repositoryId`.
+ * Outputs: the fixture value returned by `deploymentMember`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: invokes `entry.members.find`, `assert.notEqual`.
+ */
 function deploymentMember(
   entry: ReturnType<typeof deployment>,
   repositoryId: string,
 ): ReturnType<typeof deployment>["members"][number] {
-  const member = entry.members.find((candidate) => candidate.repositoryId === repositoryId);
+  const member = entry.members.find(
+    /**
+     * Tests the current candidate against the requested condition.
+     *
+     * Inputs: `candidate`.
+     * Outputs: the `candidate.repositoryId === repositoryId` result consumed by `entry.members.find`.
+     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+     * Side effects: none; it derives the current-item result.
+     */
+    (candidate) => candidate.repositoryId === repositoryId);
   assert.notEqual(member, undefined, "expected deployment member " + repositoryId);
   return member as ReturnType<typeof deployment>["members"][number];
 }
 
+/**
+ * Assembles the emittedReconciliationGraphFacts test value.
+ *
+ * Inputs: `reconciliation`.
+ * Outputs: the completion result produced by `emittedReconciliationGraphFacts`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: invokes `reconciliation.records.reduce`, `reconciliation.scopeCoverage.reduce`.
+ */
 function emittedReconciliationGraphFacts(
   reconciliation: Awaited<ReturnType<typeof scanWorkspace>>["repositories"][number]["reconciliation"],
 ): number {
-  const recordFacts = reconciliation.records.reduce((total, record) => {
+  const recordFacts = reconciliation.records.reduce(
+    /**
+     * Accumulates facts for the current record.
+     *
+     * Inputs: `total`, `record`.
+     * Outputs: the next accumulator value `{ const reasons = record.reasons.reduce( (reasonTotal, reason) => reasonTotal + 1 + (reason.gapIds?.length ?? 0) + (reason.candidateIds?.length ?? 0), 0, ); const references = record.kind ==`.
+     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+     * Side effects: none; it derives the current-item result.
+     */
+    (total, record) => {
     const reasons = record.reasons.reduce(
+      /**
+       * Accumulates facts for the current reason.
+       *
+       * Inputs: `reasonTotal`, `reason`.
+       * Outputs: the next accumulator value `reasonTotal + 1 + (reason.gapIds?.length ?? 0) + (reason.candidateIds?.length ?? 0)`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
       (reasonTotal, reason) =>
         reasonTotal +
         1 +
@@ -121,29 +213,86 @@ function emittedReconciliationGraphFacts(
     return total + 1 + references + repeatedDynamic + reasons;
   }, 0);
   return recordFacts + reconciliation.scopeCoverage.reduce(
+    /**
+     * Accumulates facts for the current coverage.
+     *
+     * Inputs: `total`, `coverage`.
+     * Outputs: the next accumulator value `total + 1 + coverage.gapIds.length`.
+     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+     * Side effects: none; it derives the current-item result.
+     */
     (total, coverage) => total + 1 + coverage.gapIds.length,
     0,
   );
 }
 
+/**
+ * Assembles the evidenceGraphFacts test value.
+ *
+ * Inputs: `evidence`.
+ * Outputs: the fixture value returned by `evidenceGraphFacts`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: invokes `evidence.reduce`.
+ */
 function evidenceGraphFacts(
   evidence: readonly { readonly locations: readonly unknown[] }[],
 ): number {
-  return evidence.reduce((total, entry) => total + 1 + entry.locations.length, 0);
+  return evidence.reduce(
+    /**
+     * Accumulates facts for the current entry.
+     *
+     * Inputs: `total`, `entry`.
+     * Outputs: the next accumulator value `total + 1 + entry.locations.length`.
+     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+     * Side effects: none; it derives the current-item result.
+     */
+    (total, entry) => total + 1 + entry.locations.length, 0);
 }
 
+/**
+ * Assembles the referenceGraphFacts test value.
+ *
+ * Inputs: `reference`.
+ * Outputs: the fixture value returned by `referenceGraphFacts`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: invokes `evidenceGraphFacts`.
+ */
 function referenceGraphFacts(reference: SecretReference): number {
   return 1 + evidenceGraphFacts(reference.evidenceChain);
 }
 
+/**
+ * Assembles the demandEdgeGraphFacts test value.
+ *
+ * Inputs: `edge`.
+ * Outputs: the fixture value returned by `demandEdgeGraphFacts`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: invokes `evidenceGraphFacts`.
+ */
 function demandEdgeGraphFacts(edge: DemandEdge): number {
   return 2 + evidenceGraphFacts(edge.evidenceChain);
 }
 
+/**
+ * Assembles the dynamicLookupGraphFacts test value.
+ *
+ * Inputs: `edge`.
+ * Outputs: the fixture value returned by `dynamicLookupGraphFacts`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: invokes `evidenceGraphFacts`.
+ */
 function dynamicLookupGraphFacts(edge: DynamicLookupEdge): number {
   return 2 + edge.likelyKeys.length + evidenceGraphFacts(edge.evidenceChain);
 }
 
+/**
+ * Assembles the emittedResultGraphFacts test value.
+ *
+ * Inputs: `entry`.
+ * Outputs: the fixture value returned by `emittedResultGraphFacts`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: invokes `entry.references.reduce`, `entry.demandEdges.reduce`, `entry.dynamicLookupEdges.reduce`, `emittedReconciliationGraphFacts`.
+ */
 function emittedResultGraphFacts(entry: {
   readonly diagnostics: readonly unknown[];
   readonly references: readonly SecretReference[];
@@ -153,39 +302,115 @@ function emittedResultGraphFacts(entry: {
 }): number {
   return (
     entry.diagnostics.length +
-    entry.references.reduce((total, reference) => total + referenceGraphFacts(reference), 0) +
-    entry.demandEdges.reduce((total, edge) => total + demandEdgeGraphFacts(edge), 0) +
-    entry.dynamicLookupEdges.reduce((total, edge) => total + dynamicLookupGraphFacts(edge), 0) +
+    entry.references.reduce(
+      /**
+       * Accumulates facts for the current reference.
+       *
+       * Inputs: `total`, `reference`.
+       * Outputs: the next accumulator value `total + referenceGraphFacts(reference)`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (total, reference) => total + referenceGraphFacts(reference), 0) +
+    entry.demandEdges.reduce(
+      /**
+       * Accumulates facts for the current edge.
+       *
+       * Inputs: `total`, `edge`.
+       * Outputs: the next accumulator value `total + demandEdgeGraphFacts(edge)`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (total, edge) => total + demandEdgeGraphFacts(edge), 0) +
+    entry.dynamicLookupEdges.reduce(
+      /**
+       * Accumulates facts for the current edge.
+       *
+       * Inputs: `total`, `edge`.
+       * Outputs: the next accumulator value `total + dynamicLookupGraphFacts(edge)`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (total, edge) => total + dynamicLookupGraphFacts(edge), 0) +
     emittedReconciliationGraphFacts(entry.reconciliation)
   );
 }
 
+/**
+ * Assembles the emittedDeploymentGraphFacts test value.
+ *
+ * Inputs: `result`.
+ * Outputs: the fixture value returned by `emittedDeploymentGraphFacts`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: invokes `result.deployments.reduce`.
+ */
 function emittedDeploymentGraphFacts(
   result: Awaited<ReturnType<typeof scanWorkspace>>,
 ): number {
-  return result.deployments.reduce((total, deployment) =>
+  return result.deployments.reduce(
+    /**
+     * Accumulates facts for the current deployment.
+     *
+     * Inputs: `total`, `deployment`.
+     * Outputs: the next accumulator value `total + deployment.sharedKeys.length + deployment.diagnostics.length + deployment.members.reduce( (memberTotal, member) => memberTotal + emittedResultGraphFacts(member), 0, )`.
+     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+     * Side effects: none; it derives the current-item result.
+     */
+    (total, deployment) =>
     total +
     deployment.sharedKeys.length +
     deployment.diagnostics.length +
     deployment.members.reduce(
+      /**
+       * Accumulates facts for the current member.
+       *
+       * Inputs: `memberTotal`, `member`.
+       * Outputs: the next accumulator value `memberTotal + emittedResultGraphFacts(member)`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
       (memberTotal, member) => memberTotal + emittedResultGraphFacts(member),
       0,
     ),
   0);
 }
 
+/**
+ * Assembles the emittedWorkspaceGraphFacts test value.
+ *
+ * Inputs: `result`.
+ * Outputs: the fixture value returned by `emittedWorkspaceGraphFacts`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: invokes `result.repositories.reduce`, `emittedDeploymentGraphFacts`.
+ */
 function emittedWorkspaceGraphFacts(
   result: Awaited<ReturnType<typeof scanWorkspace>>,
 ): number {
   return (
     result.repositories.reduce(
+      /**
+       * Accumulates facts for the current repository.
+       *
+       * Inputs: `total`, `repository`.
+       * Outputs: the next accumulator value `total + emittedResultGraphFacts(repository)`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
       (total, repository) => total + emittedResultGraphFacts(repository),
       0,
     ) + emittedDeploymentGraphFacts(result)
   );
 }
 
-/** A compact fallback is the invocation floor: one empty incomplete status. */
+/*  A compact fallback is the invocation floor: one empty incomplete status. */
+/**
+ * Assembles the isBudgetFallbackResult test value.
+ *
+ * Inputs: `member`.
+ * Outputs: the fixture value returned by `isBudgetFallbackResult`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: none; it allocates only in-memory test data.
+ */
 function isBudgetFallbackResult(
   member: {
     readonly status: string;
@@ -215,28 +440,88 @@ function isBudgetFallbackResult(
   );
 }
 
+/**
+ * Assembles the isBudgetFallbackMember test value.
+ *
+ * Inputs: `member`.
+ * Outputs: the fixture value returned by `isBudgetFallbackMember`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: invokes `isBudgetFallbackResult`.
+ */
 function isBudgetFallbackMember(member: ReturnType<typeof deploymentMember>): boolean {
   return isBudgetFallbackResult(member);
 }
 
+/**
+ * Assembles the assertInvalidManifestProvenance test value.
+ *
+ * Inputs: `result`, `fixture`.
+ * Outputs: the completion result produced by `assertInvalidManifestProvenance`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: invokes `assert.equal`, `result.repositories.every`, `result.deployments.every`, `JSON.stringify(result).includes`, `JSON.stringify`.
+ */
 function assertInvalidManifestProvenance(
   result: Awaited<ReturnType<typeof scanWorkspace>>,
   fixture: WorkspaceFixture,
 ): void {
-  assert.equal(result.repositories.every((repository) => repository.status === "invalid"), true);
-  assert.equal(result.deployments.every((deployment) => deployment.status === "invalid"), true);
+  assert.equal(result.repositories.every(
+    /**
+     * Tests the current repository against the requested condition.
+     *
+     * Inputs: `repository`.
+     * Outputs: the `repository.status === "invalid"` result consumed by `result.repositories.every`.
+     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+     * Side effects: none; it derives the current-item result.
+     */
+    (repository) => repository.status === "invalid"), true);
+  assert.equal(result.deployments.every(
+    /**
+     * Tests the current deployment against the requested condition.
+     *
+     * Inputs: `deployment`.
+     * Outputs: the `deployment.status === "invalid"` result consumed by `result.deployments.every`.
+     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+     * Side effects: none; it derives the current-item result.
+     */
+    (deployment) => deployment.status === "invalid"), true);
   assert.equal(JSON.stringify(result).includes(fixture.root), false);
   assert.equal(JSON.stringify(result).includes(fixture.privateSourceMarker), false);
 }
 
-test("workspace runtime scans an approved sibling repository through a canonical manifest base", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("workspace runtime scans an approved sibling repository through a canonical manifest base",
+  /**
+   * Exercises the “workspace runtime scans an approved sibling repository through a canonical manifest base” scenario through `withWorkspaceFixture`, `scanFixture`, `repository`, `equal`, `some`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “workspace runtime scans an approved sibling repository through a canonical manifest base”.
+   * Outputs: Normal completion only after the “workspace runtime scans an approved sibling repository through a canonical manifest base” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Runs assertions through `withWorkspaceFixture`, `scanFixture`, `repository`, `equal`, `some`; assertion failures escape.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “workspace runtime scans an approved sibling repository through a canonical manifest base”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `scanFixture`, `repository`, `assert.equal`, `api?.reconciliation.records.some`, `JSON.stringify(result).includes`, `JSON.stringify`.
+     */
+    async (fixture) => {
     const result = await scanFixture(fixture);
     const api = repository(result, "api");
 
     assert.equal(api?.status, "complete");
     assert.equal(
       api?.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "demand" && record.key.name === "DATABASE_URL"` result consumed by `api?.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (record) => record.kind === "demand" && record.key.name === "DATABASE_URL",
       ),
       true,
@@ -246,8 +531,26 @@ test("workspace runtime scans an approved sibling repository through a canonical
   });
 });
 
-test("duplicate keys aggregate only within an explicit shared deployment", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("duplicate keys aggregate only within an explicit shared deployment",
+  /**
+   * Exercises the “duplicate keys aggregate only within an explicit shared deployment” scenario through `withWorkspaceFixture`, `scanFixture`, `deployment`, `deepEqual`, `writeFixtureLayout`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “duplicate keys aggregate only within an explicit shared deployment”.
+   * Outputs: Normal completion only after the “duplicate keys aggregate only within an explicit shared deployment” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Runs assertions through `withWorkspaceFixture`, `scanFixture`, `deployment`, `deepEqual`, `writeFixtureLayout`; assertion failures escape.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “duplicate keys aggregate only within an explicit shared deployment”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `scanFixture`, `deployment`, `assert.deepEqual`, `writeFixtureLayout`, `assert.equal`, `repository`.
+     */
+    async (fixture) => {
     const unrelated = await scanFixture(fixture);
     const apiDeployment = deployment(unrelated, "api-production");
     const workerDeployment = deployment(unrelated, "worker-production");
@@ -266,8 +569,26 @@ test("duplicate keys aggregate only within an explicit shared deployment", async
   });
 });
 
-test("workspace runtime rejects forged, cloned, and mixed requests without reflecting trap text", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("workspace runtime rejects forged, cloned, and mixed requests without reflecting trap text",
+  /**
+   * Exercises the “workspace runtime rejects forged, cloned, and mixed requests without reflecting trap text” scenario through `withWorkspaceFixture`, `readLocalWorkspaceManifest`, `fail`, `defineProperty`, `revocable`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “workspace runtime rejects forged, cloned, and mixed requests without reflecting trap text”.
+   * Outputs: Normal completion only after the “workspace runtime rejects forged, cloned, and mixed requests without reflecting trap text” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Throws the deliberate test value or propagates the error expressed in its body.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Exercises “workspace runtime rejects forged, cloned, and mixed requests without reflecting trap text” through the `withWorkspaceFixture` callback and invokes `readLocalWorkspaceManifest`, `fail`, `defineProperty`, `revocable`, `revoke`.
+     *
+     * Inputs: Receives `fixture` from the `withWorkspaceFixture` callback.
+     * Outputs: Throws the deliberate test error or completes as consumed by the `withWorkspaceFixture` callback.
+     * Does not handle: It does not create, dispose, or retain the temporary fixture; withWorkspaceFixture owns that lifecycle while this callback uses only its issued paths and test-local assertions.
+     * Side effects: Throws the deliberate sentinel or propagates the error expressed in its body.
+     */
+    async (fixture) => {
     const document = await readLocalWorkspaceManifest(fixture.manifestPath);
     if (document.ok === false) {
       assert.fail(document.code);
@@ -278,20 +599,47 @@ test("workspace runtime rejects forged, cloned, and mixed requests without refle
     let getterInvoked = false;
 
     const prototypeTrap = new Proxy({}, {
-      getPrototypeOf: () => {
+      getPrototypeOf:
+        /**
+         * Implements the hostile proxy's `getPrototypeOf` trap for the forged-request rejection test.
+         *
+         * Inputs: Reflection supplies the proxy target argument; this zero-argument implementation intentionally ignores it.
+         * Outputs: Never returns: it throws the test sentinel if reflection reaches the trap.
+         * Does not handle: It neither performs reflection nor decides parser rejection; a reflective prototype lookup supplies the proxy target and this trap only marks the test sentinel before throwing.
+         * Side effects: Sets `prototypeTrapInvoked` and throws the deliberate sentinel error.
+         */
+        () => {
         prototypeTrapInvoked = true;
         throw new Error(sentinel);
       },
     });
     const ownKeysTrap = new Proxy({}, {
-      ownKeys: () => {
+      ownKeys:
+        /**
+         * Implements the hostile proxy's `ownKeys` trap for the forged-request rejection test.
+         *
+         * Inputs: Reflection supplies the proxy target argument; this zero-argument implementation intentionally ignores it.
+         * Outputs: Never returns: it throws the test sentinel if reflection reaches the trap.
+         * Does not handle: It neither enumerates properties nor decides parser rejection; reflective key enumeration supplies the proxy target and this trap only marks the test sentinel before throwing.
+         * Side effects: Sets `ownKeysTrapInvoked` and throws the deliberate sentinel error.
+         */
+        () => {
         ownKeysTrapInvoked = true;
         throw new Error(sentinel);
       },
     });
     const throwingGetter = {};
     Object.defineProperty(throwingGetter, "manifest", {
-      get: () => {
+      get:
+        /**
+         * Implements the hostile `manifest` getter installed for the forged-request rejection test.
+         *
+         * Inputs: A later property read supplies the receiver; this zero-argument getter intentionally ignores it.
+         * Outputs: Never returns: it throws the test sentinel when `manifest` is read.
+         * Does not handle: It neither installs the property nor chooses when it runs; property access invokes this test getter, which only throws the deliberate sentinel.
+         * Side effects: Sets `getterInvoked` and throws the deliberate sentinel error.
+         */
+        () => {
         getterInvoked = true;
         throw new Error(sentinel);
       },
@@ -299,7 +647,16 @@ test("workspace runtime rejects forged, cloned, and mixed requests without refle
     const revoked = Proxy.revocable({}, {});
     revoked.revoke();
 
-    const isFixedRuntimeError = (error: unknown): boolean => {
+    const isFixedRuntimeError =
+      /**
+       * Validates the redacted fixed failure emitted for forged workspace requests.
+       *
+       * Inputs: The `error` rejected by each `scanWorkspace` call in this fixture loop.
+       * Outputs: True after asserting the runtime error type and absence of the trap sentinel in string and JSON views.
+       * Does not handle: Invoking the rejected scan, repairing the error, or inspecting successful results.
+       * Side effects: Runs assertion checks that throw when the fixed error shape is violated.
+       */
+      (error: unknown): boolean => {
       assert.equal(error instanceof WorkspaceRuntimeError, true);
       assert.equal(error instanceof TypeError, false);
       assert.equal(String(error).includes(sentinel), false);
@@ -327,6 +684,14 @@ test("workspace runtime rejects forged, cloned, and mixed requests without refle
         manifest: document.manifest,
         manifestPath: sentinel,
       }),
+      /**
+       * Recognizes the fixed runtime error used by this direct rejection assertion.
+       *
+       * Inputs: The `error` supplied by `assert.rejects` after `scanWorkspace` rejects.
+       * Outputs: True exactly when the error is a `WorkspaceRuntimeError`.
+       * Does not handle: Starting the scan, checking sentinel redaction, or recovering the rejection.
+       * Side effects: None; it only performs an instance check.
+       */
       (error: unknown) => error instanceof WorkspaceRuntimeError,
     );
 
@@ -343,8 +708,26 @@ test("workspace runtime rejects forged, cloned, and mixed requests without refle
   });
 });
 
-test("workspace runtime rejects a request after its verified manifest file is replaced", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("workspace runtime rejects a request after its verified manifest file is replaced",
+  /**
+   * Exercises the “workspace runtime rejects a request after its verified manifest file is replaced” scenario through `withWorkspaceFixture`, `readLocalWorkspaceManifest`, `fail`, `rename`, `join`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “workspace runtime rejects a request after its verified manifest file is replaced”.
+   * Outputs: Normal completion only after the “workspace runtime rejects a request after its verified manifest file is replaced” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `readLocalWorkspaceManifest`, `fail`, `rename`, `join`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “workspace runtime rejects a request after its verified manifest file is replaced”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `readLocalWorkspaceManifest`, `assert.fail`, `rename`, `join`, `writeFile`, `assertInvalidManifestProvenance`, including the fixture filesystem changes.
+     */
+    async (fixture) => {
     const document = await readLocalWorkspaceManifest(fixture.manifestPath);
     if (!document.ok) {
       assert.fail(document.code);
@@ -357,8 +740,26 @@ test("workspace runtime rejects a request after its verified manifest file is re
   });
 });
 
-test("workspace runtime rejects a request after its manifest path is replaced by a symlink", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("workspace runtime rejects a request after its manifest path is replaced by a symlink",
+  /**
+   * Exercises the “workspace runtime rejects a request after its manifest path is replaced by a symlink” scenario through `withWorkspaceFixture`, `readLocalWorkspaceManifest`, `fail`, `join`, `writeFile`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “workspace runtime rejects a request after its manifest path is replaced by a symlink”.
+   * Outputs: Normal completion only after the “workspace runtime rejects a request after its manifest path is replaced by a symlink” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `readLocalWorkspaceManifest`, `fail`, `join`, `writeFile`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “workspace runtime rejects a request after its manifest path is replaced by a symlink”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `readLocalWorkspaceManifest`, `assert.fail`, `join`, `writeFile`, `rm`, `symlink`.
+     */
+    async (fixture) => {
     const document = await readLocalWorkspaceManifest(fixture.manifestPath);
     if (!document.ok) {
       assert.fail(document.code);
@@ -373,8 +774,26 @@ test("workspace runtime rejects a request after its manifest path is replaced by
   });
 });
 
-test("workspace runtime rejects a request after its verified canonical base is replaced", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("workspace runtime rejects a request after its verified canonical base is replaced",
+  /**
+   * Exercises the “workspace runtime rejects a request after its verified canonical base is replaced” scenario through `withWorkspaceFixture`, `readLocalWorkspaceManifest`, `fail`, `rename`, `join`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “workspace runtime rejects a request after its verified canonical base is replaced”.
+   * Outputs: Normal completion only after the “workspace runtime rejects a request after its verified canonical base is replaced” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `readLocalWorkspaceManifest`, `fail`, `rename`, `join`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “workspace runtime rejects a request after its verified canonical base is replaced”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `readLocalWorkspaceManifest`, `assert.fail`, `rename`, `join`, `mkdir`, `writeFile`, including the fixture filesystem changes.
+     */
+    async (fixture) => {
     const document = await readLocalWorkspaceManifest(fixture.manifestPath);
     if (!document.ok) {
       assert.fail(document.code);
@@ -388,8 +807,26 @@ test("workspace runtime rejects a request after its verified canonical base is r
   });
 });
 
-test("workspace runtime rejects equal and nested canonical root aliases before scanning", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("workspace runtime rejects equal and nested canonical root aliases before scanning",
+  /**
+   * Exercises the “workspace runtime rejects equal and nested canonical root aliases before scanning” scenario through `withWorkspaceFixture`, `symlink`, `join`, `writeFile`, `stringify`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “workspace runtime rejects equal and nested canonical root aliases before scanning”.
+   * Outputs: Normal completion only after the “workspace runtime rejects equal and nested canonical root aliases before scanning” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `symlink`, `join`, `writeFile`, `stringify`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “workspace runtime rejects equal and nested canonical root aliases before scanning”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `symlink`, `join`, `writeFile`, `JSON.stringify`, `readLocalWorkspaceManifest`, `assert.fail`.
+     */
+    async (fixture) => {
     await symlink(fixture.repositoryRoots.api, join(fixture.root, "api-alias"), "dir");
     await symlink(
       join(fixture.repositoryRoots.api, "src"),
@@ -414,12 +851,38 @@ test("workspace runtime rejects equal and nested canonical root aliases before s
     const result = await scanWorkspace(document.request);
 
     assert.deepEqual(
-      result.repositories.map((repository) => repository.status),
+      result.repositories.map(
+        /**
+         * Projects a report value from the current repository.
+         *
+         * Inputs: `repository`.
+         * Outputs: the `repository.status` result consumed by `result.repositories.map`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (repository) => repository.status),
       ["invalid", "invalid", "invalid"],
     );
     assert.equal(
-      result.repositories.every((repository) =>
+      result.repositories.every(
+        /**
+         * Tests the current repository against the requested condition.
+         *
+         * Inputs: `repository`.
+         * Outputs: the `repository.diagnostics.some( (diagnostic) => diagnostic === "WORKSPACE_REPOSITORY_ROOT_CONFLICT", )` result consumed by `result.repositories.every`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (repository) =>
         repository.diagnostics.some(
+          /**
+           * Tests the current diagnostic against the requested condition.
+           *
+           * Inputs: `diagnostic`.
+           * Outputs: the `diagnostic === "WORKSPACE_REPOSITORY_ROOT_CONFLICT"` result consumed by `repository.diagnostics.some`.
+           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+           * Side effects: none; it derives the current-item result.
+           */
           (diagnostic) => diagnostic === "WORKSPACE_REPOSITORY_ROOT_CONFLICT",
         ),
       ),
@@ -429,8 +892,26 @@ test("workspace runtime rejects equal and nested canonical root aliases before s
   });
 });
 
-test("canonical root indexing retains ancestor conflicts across prefix-like siblings", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("canonical root indexing retains ancestor conflicts across prefix-like siblings",
+  /**
+   * Exercises the “canonical root indexing retains ancestor conflicts across prefix-like siblings” scenario through `withWorkspaceFixture`, `join`, `all`, `mkdir`, `symlink`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “canonical root indexing retains ancestor conflicts across prefix-like siblings”.
+   * Outputs: Normal completion only after the “canonical root indexing retains ancestor conflicts across prefix-like siblings” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `join`, `all`, `mkdir`, `symlink`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “canonical root indexing retains ancestor conflicts across prefix-like siblings”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `join`, `Promise.all`, `mkdir`, `symlink`, `writeFile`, `JSON.stringify`.
+     */
+    async (fixture) => {
     const ancestor = join(fixture.root, "root-prefix");
     const sibling = join(fixture.root, "root-prefix-");
     const nestedAlias = join(fixture.root, "nested-prefix-alias");
@@ -455,24 +936,78 @@ test("canonical root indexing retains ancestor conflicts across prefix-like sibl
 
     const result = await scanWorkspace(document.request);
     assert.deepEqual(
-      result.repositories.map((repository) => repository.status),
+      result.repositories.map(
+        /**
+         * Projects a report value from the current repository.
+         *
+         * Inputs: `repository`.
+         * Outputs: the `repository.status` result consumed by `result.repositories.map`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (repository) => repository.status),
       ["invalid", "complete", "invalid"],
     );
   });
 });
 
-test("request member attestation indexes 10,000 resolved roots without pairwise conflict scans", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("request member attestation indexes 10,000 resolved roots without pairwise conflict scans",
+  /**
+   * Exercises the “request member attestation indexes 10,000 resolved roots without pairwise conflict scans” scenario through `withWorkspaceFixture`, `from`, `String`, `all`, `map`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “request member attestation indexes 10,000 resolved roots without pairwise conflict scans”.
+   * Outputs: Normal completion only after the “request member attestation indexes 10,000 resolved roots without pairwise conflict scans” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `from`, `String`, `all`, `map`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “request member attestation indexes 10,000 resolved roots without pairwise conflict scans”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `Array.from`, `Promise.all`, `ids.slice(start, start + 128).map`, `ids.slice`, `writeFile`, `JSON.stringify`.
+     */
+    async (fixture) => {
     const count = 10_000;
-    const ids = Array.from({ length: count }, (_, index) => "scale-" + String(index));
+    const ids = Array.from({ length: count },
+      /**
+       * Constructs one generated fixture element.
+       *
+       * Inputs: `_`, `index`.
+       * Outputs: the `"scale-" + String(index)` result consumed by `Array.from`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (_, index) => "scale-" + String(index));
     for (let start = 0; start < ids.length; start += 128) {
-      await Promise.all(ids.slice(start, start + 128).map((id) =>
+      await Promise.all(ids.slice(start, start + 128).map(
+        /**
+         * Projects a report value from the current id.
+         *
+         * Inputs: `id`.
+         * Outputs: the `mkdir(join(fixture.root, "scale", id), { recursive: true })` result consumed by `ids.slice(start, start + 128).map`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (id) =>
         mkdir(join(fixture.root, "scale", id), { recursive: true }),
       ));
     }
     await writeFile(fixture.manifestPath, JSON.stringify({
       schemaVersion: "workspace-manifest/v2",
-      repositories: ids.map((id) => ({ id, root: "../scale/" + id })),
+      repositories: ids.map(
+        /**
+         * Projects a report value from the current id.
+         *
+         * Inputs: `id`.
+         * Outputs: the `({ id, root: "../scale/" + id })` result consumed by `ids.map`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (id) => ({ id, root: "../scale/" + id })),
       deployments: [],
     }), "utf8");
 
@@ -494,17 +1029,52 @@ test("request member attestation indexes 10,000 resolved roots without pairwise 
   });
 });
 
-test("invocation indexes 10,000 deployment declarations without repeated manifest search", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("invocation indexes 10,000 deployment declarations without repeated manifest search",
+  /**
+   * Exercises the “invocation indexes 10,000 deployment declarations without repeated manifest search” scenario through `withWorkspaceFixture`, `from`, `padStart`, `String`, `writeFile`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “invocation indexes 10,000 deployment declarations without repeated manifest search”.
+   * Outputs: Normal completion only after the “invocation indexes 10,000 deployment declarations without repeated manifest search” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `from`, `padStart`, `String`, `writeFile`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “invocation indexes 10,000 deployment declarations without repeated manifest search”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `Array.from`, `writeFile`, `JSON.stringify`, `deploymentIds.map`, `readLocalWorkspaceManifest`, `assert.fail`, including the fixture filesystem changes.
+     */
+    async (fixture) => {
     const count = 10_000;
     const deploymentIds = Array.from(
       { length: count },
+      /**
+       * Constructs one generated fixture element.
+       *
+       * Inputs: `_`, `index`.
+       * Outputs: the `"deployment-index-" + String(index).padStart(4, "0")` result consumed by `Array.from`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
       (_, index) => "deployment-index-" + String(index).padStart(4, "0"),
     );
     await writeFile(fixture.manifestPath, JSON.stringify({
       schemaVersion: "workspace-manifest/v1",
       repositories: [{ id: "api", root: "../api" }],
-      deployments: deploymentIds.map((id) => ({ id, repositories: ["api"] })),
+      deployments: deploymentIds.map(
+        /**
+         * Projects a report value from the current id.
+         *
+         * Inputs: `id`.
+         * Outputs: the `({ id, repositories: ["api"] })` result consumed by `deploymentIds.map`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (id) => ({ id, repositories: ["api"] })),
     }), "utf8");
     const document = await readLocalWorkspaceManifest(fixture.manifestPath);
     if (document.ok === false) assert.fail(document.code);
@@ -529,8 +1099,26 @@ test("invocation indexes 10,000 deployment declarations without repeated manifes
   });
 });
 
-test("workspace shared keys require direct demand rather than finite dynamic possibilities", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("workspace shared keys require direct demand rather than finite dynamic possibilities",
+  /**
+   * Exercises the “workspace shared keys require direct demand rather than finite dynamic possibilities” scenario through `withWorkspaceFixture`, `writeFile`, `join`, `writeFixtureLayout`, `scanFixture`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “workspace shared keys require direct demand rather than finite dynamic possibilities”.
+   * Outputs: Normal completion only after the “workspace shared keys require direct demand rather than finite dynamic possibilities” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `writeFile`, `join`, `writeFixtureLayout`, `scanFixture`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “workspace shared keys require direct demand rather than finite dynamic possibilities”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `writeFile`, `join`, `[ "declare const enabled: boolean;", 'const choice = enabled ? "DATABASE_URL" : `, `writeFixtureLayout`, `scanFixture`, `deployment`, including the fixture filesystem changes.
+     */
+    async (fixture) => {
     await writeFile(
       join(fixture.repositoryRoots.worker, "src", "worker.ts"),
       [
@@ -552,8 +1140,26 @@ test("workspace shared keys require direct demand rather than finite dynamic pos
   });
 });
 
-test("one repository's parser uncertainty stays scoped to that repository and deployment", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("one repository's parser uncertainty stays scoped to that repository and deployment",
+  /**
+   * Exercises the “one repository's parser uncertainty stays scoped to that repository and deployment” scenario through `withWorkspaceFixture`, `scanFixture`, `equal`, `repository`, `deployment`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “one repository's parser uncertainty stays scoped to that repository and deployment”.
+   * Outputs: Normal completion only after the “one repository's parser uncertainty stays scoped to that repository and deployment” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Runs assertions through `withWorkspaceFixture`, `scanFixture`, `equal`, `repository`, `deployment`; assertion failures escape.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “one repository's parser uncertainty stays scoped to that repository and deployment”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `scanFixture`, `assert.equal`, `repository`, `deployment`, `assert.deepEqual`.
+     */
+    async (fixture) => {
     const result = await scanFixture(fixture);
 
     assert.equal(repository(result, "api")?.status, "complete");
@@ -575,8 +1181,26 @@ test("one repository's parser uncertainty stays scoped to that repository and de
   });
 });
 
-test("a malformed deployment input is scoped to its deployment, not its code repository", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("a malformed deployment input is scoped to its deployment, not its code repository",
+  /**
+   * Exercises the “a malformed deployment input is scoped to its deployment, not its code repository” scenario through `withWorkspaceFixture`, `writeFile`, `join`, `scanFixture`, `repository`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “a malformed deployment input is scoped to its deployment, not its code repository”.
+   * Outputs: Normal completion only after the “a malformed deployment input is scoped to its deployment, not its code repository” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `writeFile`, `join`, `scanFixture`, `repository`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “a malformed deployment input is scoped to its deployment, not its code repository”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `writeFile`, `join`, `scanFixture`, `repository`, `deployment`, `assert.equal`, including the fixture filesystem changes.
+     */
+    async (fixture) => {
     await writeFile(
       join(fixture.infraRoot, "api-production", "bindings.json"),
       "{",
@@ -592,12 +1216,28 @@ test("a malformed deployment input is scoped to its deployment, not its code rep
     assert.equal(apiDeployment?.status, "incomplete");
     assert.equal(
       deploymentMember(apiDeployment, "api")?.diagnostics.some(
+        /**
+         * Tests the current diagnostic against the requested condition.
+         *
+         * Inputs: `diagnostic`.
+         * Outputs: the `diagnostic === "APP_LOCAL_INPUT_INVALID_JSON"` result consumed by `deploymentMember(apiDeployment, "api")?.diagnostics.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (diagnostic) => diagnostic === "APP_LOCAL_INPUT_INVALID_JSON",
       ),
       true,
     );
     assert.equal(
       deploymentMember(apiDeployment, "api")?.reconciliation.scopeCoverage.some(
+        /**
+         * Tests the current coverage against the requested condition.
+         *
+         * Inputs: `coverage`.
+         * Outputs: the `coverage.state === "incomplete"` result consumed by `deploymentMember(apiDeployment, "api")?.reconciliation.scopeCoverage.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (coverage) => coverage.state === "incomplete",
       ),
       true,
@@ -606,8 +1246,26 @@ test("a malformed deployment input is scoped to its deployment, not its code rep
   });
 });
 
-test("an oversized provisioning document is scoped incomplete and cannot support absence", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("an oversized provisioning document is scoped incomplete and cannot support absence",
+  /**
+   * Exercises the “an oversized provisioning document is scoped incomplete and cannot support absence” scenario through `withWorkspaceFixture`, `fill`, `writeFile`, `join`, `stringify`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “an oversized provisioning document is scoped incomplete and cannot support absence”.
+   * Outputs: Normal completion only after the “an oversized provisioning document is scoped incomplete and cannot support absence” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `fill`, `writeFile`, `join`, `stringify`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “an oversized provisioning document is scoped incomplete and cannot support absence”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `new Array<unknown>(100_001).fill`, `Array`, `writeFile`, `join`, `JSON.stringify`, `scanFixture`, including the fixture filesystem changes.
+     */
+    async (fixture) => {
     const sentinel = "TEST SENTINEL VALUE";
     const candidates = new Array<unknown>(100_001).fill(null);
     candidates[candidates.length - 1] = sentinel;
@@ -630,20 +1288,55 @@ test("an oversized provisioning document is scoped incomplete and cannot support
     assert.equal(member.status, "incomplete");
     assert.equal(
       member.diagnostics.some(
+        /**
+         * Tests the current diagnostic against the requested condition.
+         *
+         * Inputs: `diagnostic`.
+         * Outputs: the `String(diagnostic) === "APP_PROVISIONING_INPUT_ENTRY_LIMIT_EXCEEDED"` result consumed by `member.diagnostics.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (diagnostic) => String(diagnostic) === "APP_PROVISIONING_INPUT_ENTRY_LIMIT_EXCEEDED",
       ),
       true,
     );
     assert.equal(
-      member.reconciliation.scopeCoverage.some((coverage) => coverage.state === "incomplete"),
+      member.reconciliation.scopeCoverage.some(
+        /**
+         * Tests the current coverage against the requested condition.
+         *
+         * Inputs: `coverage`.
+         * Outputs: the `coverage.state === "incomplete"` result consumed by `member.reconciliation.scopeCoverage.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (coverage) => coverage.state === "incomplete"),
       true,
     );
     assert.equal(JSON.stringify(result).includes(sentinel), false);
   });
 });
 
-test("unscoped inventory without a member-scoped provider binding stays unattributed", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("unscoped inventory without a member-scoped provider binding stays unattributed",
+  /**
+   * Exercises the “unscoped inventory without a member-scoped provider binding stays unattributed” scenario through `withWorkspaceFixture`, `writeFile`, `join`, `stringify`, `scanFixture`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “unscoped inventory without a member-scoped provider binding stays unattributed”.
+   * Outputs: Normal completion only after the “unscoped inventory without a member-scoped provider binding stays unattributed” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `writeFile`, `join`, `stringify`, `scanFixture`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “unscoped inventory without a member-scoped provider binding stays unattributed”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `writeFile`, `join`, `JSON.stringify`, `scanFixture`, `repository`, `deployment`, including the fixture filesystem changes.
+     */
+    async (fixture) => {
     await writeFile(
       join(fixture.infraRoot, "api-production", "inventory.json"),
       JSON.stringify({
@@ -669,12 +1362,29 @@ test("unscoped inventory without a member-scoped provider binding stays unattrib
 
     assert.equal(api?.status, "complete");
     assert.equal(
-      api?.reconciliation.records.some((record) => record.kind === "inventory"),
+      api?.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "inventory"` result consumed by `api?.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (record) => record.kind === "inventory"),
       false,
     );
     assert.equal(apiDeployment?.status, "incomplete");
     assert.equal(
       deploymentMember(apiDeployment, "api")?.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "unused-fixture-resource"` result consumed by `deploymentMember(apiDeployment, "api")?.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (record) =>
           record.kind === "inventory" &&
           record.providerResourceId.canonicalId === "unused-fixture-resource",
@@ -683,6 +1393,14 @@ test("unscoped inventory without a member-scoped provider binding stays unattrib
     );
     assert.equal(
       apiDeployment?.diagnostics.some(
+        /**
+         * Tests the current diagnostic against the requested condition.
+         *
+         * Inputs: `diagnostic`.
+         * Outputs: the `diagnostic === "WORKSPACE_DEPLOYMENT_UNATTRIBUTED_INVENTORY"` result consumed by `apiDeployment?.diagnostics.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (diagnostic) => diagnostic === "WORKSPACE_DEPLOYMENT_UNATTRIBUTED_INVENTORY",
       ),
       true,
@@ -690,8 +1408,26 @@ test("unscoped inventory without a member-scoped provider binding stays unattrib
   });
 });
 
-test("workspace deployment closed-model verification uses the captured manifest base after chdir", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("workspace deployment closed-model verification uses the captured manifest base after chdir",
+  /**
+   * Exercises the “workspace deployment closed-model verification uses the captured manifest base after chdir” scenario through `withWorkspaceFixture`, `join`, `mkdir`, `writeFile`, `stringify`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “workspace deployment closed-model verification uses the captured manifest base after chdir”.
+   * Outputs: Normal completion only after the “workspace deployment closed-model verification uses the captured manifest base after chdir” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `join`, `mkdir`, `writeFile`, `stringify`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “workspace deployment closed-model verification uses the captured manifest base after chdir”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `join`, `mkdir`, `writeFile`, `JSON.stringify`, `closedModelDocumentForWorkspaceRuntime`, `readLocalWorkspaceManifest`.
+     */
+    async (fixture) => {
     const manifestPath = join(fixture.root, "workspace.jsonc");
     const closedModelPath = join(fixture.infraRoot, "api-production", "closed-model.json");
     const unrelatedCwd = join(fixture.root, "unrelated");
@@ -741,6 +1477,14 @@ test("workspace deployment closed-model verification uses the captured manifest 
       assert.equal(apiDeployment?.status, "complete");
       assert.equal(
         apiDeployment?.diagnostics.some(
+          /**
+           * Tests the current diagnostic against the requested condition.
+           *
+           * Inputs: `diagnostic`.
+           * Outputs: the `String(diagnostic) === "APP_CLOSED_MODEL_ROOT_UNVERIFIED"` result consumed by `apiDeployment?.diagnostics.some`.
+           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+           * Side effects: none; it derives the current-item result.
+           */
           (diagnostic) => String(diagnostic) === "APP_CLOSED_MODEL_ROOT_UNVERIFIED",
         ),
         false,
@@ -751,8 +1495,26 @@ test("workspace deployment closed-model verification uses the captured manifest 
   });
 });
 
-test("multi-member closed provisioning remains independently verifiable after chdir", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("multi-member closed provisioning remains independently verifiable after chdir",
+  /**
+   * Exercises the “multi-member closed provisioning remains independently verifiable after chdir” scenario through `withWorkspaceFixture`, `writeFixtureLayout`, `join`, `mkdir`, `writeDeploymentProvisioning`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “multi-member closed provisioning remains independently verifiable after chdir”.
+   * Outputs: Normal completion only after the “multi-member closed provisioning remains independently verifiable after chdir” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `writeFixtureLayout`, `join`, `mkdir`, `writeDeploymentProvisioning`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “multi-member closed provisioning remains independently verifiable after chdir”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `writeFixtureLayout`, `join`, `mkdir`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`.
+     */
+    async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
     const manifestPath = join(fixture.root, "workspace-multi-closed.jsonc");
     const closedModelPath = join(fixture.infraRoot, "shared-production", "closed-model.json");
@@ -835,11 +1597,28 @@ test("multi-member closed provisioning remains independently verifiable after ch
     try {
       const shared = deployment(await scanWorkspace(document.request), "shared-production");
       assert.equal(shared.status, "complete");
-      assert.deepEqual(shared.members.map((member) => member.repositoryId), ["api", "worker"]);
+      assert.deepEqual(shared.members.map(
+        /**
+         * Projects a report value from the current member.
+         *
+         * Inputs: `member`.
+         * Outputs: the `member.repositoryId` result consumed by `shared.members.map`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (member) => member.repositoryId), ["api", "worker"]);
       for (const member of shared.members) {
         assert.equal(member.status, "complete");
         assert.equal(
           member.diagnostics.some(
+            /**
+             * Tests the current diagnostic against the requested condition.
+             *
+             * Inputs: `diagnostic`.
+             * Outputs: the `diagnostic === "APP_CLOSED_MODEL_ROOT_UNVERIFIED"` result consumed by `member.diagnostics.some`.
+             * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+             * Side effects: none; it derives the current-item result.
+             */
             (diagnostic) => diagnostic === "APP_CLOSED_MODEL_ROOT_UNVERIFIED",
           ),
           false,
@@ -859,12 +1638,28 @@ test("multi-member closed provisioning remains independently verifiable after ch
       for (const member of withUnattributedInventory.members) {
         assert.equal(
           member.diagnostics.some(
+            /**
+             * Tests the current diagnostic against the requested condition.
+             *
+             * Inputs: `diagnostic`.
+             * Outputs: the `diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED"` result consumed by `member.diagnostics.some`.
+             * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+             * Side effects: none; it derives the current-item result.
+             */
             (diagnostic) => diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED",
           ),
           true,
         );
         assert.equal(
           member.reconciliation.records.some(
+            /**
+             * Tests the current record against the requested condition.
+             *
+             * Inputs: `record`.
+             * Outputs: the `record.kind === "demand" && record.inventory === "missing-under-declared-model"` result consumed by `member.reconciliation.records.some`.
+             * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+             * Side effects: none; it derives the current-item result.
+             */
             (record) =>
               record.kind === "demand" &&
               record.inventory === "missing-under-declared-model",
@@ -901,12 +1696,28 @@ test("multi-member closed provisioning remains independently verifiable after ch
       for (const member of withMixedUnknownOwnership.members) {
         assert.equal(
           member.diagnostics.some(
+            /**
+             * Tests the current diagnostic against the requested condition.
+             *
+             * Inputs: `diagnostic`.
+             * Outputs: the `diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED"` result consumed by `member.diagnostics.some`.
+             * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+             * Side effects: none; it derives the current-item result.
+             */
             (diagnostic) => diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED",
           ),
           true,
         );
         assert.equal(
           member.reconciliation.records.some(
+            /**
+             * Tests the current record against the requested condition.
+             *
+             * Inputs: `record`.
+             * Outputs: the `record.kind === "demand" && record.inventory === "missing-under-declared-model"` result consumed by `member.reconciliation.records.some`.
+             * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+             * Side effects: none; it derives the current-item result.
+             */
             (record) =>
               record.kind === "demand" &&
               record.inventory === "missing-under-declared-model",
@@ -920,8 +1731,26 @@ test("multi-member closed provisioning remains independently verifiable after ch
   });
 });
 
-test("multi-repository deployment keeps exact provisioning in independent repository-qualified partitions", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("multi-repository deployment keeps exact provisioning in independent repository-qualified partitions",
+  /**
+   * Exercises the “multi-repository deployment keeps exact provisioning in independent repository-qualified partitions” scenario through `withWorkspaceFixture`, `writeFixtureLayout`, `memberExecutionScope`, `writeFile`, `stringify`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “multi-repository deployment keeps exact provisioning in independent repository-qualified partitions”.
+   * Outputs: Normal completion only after the “multi-repository deployment keeps exact provisioning in independent repository-qualified partitions” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `writeFixtureLayout`, `memberExecutionScope`, `writeFile`, `stringify`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “multi-repository deployment keeps exact provisioning in independent repository-qualified partitions”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `writeFixtureLayout`, `memberExecutionScope`, `writeFile`, `JSON.stringify`, `writeDeploymentProvisioning`, `bindingManifest`.
+     */
+    async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
     const apiScope = memberExecutionScope("api", "api-runtime-target");
     const workerScope = memberExecutionScope("worker", "worker-runtime-target");
@@ -971,7 +1800,16 @@ test("multi-repository deployment keeps exact provisioning in independent reposi
     const shared = deployment(result, "shared-production");
 
     assert.equal(shared?.status, "complete");
-    assert.deepEqual(shared?.members.map((member) => member.repositoryId), ["api", "worker"]);
+    assert.deepEqual(shared?.members.map(
+      /**
+       * Projects a report value from the current member.
+       *
+       * Inputs: `member`.
+       * Outputs: the `member.repositoryId` result consumed by `shared?.members.map`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (member) => member.repositoryId), ["api", "worker"]);
     assert.deepEqual(shared?.sharedKeys, [
       { namespace: "env", name: "DATABASE_URL" },
     ]);
@@ -979,6 +1817,14 @@ test("multi-repository deployment keeps exact provisioning in independent reposi
     const worker = deploymentMember(shared, "worker");
     assert.equal(
       api?.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "demand" && record.binding === "exact-declared" && record.inventory === "bound"` result consumed by `api?.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (record) =>
           record.kind === "demand" &&
           record.binding === "exact-declared" &&
@@ -988,6 +1834,14 @@ test("multi-repository deployment keeps exact provisioning in independent reposi
     );
     assert.equal(
       worker?.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "demand" && record.binding === "exact-declared" && record.inventory === "bound"` result consumed by `worker?.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (record) =>
           record.kind === "demand" &&
           record.binding === "exact-declared" &&
@@ -997,6 +1851,14 @@ test("multi-repository deployment keeps exact provisioning in independent reposi
     );
     assert.equal(
       api?.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "worker-database"` result consumed by `api?.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (record) =>
           record.kind === "inventory" &&
           record.providerResourceId.canonicalId === "worker-database",
@@ -1005,6 +1867,14 @@ test("multi-repository deployment keeps exact provisioning in independent reposi
     );
     assert.equal(
       api?.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "outsider-database"` result consumed by `api?.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (record) =>
           record.kind === "inventory" &&
           record.providerResourceId.canonicalId === "outsider-database",
@@ -1013,6 +1883,14 @@ test("multi-repository deployment keeps exact provisioning in independent reposi
     );
     assert.equal(
       worker?.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "outsider-database"` result consumed by `worker?.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (record) =>
           record.kind === "inventory" &&
           record.providerResourceId.canonicalId === "outsider-database",
@@ -1021,6 +1899,14 @@ test("multi-repository deployment keeps exact provisioning in independent reposi
     );
     assert.equal(
       worker?.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "api-database"` result consumed by `worker?.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (record) =>
           record.kind === "inventory" &&
           record.providerResourceId.canonicalId === "api-database",
@@ -1030,8 +1916,26 @@ test("multi-repository deployment keeps exact provisioning in independent reposi
   });
 });
 
-test("an explicitly shared provider resource remains bound in each exact member partition", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("an explicitly shared provider resource remains bound in each exact member partition",
+  /**
+   * Verifies “an explicitly shared provider resource remains bound in each exact member partition”.
+   *
+   * Inputs: no arguments.
+   * Outputs: a promise that settles after its awaited workspace operations and assertions.
+   * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+   * Side effects: runs `withWorkspaceFixture`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “an explicitly shared provider resource remains bound in each exact member partition”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `memberExecutionScope`.
+     */
+    async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
     await writeDeploymentProvisioning(
       fixture,
@@ -1056,6 +1960,14 @@ test("an explicitly shared provider resource remains bound in each exact member 
       const member = deploymentMember(shared, repositoryId);
       assert.equal(
         member.reconciliation.records.some(
+          /**
+           * Tests the current record against the requested condition.
+           *
+           * Inputs: `record`.
+           * Outputs: the `record.kind === "demand" && record.binding === "exact-declared" && record.inventory === "bound"` result consumed by `member.reconciliation.records.some`.
+           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+           * Side effects: none; it derives the current-item result.
+           */
           (record) =>
             record.kind === "demand" &&
             record.binding === "exact-declared" &&
@@ -1065,6 +1977,14 @@ test("an explicitly shared provider resource remains bound in each exact member 
       );
       assert.equal(
         member.diagnostics.some(
+          /**
+           * Tests the current diagnostic against the requested condition.
+           *
+           * Inputs: `diagnostic`.
+           * Outputs: the `diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED"` result consumed by `member.diagnostics.some`.
+           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+           * Side effects: none; it derives the current-item result.
+           */
           (diagnostic) => diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED",
         ),
         false,
@@ -1073,8 +1993,26 @@ test("an explicitly shared provider resource remains bound in each exact member 
   });
 });
 
-test("contradictory inventory ownership makes only listed member partitions inconclusive", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("contradictory inventory ownership makes only listed member partitions inconclusive",
+  /**
+   * Verifies “contradictory inventory ownership makes only listed member partitions inconclusive”.
+   *
+   * Inputs: no arguments.
+   * Outputs: a promise that settles after its awaited workspace operations and assertions.
+   * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+   * Side effects: runs `withWorkspaceFixture`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “contradictory inventory ownership makes only listed member partitions inconclusive”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `memberExecutionScope`.
+     */
+    async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
     await writeDeploymentProvisioning(
       fixture,
@@ -1102,18 +2040,42 @@ test("contradictory inventory ownership makes only listed member partitions inco
     for (const member of [api, worker]) {
       assert.equal(
         member?.diagnostics.some(
+          /**
+           * Tests the current diagnostic against the requested condition.
+           *
+           * Inputs: `diagnostic`.
+           * Outputs: the `diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED"` result consumed by `member?.diagnostics.some`.
+           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+           * Side effects: none; it derives the current-item result.
+           */
           (diagnostic) => diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED",
         ),
         true,
       );
       assert.equal(
         member?.reconciliation.records.some(
+          /**
+           * Tests the current record against the requested condition.
+           *
+           * Inputs: `record`.
+           * Outputs: the `record.kind === "demand" && record.disposition === "inconclusive"` result consumed by `member?.reconciliation.records.some`.
+           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+           * Side effects: none; it derives the current-item result.
+           */
           (record) => record.kind === "demand" && record.disposition === "inconclusive",
         ),
         true,
       );
       assert.equal(
         member?.reconciliation.records.some(
+          /**
+           * Tests the current record against the requested condition.
+           *
+           * Inputs: `record`.
+           * Outputs: the `record.kind === "inventory" && record.inventory === "inventory-listed-no-static-read"` result consumed by `member?.reconciliation.records.some`.
+           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+           * Side effects: none; it derives the current-item result.
+           */
           (record) => record.kind === "inventory" && record.inventory === "inventory-listed-no-static-read",
         ),
         false,
@@ -1122,8 +2084,26 @@ test("contradictory inventory ownership makes only listed member partitions inco
   });
 });
 
-test("a dynamic binding candidate cannot make unscoped inventory shared across members", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("a dynamic binding candidate cannot make unscoped inventory shared across members",
+  /**
+   * Verifies “a dynamic binding candidate cannot make unscoped inventory shared across members”.
+   *
+   * Inputs: no arguments.
+   * Outputs: a promise that settles after its awaited workspace operations and assertions.
+   * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+   * Side effects: runs `withWorkspaceFixture`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “a dynamic binding candidate cannot make unscoped inventory shared across members”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `unscopedInventoryItem`.
+     */
+    async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
     await writeDeploymentProvisioning(
       fixture,
@@ -1141,12 +2121,28 @@ test("a dynamic binding candidate cannot make unscoped inventory shared across m
     assert.deepEqual(shared.sharedKeys, [{ namespace: "env", name: "DATABASE_URL" }]);
     assert.equal(
       api.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "demand" && record.binding === "dynamic"` result consumed by `api.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (record) => record.kind === "demand" && record.binding === "dynamic",
       ),
       true,
     );
     assert.equal(
       api.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "shared-database"` result consumed by `api.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (record) =>
           record.kind === "inventory" &&
           record.providerResourceId.canonicalId === "shared-database",
@@ -1155,6 +2151,14 @@ test("a dynamic binding candidate cannot make unscoped inventory shared across m
     );
     assert.equal(
       worker.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "demand" && record.binding === "exact-declared" && record.inventory === "bound"` result consumed by `worker.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (record) =>
           record.kind === "demand" &&
           record.binding === "exact-declared" &&
@@ -1165,8 +2169,26 @@ test("a dynamic binding candidate cannot make unscoped inventory shared across m
   });
 });
 
-test("a dynamic binding competitor prevents an exact candidate from proving a bound member relation", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("a dynamic binding competitor prevents an exact candidate from proving a bound member relation",
+  /**
+   * Verifies “a dynamic binding competitor prevents an exact candidate from proving a bound member relation”.
+   *
+   * Inputs: no arguments.
+   * Outputs: a promise that settles after its awaited workspace operations and assertions.
+   * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+   * Side effects: runs `withWorkspaceFixture`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “a dynamic binding competitor prevents an exact candidate from proving a bound member relation”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `unscopedInventoryItem`.
+     */
+    async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
     await writeDeploymentProvisioning(
       fixture,
@@ -1205,6 +2227,14 @@ test("a dynamic binding competitor prevents an exact candidate from proving a bo
     assert.equal(shared.status, "incomplete");
     assert.equal(
       api.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "demand" && record.binding === "dynamic" && record.disposition === "inconclusive"` result consumed by `api.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (record) =>
           record.kind === "demand" &&
           record.binding === "dynamic" &&
@@ -1214,12 +2244,28 @@ test("a dynamic binding competitor prevents an exact candidate from proving a bo
     );
     assert.equal(
       api.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "demand" && record.inventory === "bound"` result consumed by `api.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (record) => record.kind === "demand" && record.inventory === "bound",
       ),
       false,
     );
     assert.equal(
       api.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "api-exact-database"` result consumed by `api.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (record) =>
           record.kind === "inventory" &&
           record.providerResourceId.canonicalId === "api-exact-database",
@@ -1229,8 +2275,26 @@ test("a dynamic binding competitor prevents an exact candidate from proving a bo
   });
 });
 
-test("an unknown binding scope makes only its potentially affected member inconclusive", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("an unknown binding scope makes only its potentially affected member inconclusive",
+  /**
+   * Verifies “an unknown binding scope makes only its potentially affected member inconclusive”.
+   *
+   * Inputs: no arguments.
+   * Outputs: a promise that settles after its awaited workspace operations and assertions.
+   * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+   * Side effects: runs `withWorkspaceFixture`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “an unknown binding scope makes only its potentially affected member inconclusive”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `inventoryItem`.
+     */
+    async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
     await writeDeploymentProvisioning(
       fixture,
@@ -1276,12 +2340,28 @@ test("an unknown binding scope makes only its potentially affected member inconc
     assert.equal(shared.status, "incomplete");
     assert.equal(
       api.diagnostics.some(
+        /**
+         * Tests the current diagnostic against the requested condition.
+         *
+         * Inputs: `diagnostic`.
+         * Outputs: the `diagnostic === "WORKSPACE_MEMBER_BINDING_OWNERSHIP_UNRESOLVED"` result consumed by `api.diagnostics.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (diagnostic) => diagnostic === "WORKSPACE_MEMBER_BINDING_OWNERSHIP_UNRESOLVED",
       ),
       true,
     );
     assert.equal(
       api.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "demand" && record.disposition === "inconclusive"` result consumed by `api.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (record) => record.kind === "demand" && record.disposition === "inconclusive",
       ),
       true,
@@ -1292,6 +2372,14 @@ test("an unknown binding scope makes only its potentially affected member inconc
     );
     assert.equal(
       worker.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "demand" && record.inventory === "bound"` result consumed by `worker.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (record) => record.kind === "demand" && record.inventory === "bound",
       ),
       true,
@@ -1299,8 +2387,26 @@ test("an unknown binding scope makes only its potentially affected member inconc
   });
 });
 
-test("a partial binding selector cannot turn unscoped inventory into an exact member binding", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("a partial binding selector cannot turn unscoped inventory into an exact member binding",
+  /**
+   * Verifies “a partial binding selector cannot turn unscoped inventory into an exact member binding”.
+   *
+   * Inputs: no arguments.
+   * Outputs: a promise that settles after its awaited workspace operations and assertions.
+   * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+   * Side effects: runs `withWorkspaceFixture`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “a partial binding selector cannot turn unscoped inventory into an exact member binding”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `unscopedInventoryItem`.
+     */
+    async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
     await writeDeploymentProvisioning(
       fixture,
@@ -1328,18 +2434,42 @@ test("a partial binding selector cannot turn unscoped inventory into an exact me
     assert.equal(shared.status, "incomplete");
     assert.equal(
       shared.diagnostics.some(
+        /**
+         * Tests the current diagnostic against the requested condition.
+         *
+         * Inputs: `diagnostic`.
+         * Outputs: the `diagnostic === "WORKSPACE_DEPLOYMENT_UNATTRIBUTED_INVENTORY"` result consumed by `shared.diagnostics.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (diagnostic) => diagnostic === "WORKSPACE_DEPLOYMENT_UNATTRIBUTED_INVENTORY",
       ),
       true,
     );
     assert.equal(
       api.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "demand" && record.inventory === "bound"` result consumed by `api.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (record) => record.kind === "demand" && record.inventory === "bound",
       ),
       false,
     );
     assert.equal(
       api.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "demand" && record.binding === "unresolved"` result consumed by `api.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (record) => record.kind === "demand" && record.binding === "unresolved",
       ),
       true,
@@ -1347,6 +2477,14 @@ test("a partial binding selector cannot turn unscoped inventory into an exact me
     assert.equal(worker.status, "incomplete");
     assert.equal(
       worker.diagnostics.some(
+        /**
+         * Tests the current diagnostic against the requested condition.
+         *
+         * Inputs: `diagnostic`.
+         * Outputs: the `diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED"` result consumed by `worker.diagnostics.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (diagnostic) => diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED",
       ),
       true,
@@ -1354,8 +2492,26 @@ test("a partial binding selector cannot turn unscoped inventory into an exact me
   });
 });
 
-test("a shadowed binding cannot claim an otherwise unscoped inventory item", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("a shadowed binding cannot claim an otherwise unscoped inventory item",
+  /**
+   * Verifies “a shadowed binding cannot claim an otherwise unscoped inventory item”.
+   *
+   * Inputs: no arguments.
+   * Outputs: a promise that settles after its awaited workspace operations and assertions.
+   * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+   * Side effects: runs `withWorkspaceFixture`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “a shadowed binding cannot claim an otherwise unscoped inventory item”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `unscopedInventoryItem`.
+     */
+    async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
     await writeDeploymentProvisioning(
       fixture,
@@ -1395,12 +2551,28 @@ test("a shadowed binding cannot claim an otherwise unscoped inventory item", asy
     assert.equal(shared.status, "incomplete");
     assert.equal(
       shared.diagnostics.some(
+        /**
+         * Tests the current diagnostic against the requested condition.
+         *
+         * Inputs: `diagnostic`.
+         * Outputs: the `diagnostic === "WORKSPACE_DEPLOYMENT_UNATTRIBUTED_INVENTORY"` result consumed by `shared.diagnostics.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (diagnostic) => diagnostic === "WORKSPACE_DEPLOYMENT_UNATTRIBUTED_INVENTORY",
       ),
       true,
     );
     assert.equal(
       api.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "demand" && record.inventory === "bound"` result consumed by `api.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (record) =>
           record.kind === "demand" && record.inventory === "bound",
       ),
@@ -1408,6 +2580,14 @@ test("a shadowed binding cannot claim an otherwise unscoped inventory item", asy
     );
     assert.equal(
       api.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "api-shadowed-database"` result consumed by `api.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (record) =>
           record.kind === "inventory" &&
           record.providerResourceId.canonicalId === "api-shadowed-database",
@@ -1417,8 +2597,26 @@ test("a shadowed binding cannot claim an otherwise unscoped inventory item", asy
   });
 });
 
-test("mismatched inventory authority cannot become a cross-member bound relation", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("mismatched inventory authority cannot become a cross-member bound relation",
+  /**
+   * Verifies “mismatched inventory authority cannot become a cross-member bound relation”.
+   *
+   * Inputs: no arguments.
+   * Outputs: a promise that settles after its awaited workspace operations and assertions.
+   * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+   * Side effects: runs `withWorkspaceFixture`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “mismatched inventory authority cannot become a cross-member bound relation”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `inventoryItem`.
+     */
+    async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
     await writeDeploymentProvisioning(
       fixture,
@@ -1439,12 +2637,28 @@ test("mismatched inventory authority cannot become a cross-member bound relation
     assert.equal(shared?.status, "incomplete");
     assert.equal(
       api?.diagnostics.some(
+        /**
+         * Tests the current diagnostic against the requested condition.
+         *
+         * Inputs: `diagnostic`.
+         * Outputs: the `diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED"` result consumed by `api?.diagnostics.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (diagnostic) => diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED",
       ),
       true,
     );
     assert.equal(
       api?.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "demand" && record.inventory === "bound"` result consumed by `api?.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (record) =>
           record.kind === "demand" &&
           record.inventory === "bound",
@@ -1453,6 +2667,14 @@ test("mismatched inventory authority cannot become a cross-member bound relation
     );
     assert.equal(
       api?.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "demand" && record.disposition === "inconclusive"` result consumed by `api?.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (record) => record.kind === "demand" && record.disposition === "inconclusive",
       ),
       true,
@@ -1461,8 +2683,26 @@ test("mismatched inventory authority cannot become a cross-member bound relation
   });
 });
 
-test("a broken deployment member does not erase an independently reconciled sibling", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("a broken deployment member does not erase an independently reconciled sibling",
+  /**
+   * Exercises the “a broken deployment member does not erase an independently reconciled sibling” scenario through `withWorkspaceFixture`, `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “a broken deployment member does not erase an independently reconciled sibling”.
+   * Outputs: Normal completion only after the “a broken deployment member does not erase an independently reconciled sibling” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “a broken deployment member does not erase an independently reconciled sibling”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `inventoryItem`.
+     */
+    async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
     await writeDeploymentProvisioning(
       fixture,
@@ -1490,6 +2730,14 @@ test("a broken deployment member does not erase an independently reconciled sibl
     assert.equal(worker?.status, "incomplete");
     assert.equal(
       api?.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "demand" && record.inventory === "bound"` result consumed by `api?.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (record) => record.kind === "demand" && record.inventory === "bound",
       ),
       true,
@@ -1497,8 +2745,26 @@ test("a broken deployment member does not erase an independently reconciled sibl
   });
 });
 
-test("an unresolved deployment root does not erase a valid sibling partition", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("an unresolved deployment root does not erase a valid sibling partition",
+  /**
+   * Exercises the “an unresolved deployment root does not erase a valid sibling partition” scenario through `withWorkspaceFixture`, `join`, `mkdir`, `all`, `writeFile`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “an unresolved deployment root does not erase a valid sibling partition”.
+   * Outputs: Normal completion only after the “an unresolved deployment root does not erase a valid sibling partition” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `join`, `mkdir`, `all`, `writeFile`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “an unresolved deployment root does not erase a valid sibling partition”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `join`, `mkdir`, `Promise.all`, `writeFile`, `JSON.stringify`, `bindingManifest`, including the fixture filesystem changes.
+     */
+    async (fixture) => {
     const inputRoot = join(fixture.infraRoot, "root-isolation");
     await mkdir(inputRoot, { recursive: true });
     await Promise.all([
@@ -1553,6 +2819,14 @@ test("an unresolved deployment root does not erase a valid sibling partition", a
     assert.equal(missing.status, "invalid");
     assert.equal(
       missing.diagnostics.some(
+        /**
+         * Tests the current diagnostic against the requested condition.
+         *
+         * Inputs: `diagnostic`.
+         * Outputs: the `diagnostic === "WORKSPACE_REPOSITORY_ROOT_UNAVAILABLE"` result consumed by `missing.diagnostics.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (diagnostic) => diagnostic === "WORKSPACE_REPOSITORY_ROOT_UNAVAILABLE",
       ),
       true,
@@ -1560,8 +2834,26 @@ test("an unresolved deployment root does not erase a valid sibling partition", a
   });
 });
 
-test("one repository can participate in separate deployments without provisioning or source-snapshot merge", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("one repository can participate in separate deployments without provisioning or source-snapshot merge",
+  /**
+   * Exercises the “one repository can participate in separate deployments without provisioning or source-snapshot merge” scenario through `withWorkspaceFixture`, `all`, `mkdir`, `join`, `writeFile`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “one repository can participate in separate deployments without provisioning or source-snapshot merge”.
+   * Outputs: Normal completion only after the “one repository can participate in separate deployments without provisioning or source-snapshot merge” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `all`, `mkdir`, `join`, `writeFile`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “one repository can participate in separate deployments without provisioning or source-snapshot merge”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `Promise.all`, `mkdir`, `join`, `writeFile`, `JSON.stringify`, `deploymentWithMemberScope`, including the fixture filesystem changes.
+     */
+    async (fixture) => {
     await Promise.all([
       mkdir(join(fixture.infraRoot, "first-production"), { recursive: true }),
       mkdir(join(fixture.infraRoot, "second-production"), { recursive: true }),
@@ -1598,18 +2890,42 @@ test("one repository can participate in separate deployments without provisionin
     assert.equal(second?.status, "complete");
     assert.equal(
       first?.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "first-database"` result consumed by `first?.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (record) => record.kind === "inventory" && record.providerResourceId.canonicalId === "first-database",
       ),
       true,
     );
     assert.equal(
       first?.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "second-database"` result consumed by `first?.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (record) => record.kind === "inventory" && record.providerResourceId.canonicalId === "second-database",
       ),
       false,
     );
     assert.equal(
       second?.reconciliation.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "second-database"` result consumed by `second?.reconciliation.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (record) => record.kind === "inventory" && record.providerResourceId.canonicalId === "second-database",
       ),
       true,
@@ -1621,9 +2937,27 @@ test("one repository can participate in separate deployments without provisionin
   });
 });
 
-test("workspace runtime exposes the exact narrow N5 port shape", async () => {
+test("workspace runtime exposes the exact narrow N5 port shape",
+  /**
+   * Exercises the “workspace runtime exposes the exact narrow N5 port shape” scenario through `createLocalWorkspaceScanPort`, `withWorkspaceFixture`, `readLocalWorkspaceManifest`, `fail`, `scan`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “workspace runtime exposes the exact narrow N5 port shape”.
+   * Outputs: Normal completion only after the “workspace runtime exposes the exact narrow N5 port shape” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Runs assertions through `createLocalWorkspaceScanPort`, `withWorkspaceFixture`, `readLocalWorkspaceManifest`, `fail`, `scan`; assertion failures escape.
+   */
+  async () => {
   const port: WorkspaceScanPort<WorkspaceScanReportSource> = createLocalWorkspaceScanPort();
-  await withWorkspaceFixture(async (fixture) => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “workspace runtime exposes the exact narrow N5 port shape”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `readLocalWorkspaceManifest`, `assert.fail`, `port.scan`, `assert.equal`.
+     */
+    async (fixture) => {
     const document = await readLocalWorkspaceManifest(fixture.manifestPath);
     if (document.ok === false) {
       assert.fail(document.code);
@@ -1634,13 +2968,58 @@ test("workspace runtime exposes the exact narrow N5 port shape", async () => {
   });
 });
 
-test("runtime deployment preparation bounds broad binding and inventory fanout", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("runtime deployment preparation bounds broad binding and inventory fanout",
+  /**
+   * Exercises the “runtime deployment preparation bounds broad binding and inventory fanout” scenario through `withWorkspaceFixture`, `from`, `String`, `all`, `map`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “runtime deployment preparation bounds broad binding and inventory fanout”.
+   * Outputs: Normal completion only after the “runtime deployment preparation bounds broad binding and inventory fanout” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `from`, `String`, `all`, `map`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “runtime deployment preparation bounds broad binding and inventory fanout”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `Array.from`, `Promise.all`, `repositoryIds.map`, `["binding-fanout", "inventory-fanout"].map`, `writeFile`, `JSON.stringify`.
+     */
+    async (fixture) => {
     const memberCount = 100;
     const candidateCount = 1_001;
-    const repositoryIds = Array.from({ length: memberCount }, (_, index) => "fanout-" + String(index));
-    await Promise.all(repositoryIds.map((id) => mkdir(join(fixture.root, id), { recursive: true })));
-    const memberScopes = repositoryIds.map((repositoryId, index) => ({
+    const repositoryIds = Array.from({ length: memberCount },
+      /**
+       * Constructs one generated fixture element.
+       *
+       * Inputs: `_`, `index`.
+       * Outputs: the `"fanout-" + String(index)` result consumed by `Array.from`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (_, index) => "fanout-" + String(index));
+    await Promise.all(repositoryIds.map(
+      /**
+       * Projects a report value from the current id.
+       *
+       * Inputs: `id`.
+       * Outputs: the `mkdir(join(fixture.root, id), { recursive: true })` result consumed by `repositoryIds.map`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (id) => mkdir(join(fixture.root, id), { recursive: true })));
+    const memberScopes = repositoryIds.map(
+      /**
+       * Projects a report value from the current index.
+       *
+       * Inputs: `repositoryId`, `index`.
+       * Outputs: the `({ repositoryId, scope: { id: "fanout-runtime", componentId: "fanout-runtime", phase: "runtime", stage: { kind: "exact", values: ["fanout-stage-" + String(index)] }, channel: "environment", ` result consumed by `repositoryIds.map`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (repositoryId, index) => ({
       repositoryId,
       scope: {
         id: "fanout-runtime",
@@ -1657,7 +3036,16 @@ test("runtime deployment preparation bounds broad binding and inventory fanout",
       stage: { kind: "all" as const },
       channel: "environment" as const,
     };
-    const deployments = ["binding-fanout", "inventory-fanout"].map((id) => ({
+    const deployments = ["binding-fanout", "inventory-fanout"].map(
+      /**
+       * Projects a report value from the current id.
+       *
+       * Inputs: `id`.
+       * Outputs: the `({ id, repositories: repositoryIds, inputs: { bindings: "../infra/" + id + "/bindings.json", inventory: "../infra/" + id + "/inventory.json", memberScopes, }, })` result consumed by `["binding-fanout", "inventory-fanout"].map`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (id) => ({
       id,
       repositories: repositoryIds,
       inputs: {
@@ -1670,16 +3058,43 @@ test("runtime deployment preparation bounds broad binding and inventory fanout",
       fixture.manifestPath,
       JSON.stringify({
         schemaVersion: "workspace-manifest/v2",
-        repositories: repositoryIds.map((id) => ({ id, root: "../" + id })),
+        repositories: repositoryIds.map(
+          /**
+           * Projects a report value from the current id.
+           *
+           * Inputs: `id`.
+           * Outputs: the `({ id, root: "../" + id })` result consumed by `repositoryIds.map`.
+           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+           * Side effects: none; it derives the current-item result.
+           */
+          (id) => ({ id, root: "../" + id })),
         deployments,
       }),
       "utf8",
     );
-    await Promise.all(deployments.map(async (deployment) => {
+    await Promise.all(deployments.map(
+      /**
+       * Projects a report value from the current deployment.
+       *
+       * Inputs: `deployment`.
+       * Outputs: the `{ const directory = join(fixture.infraRoot, deployment.id); await mkdir(directory, { recursive: true }); const bindingCandidates = deployment.id === "binding-fanout" ? Array.from({ length: c` result consumed by `deployments.map`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      async (deployment) => {
       const directory = join(fixture.infraRoot, deployment.id);
       await mkdir(directory, { recursive: true });
       const bindingCandidates = deployment.id === "binding-fanout"
-        ? Array.from({ length: candidateCount }, (_, index) => bindingCandidate(
+        ? Array.from({ length: candidateCount },
+          /**
+           * Constructs one generated fixture element.
+           *
+           * Inputs: `_`, `index`.
+           * Outputs: the `bindingCandidate( "fanout", "binding-resource-" + String(index), "fixture-authority", broadScope, "exact", { kind: "all" }, String(index), )` result consumed by `Array.from`.
+           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+           * Side effects: none; it derives the current-item result.
+           */
+          (_, index) => bindingCandidate(
             "fanout",
             "binding-resource-" + String(index),
             "fixture-authority",
@@ -1690,7 +3105,16 @@ test("runtime deployment preparation bounds broad binding and inventory fanout",
           ))
         : [];
       const inventoryItems = deployment.id === "inventory-fanout"
-        ? Array.from({ length: candidateCount }, (_, index) => inventoryItem(
+        ? Array.from({ length: candidateCount },
+          /**
+           * Constructs one generated fixture element.
+           *
+           * Inputs: `_`, `index`.
+           * Outputs: the `inventoryItem( "fanout", "inventory-resource-" + String(index), "fixture-authority", broadScope, )` result consumed by `Array.from`.
+           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+           * Side effects: none; it derives the current-item result.
+           */
+          (_, index) => inventoryItem(
             "fanout",
             "inventory-resource-" + String(index),
             "fixture-authority",
@@ -1710,12 +3134,28 @@ test("runtime deployment preparation bounds broad binding and inventory fanout",
     const result = await scanWorkspace(document.request);
     assert.equal(
       deployment(result, "binding-fanout").diagnostics.some(
+        /**
+         * Tests the current diagnostic against the requested condition.
+         *
+         * Inputs: `diagnostic`.
+         * Outputs: the `String(diagnostic) === "WORKSPACE_DEPLOYMENT_BINDING_FANOUT_EXCEEDED"` result consumed by `deployment(result, "binding-fanout").diagnostics.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (diagnostic) => String(diagnostic) === "WORKSPACE_DEPLOYMENT_BINDING_FANOUT_EXCEEDED",
       ),
       true,
     );
     assert.equal(
       deployment(result, "inventory-fanout").diagnostics.some(
+        /**
+         * Tests the current diagnostic against the requested condition.
+         *
+         * Inputs: `diagnostic`.
+         * Outputs: the `String(diagnostic) === "WORKSPACE_DEPLOYMENT_INVENTORY_FANOUT_EXCEEDED" || String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED"` result consumed by `deployment(result, "inventory-fanout").diagnostics.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (diagnostic) =>
           String(diagnostic) === "WORKSPACE_DEPLOYMENT_INVENTORY_FANOUT_EXCEEDED" ||
           String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED",
@@ -1725,24 +3165,76 @@ test("runtime deployment preparation bounds broad binding and inventory fanout",
   });
 });
 
-test("runtime projection budget bounds source-rich member output deterministically", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("runtime projection budget bounds source-rich member output deterministically",
+  /**
+   * Exercises the “runtime projection budget bounds source-rich member output deterministically” scenario through `withWorkspaceFixture`, `from`, `String`, `join`, `all`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “runtime projection budget bounds source-rich member output deterministically”.
+   * Outputs: Normal completion only after the “runtime projection budget bounds source-rich member output deterministically” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `from`, `String`, `join`, `all`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “runtime projection budget bounds source-rich member output deterministically”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `Array.from`, `Array.from( { length: readsPerMember }, /** * Supplies `_`, `index` to the `from`, `Promise.all`, `repositoryIds.map`, `writeFile`, `JSON.stringify`.
+     */
+    async (fixture) => {
     const memberCount = 100;
     const readsPerMember = 1_001;
     const repositoryIds = Array.from(
       { length: memberCount },
+      /**
+       * Constructs one generated fixture element.
+       *
+       * Inputs: `_`, `index`.
+       * Outputs: the `"projection-" + String(index)` result consumed by `Array.from`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
       (_, index) => "projection-" + String(index),
     );
     const source = Array.from(
       { length: readsPerMember },
+      /**
+       * Constructs one generated fixture element.
+       *
+       * Inputs: `_`, `index`.
+       * Outputs: the `"export const value" + String(index) + " = process.env.PROJECTION_KEY_" + String(index) + ";"` result consumed by `Array.from`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
       (_, index) => "export const value" + String(index) + " = process.env.PROJECTION_KEY_" + String(index) + ";",
     ).join("\n") + "\n";
-    await Promise.all(repositoryIds.map(async (id) => {
+    await Promise.all(repositoryIds.map(
+      /**
+       * Projects a report value from the current id.
+       *
+       * Inputs: `id`.
+       * Outputs: the `{ const root = join(fixture.root, id, "src"); await mkdir(root, { recursive: true }); await writeFile(join(root, "index.ts"), source, "utf8"); }` result consumed by `repositoryIds.map`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      async (id) => {
       const root = join(fixture.root, id, "src");
       await mkdir(root, { recursive: true });
       await writeFile(join(root, "index.ts"), source, "utf8");
     }));
-    const memberScopes = repositoryIds.map((repositoryId) => ({
+    const memberScopes = repositoryIds.map(
+      /**
+       * Projects a report value from the current repositoryId.
+       *
+       * Inputs: `repositoryId`.
+       * Outputs: the `({ repositoryId, scope: { id: "scope-" + repositoryId, componentId: "component-" + repositoryId, phase: "runtime" as const, stage: { kind: "all" as const }, channel: "environment" as const, ` result consumed by `repositoryIds.map`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (repositoryId) => ({
       repositoryId,
       scope: {
         id: "scope-" + repositoryId,
@@ -1754,7 +3246,16 @@ test("runtime projection budget bounds source-rich member output deterministical
     }));
     await writeFile(fixture.manifestPath, JSON.stringify({
       schemaVersion: "workspace-manifest/v2",
-      repositories: repositoryIds.map((id) => ({ id, root: "../" + id })),
+      repositories: repositoryIds.map(
+        /**
+         * Projects a report value from the current id.
+         *
+         * Inputs: `id`.
+         * Outputs: the `({ id, root: "../" + id })` result consumed by `repositoryIds.map`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (id) => ({ id, root: "../" + id })),
       deployments: [{
         id: "projection-budget",
         repositories: repositoryIds,
@@ -1780,21 +3281,57 @@ test("runtime projection budget bounds source-rich member output deterministical
     const first = deployment(firstWorkspace, "projection-budget");
     const exhausted = first.members
       .filter(isBudgetFallbackMember)
-      .map((member) => member.repositoryId);
+      .map(
+        /**
+         * Projects a report value from the current member.
+         *
+         * Inputs: `member`.
+         * Outputs: the `member.repositoryId` result consumed by `first.members .filter(isBudgetFallbackMember) .map`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (member) => member.repositoryId);
 
     assert.ok(exhausted.length > 0);
     assert.ok(firstWorkspace.repositories.some(isBudgetFallbackResult));
     assert.ok(emittedWorkspaceGraphFacts(firstWorkspace) <= 100_000);
-    for (const member of first.members.filter((entry) => exhausted.includes(entry.repositoryId))) {
+    for (const member of first.members.filter(
+      /**
+       * Tests the current entry against the requested condition.
+       *
+       * Inputs: `entry`.
+       * Outputs: the `exhausted.includes(entry.repositoryId)` result consumed by `first.members.filter`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (entry) => exhausted.includes(entry.repositoryId))) {
       assert.equal(member.status, "incomplete");
       assert.deepEqual(member.references, []);
       assert.deepEqual(member.demandEdges, []);
       assert.equal(
-        member.reconciliation.scopeCoverage.some((coverage) => coverage.state === "incomplete"),
+        member.reconciliation.scopeCoverage.some(
+          /**
+           * Tests the current coverage against the requested condition.
+           *
+           * Inputs: `coverage`.
+           * Outputs: the `coverage.state === "incomplete"` result consumed by `member.reconciliation.scopeCoverage.some`.
+           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+           * Side effects: none; it derives the current-item result.
+           */
+          (coverage) => coverage.state === "incomplete"),
         true,
       );
       assert.equal(
-        member.reconciliation.records.some((record) => record.coverage === "complete"),
+        member.reconciliation.records.some(
+          /**
+           * Tests the current record against the requested condition.
+           *
+           * Inputs: `record`.
+           * Outputs: the `record.coverage === "complete"` result consumed by `member.reconciliation.records.some`.
+           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+           * Side effects: none; it derives the current-item result.
+           */
+          (record) => record.coverage === "complete"),
         false,
       );
     }
@@ -1802,33 +3339,94 @@ test("runtime projection budget bounds source-rich member output deterministical
     const second = deployment(await scanWorkspace(document.request), "projection-budget");
     const exhaustedAgain = second.members
       .filter(isBudgetFallbackMember)
-      .map((member) => member.repositoryId);
+      .map(
+        /**
+         * Projects a report value from the current member.
+         *
+         * Inputs: `member`.
+         * Outputs: the `member.repositoryId` result consumed by `second.members .filter(isBudgetFallbackMember) .map`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (member) => member.repositoryId);
     assert.deepEqual(exhaustedAgain, exhausted);
   });
 });
 
-test("repository-only admission shares the invocation graph ledger", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("repository-only admission shares the invocation graph ledger",
+  /**
+   * Exercises the “repository-only admission shares the invocation graph ledger” scenario through `withWorkspaceFixture`, `from`, `String`, `join`, `all`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “repository-only admission shares the invocation graph ledger”.
+   * Outputs: Normal completion only after the “repository-only admission shares the invocation graph ledger” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `from`, `String`, `join`, `all`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “repository-only admission shares the invocation graph ledger”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `Array.from`, `Array.from( { length: readsPerRepository }, /** * Supplies `_`, `index` to the ``, `Promise.all`, `repositoryIds.map`, `writeFile`, `JSON.stringify`.
+     */
+    async (fixture) => {
     const repositoryCount = 40;
     const readsPerRepository = 1_001;
     const repositoryIds = Array.from(
       { length: repositoryCount },
+      /**
+       * Constructs one generated fixture element.
+       *
+       * Inputs: `_`, `index`.
+       * Outputs: the `"repository-budget-" + String(index)` result consumed by `Array.from`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
       (_, index) => "repository-budget-" + String(index),
     );
     const source = Array.from(
       { length: readsPerRepository },
+      /**
+       * Constructs one generated fixture element.
+       *
+       * Inputs: `_`, `index`.
+       * Outputs: the `"export const value" + String(index) + " = process.env.REPOSITORY_BUDGET_KEY_" + String(index) + ";"` result consumed by `Array.from`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
       (_, index) =>
         "export const value" + String(index) +
         " = process.env.REPOSITORY_BUDGET_KEY_" + String(index) + ";",
     ).join("\n") + "\n";
-    await Promise.all(repositoryIds.map(async (id) => {
+    await Promise.all(repositoryIds.map(
+      /**
+       * Projects a report value from the current id.
+       *
+       * Inputs: `id`.
+       * Outputs: the `{ const root = join(fixture.root, id, "src"); await mkdir(root, { recursive: true }); await writeFile(join(root, "index.ts"), source, "utf8"); }` result consumed by `repositoryIds.map`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      async (id) => {
       const root = join(fixture.root, id, "src");
       await mkdir(root, { recursive: true });
       await writeFile(join(root, "index.ts"), source, "utf8");
     }));
     await writeFile(fixture.manifestPath, JSON.stringify({
       schemaVersion: "workspace-manifest/v1",
-      repositories: repositoryIds.map((id) => ({ id, root: "../" + id })),
+      repositories: repositoryIds.map(
+        /**
+         * Projects a report value from the current id.
+         *
+         * Inputs: `id`.
+         * Outputs: the `({ id, root: "../" + id })` result consumed by `repositoryIds.map`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (id) => ({ id, root: "../" + id })),
       deployments: [],
     }), "utf8");
 
@@ -1837,24 +3435,68 @@ test("repository-only admission shares the invocation graph ledger", async () =>
     const first = await scanWorkspace(document.request);
     const fallback = first.repositories
       .filter(isBudgetFallbackResult)
-      .map((repository) => repository.id);
+      .map(
+        /**
+         * Projects a report value from the current repository.
+         *
+         * Inputs: `repository`.
+         * Outputs: the `repository.id` result consumed by `first.repositories .filter(isBudgetFallbackResult) .map`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (repository) => repository.id);
     assert.ok(fallback.length > 0);
     assert.ok(fallback.length < repositoryCount);
     assert.ok(emittedWorkspaceGraphFacts(first) <= 100_000);
 
     const second = await scanWorkspace(document.request);
     assert.deepEqual(
-      second.repositories.filter(isBudgetFallbackResult).map((repository) => repository.id),
+      second.repositories.filter(isBudgetFallbackResult).map(
+        /**
+         * Projects a report value from the current repository.
+         *
+         * Inputs: `repository`.
+         * Outputs: the `repository.id` result consumed by `second.repositories.filter(isBudgetFallbackResult).map`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (repository) => repository.id),
       fallback,
     );
   });
 });
 
-test("nested coverage evidence is admitted before Core record materialization", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("nested coverage evidence is admitted before Core record materialization",
+  /**
+   * Exercises the “nested coverage evidence is admitted before Core record materialization” scenario through `withWorkspaceFixture`, `join`, `from`, `String`, `writeFile`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “nested coverage evidence is admitted before Core record materialization”.
+   * Outputs: Normal completion only after the “nested coverage evidence is admitted before Core record materialization” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `join`, `from`, `String`, `writeFile`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “nested coverage evidence is admitted before Core record materialization”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `Array.from( { length: demandCount }, /** * Supplies `_`, `index` to the `from` o`, `Array.from`, `writeFile`, `join`, `mkdir`, `Promise.all`.
+     */
+    async (fixture) => {
     const demandCount = 1_000;
     const source = Array.from(
       { length: demandCount },
+      /**
+       * Constructs one generated fixture element.
+       *
+       * Inputs: `_`, `index`.
+       * Outputs: the `"export const value" + String(index) + " = process.env.NESTED_EVIDENCE_KEY_" + String(index) + ";"` result consumed by `Array.from`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
       (_, index) =>
         "export const value" + String(index) +
         " = process.env.NESTED_EVIDENCE_KEY_" + String(index) + ";",
@@ -1864,6 +3506,14 @@ test("nested coverage evidence is admitted before Core record materialization", 
     await mkdir(inputRoot, { recursive: true });
     const invalidCandidates = Array.from(
       { length: 1_000 },
+      /**
+       * Constructs one generated fixture element.
+       *
+       * Inputs: no arguments.
+       * Outputs: the `({ invalid: "not-a-binding-candidate" })` result consumed by `Array.from`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
       () => ({ invalid: "not-a-binding-candidate" }),
     );
     await Promise.all([
@@ -1905,11 +3555,37 @@ test("nested coverage evidence is admitted before Core record materialization", 
   });
 });
 
-test("workspace projection budget does not reset for the same source in later deployments", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("workspace projection budget does not reset for the same source in later deployments",
+  /**
+   * Exercises the “workspace projection budget does not reset for the same source in later deployments” scenario through `withWorkspaceFixture`, `join`, `from`, `String`, `writeFile`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “workspace projection budget does not reset for the same source in later deployments”.
+   * Outputs: Normal completion only after the “workspace projection budget does not reset for the same source in later deployments” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `join`, `from`, `String`, `writeFile`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “workspace projection budget does not reset for the same source in later deployments”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `Array.from( { length: 1_001 }, /** * Supplies `_`, `index` to the `from` operati`, `Array.from`, `writeFile`, `join`, `mkdir`, `Promise.all`.
+     */
+    async (fixture) => {
     const deploymentCount = 51;
     const reads = Array.from(
       { length: 1_001 },
+      /**
+       * Constructs one generated fixture element.
+       *
+       * Inputs: `_`, `index`.
+       * Outputs: the `"export const repeat" + String(index) + " = process.env.REPEAT_KEY_" + String(index) + ";"` result consumed by `Array.from`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
       (_, index) => "export const repeat" + String(index) + " = process.env.REPEAT_KEY_" + String(index) + ";",
     ).join("\n") + "\n";
     await writeFile(join(fixture.repositoryRoots.api, "src", "index.ts"), reads, "utf8");
@@ -1919,7 +3595,16 @@ test("workspace projection budget does not reset for the same source in later de
       writeFile(join(inputRoot, "bindings.json"), JSON.stringify(bindingManifest([])), "utf8"),
       writeFile(join(inputRoot, "inventory.json"), JSON.stringify(inventorySnapshot([])), "utf8"),
     ]);
-    const deployments = Array.from({ length: deploymentCount }, (_, index) => ({
+    const deployments = Array.from({ length: deploymentCount },
+      /**
+       * Constructs one generated fixture element.
+       *
+       * Inputs: `_`, `index`.
+       * Outputs: the `({ id: "workspace-budget-" + String(index), repositories: ["api"], inputs: { bindings: "../infra/workspace-budget-repeat/bindings.json", inventory: "../infra/workspace-budget-repeat/inventor` result consumed by `Array.from`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (_, index) => ({
       id: "workspace-budget-" + String(index),
       repositories: ["api"],
       inputs: {
@@ -1949,8 +3634,26 @@ test("workspace projection budget does not reset for the same source in later de
     }
     const first = await scanWorkspace(document.request);
     const exhausted = first.deployments
-      .filter((entry) => isBudgetFallbackMember(deploymentMember(entry, "api")))
-      .map((entry) => entry.id);
+      .filter(
+        /**
+         * Tests the current entry against the requested condition.
+         *
+         * Inputs: `entry`.
+         * Outputs: the `isBudgetFallbackMember(deploymentMember(entry, "api"))` result consumed by `first.deployments .filter`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (entry) => isBudgetFallbackMember(deploymentMember(entry, "api")))
+      .map(
+        /**
+         * Verifies “workspace projection budget does not reset for the same source in later deployments”.
+         *
+         * Inputs: `entry`.
+         * Outputs: a promise that settles after its awaited workspace operations and assertions.
+         * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+         * Side effects: runs no helper.
+         */
+        (entry) => entry.id);
     assert.ok(exhausted.length > 0);
     assert.ok(exhausted.length < deploymentCount);
     assert.equal(first.deployments[0]?.members[0]?.status, "complete");
@@ -1960,27 +3663,89 @@ test("workspace projection budget does not reset for the same source in later de
       assert.deepEqual(member.references, []);
       assert.deepEqual(member.demandEdges, []);
       assert.equal(
-        member.reconciliation.records.some((record) => record.coverage === "complete"),
+        member.reconciliation.records.some(
+          /**
+           * Tests the current record against the requested condition.
+           *
+           * Inputs: `record`.
+           * Outputs: the `record.coverage === "complete"` result consumed by `member.reconciliation.records.some`.
+           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+           * Side effects: none; it derives the current-item result.
+           */
+          (record) => record.coverage === "complete"),
         false,
       );
     }
 
     const second = await scanWorkspace(document.request);
     const exhaustedAgain = second.deployments
-      .filter((entry) => isBudgetFallbackMember(deploymentMember(entry, "api")))
-      .map((entry) => entry.id);
+      .filter(
+        /**
+         * Tests the current entry against the requested condition.
+         *
+         * Inputs: `entry`.
+         * Outputs: the `isBudgetFallbackMember(deploymentMember(entry, "api"))` result consumed by `second.deployments .filter`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (entry) => isBudgetFallbackMember(deploymentMember(entry, "api")))
+      .map(
+        /**
+         * Verifies “workspace projection budget does not reset for the same source in later deployments”.
+         *
+         * Inputs: `entry`.
+         * Outputs: a promise that settles after its awaited workspace operations and assertions.
+         * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+         * Side effects: runs no helper.
+         */
+        (entry) => entry.id);
     assert.deepEqual(exhaustedAgain, exhausted);
   });
 });
 
-test("scan-only deployments share one invocation budget and reset on the next scan", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("scan-only deployments share one invocation budget and reset on the next scan",
+  /**
+   * Exercises the “scan-only deployments share one invocation budget and reset on the next scan” scenario through `withWorkspaceFixture`, `join`, `from`, `String`, `writeFile`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “scan-only deployments share one invocation budget and reset on the next scan”.
+   * Outputs: Normal completion only after the “scan-only deployments share one invocation budget and reset on the next scan” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `join`, `from`, `String`, `writeFile`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “scan-only deployments share one invocation budget and reset on the next scan”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `Array.from( { length: 1_001 }, /** * Supplies `_`, `index` to the `from` operati`, `Array.from`, `writeFile`, `join`, `JSON.stringify`, `readLocalWorkspaceManifest`.
+     */
+    async (fixture) => {
     const reads = Array.from(
       { length: 1_001 },
+      /**
+       * Constructs one generated fixture element.
+       *
+       * Inputs: `_`, `index`.
+       * Outputs: the `"export const scanOnly" + String(index) + " = process.env.SCAN_ONLY_KEY_" + String(index) + ";"` result consumed by `Array.from`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
       (_, index) => "export const scanOnly" + String(index) + " = process.env.SCAN_ONLY_KEY_" + String(index) + ";",
     ).join("\n") + "\n";
     await writeFile(join(fixture.repositoryRoots.api, "src", "index.ts"), reads, "utf8");
-    const deployments = Array.from({ length: 101 }, (_, index) => ({
+    const deployments = Array.from({ length: 101 },
+      /**
+       * Constructs one generated fixture element.
+       *
+       * Inputs: `_`, `index`.
+       * Outputs: the `({ id: "scan-only-budget-" + String(index), repositories: ["api"], })` result consumed by `Array.from`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (_, index) => ({
       id: "scan-only-budget-" + String(index),
       repositories: ["api"],
     }));
@@ -1994,8 +3759,26 @@ test("scan-only deployments share one invocation budget and reset on the next sc
 
     const first = await scanWorkspace(document.request);
     const exhausted = first.deployments
-      .filter((entry) => isBudgetFallbackMember(deploymentMember(entry, "api")))
-      .map((entry) => entry.id);
+      .filter(
+        /**
+         * Tests the current entry against the requested condition.
+         *
+         * Inputs: `entry`.
+         * Outputs: the `isBudgetFallbackMember(deploymentMember(entry, "api"))` result consumed by `first.deployments .filter`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (entry) => isBudgetFallbackMember(deploymentMember(entry, "api")))
+      .map(
+        /**
+         * Verifies “scan-only deployments share one invocation budget and reset on the next scan”.
+         *
+         * Inputs: `entry`.
+         * Outputs: a promise that settles after its awaited workspace operations and assertions.
+         * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+         * Side effects: runs no helper.
+         */
+        (entry) => entry.id);
     assert.ok(emittedDeploymentGraphFacts(first) <= 100_000);
     assert.ok(exhausted.length > 0);
     for (const id of exhausted) {
@@ -2007,23 +3790,76 @@ test("scan-only deployments share one invocation budget and reset on the next sc
 
     const second = await scanWorkspace(document.request);
     const exhaustedAgain = second.deployments
-      .filter((entry) => isBudgetFallbackMember(deploymentMember(entry, "api")))
-      .map((entry) => entry.id);
+      .filter(
+        /**
+         * Tests the current entry against the requested condition.
+         *
+         * Inputs: `entry`.
+         * Outputs: the `isBudgetFallbackMember(deploymentMember(entry, "api"))` result consumed by `second.deployments .filter`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (entry) => isBudgetFallbackMember(deploymentMember(entry, "api")))
+      .map(
+        /**
+         * Verifies “scan-only deployments share one invocation budget and reset on the next scan”.
+         *
+         * Inputs: `entry`.
+         * Outputs: a promise that settles after its awaited workspace operations and assertions.
+         * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+         * Side effects: runs no helper.
+         */
+        (entry) => entry.id);
     assert.deepEqual(exhaustedAgain, exhausted);
   });
 });
 
-test("shared-key output is withheld when source graph budget is exhausted", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("shared-key output is withheld when source graph budget is exhausted",
+  /**
+   * Exercises the “shared-key output is withheld when source graph budget is exhausted” scenario through `withWorkspaceFixture`, `join`, `from`, `String`, `all`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “shared-key output is withheld when source graph budget is exhausted”.
+   * Outputs: Normal completion only after the “shared-key output is withheld when source graph budget is exhausted” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `join`, `from`, `String`, `all`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “shared-key output is withheld when source graph budget is exhausted”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: Generates 900 source reads, writes the oversized fixture source, and invokes the workspace scan.
+     */
+    async (fixture) => {
     const reads = Array.from(
       { length: 900 },
+      /**
+       * Constructs one generated fixture element.
+       *
+       * Inputs: `_`, `index`.
+       * Outputs: the `"export const shared" + String(index) + " = process.env.SHARED_BUDGET_KEY_" + String(index) + ";"` result consumed by `Array.from`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
       (_, index) => "export const shared" + String(index) + " = process.env.SHARED_BUDGET_KEY_" + String(index) + ";",
     ).join("\n") + "\n";
     await Promise.all([
       writeFile(join(fixture.repositoryRoots.api, "src", "index.ts"), reads, "utf8"),
       writeFile(join(fixture.repositoryRoots.worker, "src", "worker.ts"), reads, "utf8"),
     ]);
-    const deployments = Array.from({ length: 20 }, (_, index) => ({
+    const deployments = Array.from({ length: 20 },
+      /**
+       * Constructs one generated fixture element.
+       *
+       * Inputs: `_`, `index`.
+       * Outputs: the `({ id: "shared-key-budget-" + String(index), repositories: ["api", "worker"], })` result consumed by `Array.from`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (_, index) => ({
       id: "shared-key-budget-" + String(index),
       repositories: ["api", "worker"],
     }));
@@ -2039,7 +3875,24 @@ test("shared-key output is withheld when source graph budget is exhausted", asyn
     if (document.ok === false) assert.fail(document.code);
 
     const result = await scanWorkspace(document.request);
-    const budgetExhausted = result.deployments.filter((entry) => entry.diagnostics.some(
+    const budgetExhausted = result.deployments.filter(
+      /**
+       * Tests the current entry against the requested condition.
+       *
+       * Inputs: `entry`.
+       * Outputs: the `entry.diagnostics.some( (diagnostic) => String(diagnostic) === "WORKSPACE_DEPLOYMENT_SHARED_KEY_BUDGET_EXCEEDED" || String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED", ` result consumed by `result.deployments.filter`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (entry) => entry.diagnostics.some(
+      /**
+       * Tests the current diagnostic against the requested condition.
+       *
+       * Inputs: `diagnostic`.
+       * Outputs: the `String(diagnostic) === "WORKSPACE_DEPLOYMENT_SHARED_KEY_BUDGET_EXCEEDED" || String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED"` result consumed by `entry.diagnostics.some`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
       (diagnostic) =>
         String(diagnostic) === "WORKSPACE_DEPLOYMENT_SHARED_KEY_BUDGET_EXCEEDED" ||
         String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED",
@@ -2063,8 +3916,26 @@ test("shared-key output is withheld when source graph budget is exhausted", asyn
   });
 });
 
-test("provisioning records share the invocation graph budget before Core materializes them", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("provisioning records share the invocation graph budget before Core materializes them",
+  /**
+   * Exercises the “provisioning records share the invocation graph budget before Core materializes them” scenario through `withWorkspaceFixture`, `writeFile`, `join`, `mkdir`, `from`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “provisioning records share the invocation graph budget before Core materializes them”.
+   * Outputs: Normal completion only after the “provisioning records share the invocation graph budget before Core materializes them” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `writeFile`, `join`, `mkdir`, `from`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “provisioning records share the invocation graph budget before Core materializes them”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `writeFile`, `join`, `mkdir`, `Array.from`, `Promise.all`, `JSON.stringify`, including the fixture filesystem changes.
+     */
+    async (fixture) => {
     await writeFile(
       join(fixture.repositoryRoots.api, "src", "index.ts"),
       "export const noStaticSecrets = true;\n",
@@ -2079,7 +3950,16 @@ test("provisioning records share the invocation graph budget before Core materia
       stage: { kind: "all" },
       channel: "environment",
     };
-    const candidates = Array.from({ length: 1_001 }, (_, index) => ({
+    const candidates = Array.from({ length: 1_001 },
+      /**
+       * Constructs one generated fixture element.
+       *
+       * Inputs: `_`, `index`.
+       * Outputs: the `({ id: "provisioning-binding-" + String(index), adapterId: "fixture", scope, destination: { namespace: "env", name: "PROVISIONING_KEY_" + String(index) }, sourceKind: "secret-manager", provi` result consumed by `Array.from`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (_, index) => ({
       id: "provisioning-binding-" + String(index),
       adapterId: "fixture",
       scope,
@@ -2099,7 +3979,16 @@ test("provisioning records share the invocation graph budget before Core materia
       precedence: { source: "fixture", rank: 1, comparable: true },
       resolution: "exact",
     }));
-    const items = Array.from({ length: 1_001 }, (_, index) => ({
+    const items = Array.from({ length: 1_001 },
+      /**
+       * Constructs one generated fixture element.
+       *
+       * Inputs: `_`, `index`.
+       * Outputs: the `({ providerResourceId: { authorityId: "fixture-authority", canonicalId: "provisioning-resource-" + String(index), }, declaredScopes: [scope], })` result consumed by `Array.from`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (_, index) => ({
       providerResourceId: {
         authorityId: "fixture-authority",
         canonicalId: "provisioning-resource-" + String(index),
@@ -2110,7 +3999,16 @@ test("provisioning records share the invocation graph budget before Core materia
       writeFile(join(inputRoot, "bindings.json"), JSON.stringify(bindingManifest(candidates)), "utf8"),
       writeFile(join(inputRoot, "inventory.json"), JSON.stringify(inventorySnapshot(items)), "utf8"),
     ]);
-    const deployments = Array.from({ length: 101 }, (_, index) => ({
+    const deployments = Array.from({ length: 101 },
+      /**
+       * Constructs one generated fixture element.
+       *
+       * Inputs: `_`, `index`.
+       * Outputs: the `({ id: "provisioning-graph-" + String(index).padStart(3, "0"), repositories: ["api"], inputs: { bindings: "../infra/provisioning-graph-budget/bindings.json", inventory: "../infra/provisionin` result consumed by `Array.from`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (_, index) => ({
       id: "provisioning-graph-" + String(index).padStart(3, "0"),
       repositories: ["api"],
       inputs: {
@@ -2129,10 +4027,28 @@ test("provisioning records share the invocation graph budget before Core materia
 
     const result = await scanWorkspace(document.request);
     assert.ok(emittedWorkspaceGraphFacts(result) <= 100_000);
-    assert.ok(result.deployments.some((entry) =>
+    assert.ok(result.deployments.some(
+      /**
+       * Tests the current entry against the requested condition.
+       *
+       * Inputs: `entry`.
+       * Outputs: the `deploymentMember(entry, "api").reconciliation.records.length >= 1_001` result consumed by `result.deployments.some`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (entry) =>
       deploymentMember(entry, "api").reconciliation.records.length >= 1_001,
     ));
-    const exhausted = result.deployments.filter((entry) =>
+    const exhausted = result.deployments.filter(
+      /**
+       * Tests the current entry against the requested condition.
+       *
+       * Inputs: `entry`.
+       * Outputs: the `isBudgetFallbackMember(deploymentMember(entry, "api"))` result consumed by `result.deployments.filter`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (entry) =>
       isBudgetFallbackMember(deploymentMember(entry, "api")),
     );
     assert.ok(exhausted.length > 0);
@@ -2144,8 +4060,26 @@ test("provisioning records share the invocation graph budget before Core materia
   });
 });
 
-test("finite condition partition floods fall back before Core selection materializes", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("finite condition partition floods fall back before Core selection materializes",
+  /**
+   * Exercises the “finite condition partition floods fall back before Core selection materializes” scenario through `withWorkspaceFixture`, `writeFile`, `join`, `from`, `String`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “finite condition partition floods fall back before Core selection materializes”.
+   * Outputs: Normal completion only after the “finite condition partition floods fall back before Core selection materializes” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `writeFile`, `join`, `from`, `String`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “finite condition partition floods fall back before Core selection materializes”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `writeFile`, `join`, `Array.from`, `assert.ok`, `Buffer.byteLength`, `JSON.stringify`, including the fixture filesystem changes.
+     */
+    async (fixture) => {
     await writeFile(
       join(fixture.repositoryRoots.api, "src", "index.ts"),
       "export const noStaticSecrets = true;\n",
@@ -2161,7 +4095,16 @@ test("finite condition partition floods fall back before Core selection material
     // 10,000 candidates in one slot × 256 finite assignments would force
     // Core to allocate roughly 2.56M selection entries if admission happened
     // after resolution. This deliberately stays under the 5 MiB input gate.
-    const candidates = Array.from({ length: 10_000 }, (_, index) => ({
+    const candidates = Array.from({ length: 10_000 },
+      /**
+       * Constructs one generated fixture element.
+       *
+       * Inputs: `_`, `index`.
+       * Outputs: the `({ id: "c" + String(index), adapterId: "a", scope, destination: { namespace: "env", name: "F" }, sourceKind: "external", appliesWhen: { executionUnitIds: [scope.id], phases: ["runtime"], sta` result consumed by `Array.from`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (_, index) => ({
       id: "c" + String(index),
       adapterId: "a",
       scope,
@@ -2218,6 +4161,14 @@ test("finite condition partition floods fall back before Core selection material
     const member = deploymentMember(entry, "api");
     assert.equal(
       entry.diagnostics.some(
+        /**
+         * Tests the current diagnostic against the requested condition.
+         *
+         * Inputs: `diagnostic`.
+         * Outputs: the `String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED"` result consumed by `entry.diagnostics.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (diagnostic) => String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED",
       ),
       true,
@@ -2232,8 +4183,26 @@ test("finite condition partition floods fall back before Core selection material
   });
 });
 
-test("inventory projection bounds 10k by 10k resource matches without pairwise work", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("inventory projection bounds 10k by 10k resource matches without pairwise work",
+  /**
+   * Exercises the “inventory projection bounds 10k by 10k resource matches without pairwise work” scenario through `withWorkspaceFixture`, `writeFile`, `join`, `from`, `String`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “inventory projection bounds 10k by 10k resource matches without pairwise work”.
+   * Outputs: Normal completion only after the “inventory projection bounds 10k by 10k resource matches without pairwise work” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `writeFile`, `join`, `from`, `String`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “inventory projection bounds 10k by 10k resource matches without pairwise work”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `writeFile`, `join`, `Array.from`, `assert.ok`, `Buffer.byteLength`, `JSON.stringify`, including the fixture filesystem changes.
+     */
+    async (fixture) => {
     await writeFile(
       join(fixture.repositoryRoots.api, "src", "index.ts"),
       "export const noStaticSecrets = true;\n",
@@ -2251,7 +4220,16 @@ test("inventory projection bounds 10k by 10k resource matches without pairwise w
     // every one of 10,000 candidates to every one of 10,000 inventory items.
     // Two finite branches per slot make the complete projected graph just
     // exceed the invocation cap, so Core must never receive these candidates.
-    const candidates = Array.from({ length: 10_000 }, (_, index) => ({
+    const candidates = Array.from({ length: 10_000 },
+      /**
+       * Constructs one generated fixture element.
+       *
+       * Inputs: `_`, `index`.
+       * Outputs: the `({ id: "c" + String(index), adapterId: "a", scope, destination: { namespace: "env", name: "K" + String(index) }, sourceKind: "external", providerResourceId: { authorityId: "a", canonicalId: ` result consumed by `Array.from`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (_, index) => ({
       id: "c" + String(index),
       adapterId: "a",
       scope,
@@ -2280,7 +4258,16 @@ test("inventory projection bounds 10k by 10k resource matches without pairwise w
       inputId: "inventory-frequency-inventory",
       authorityId: "a",
       asOf: "2026-07-12T00:00:00Z",
-      items: Array.from({ length: 10_000 }, (_, index) => ({
+      items: Array.from({ length: 10_000 },
+        /**
+         * Constructs one generated fixture element.
+         *
+         * Inputs: `_`, `index`.
+         * Outputs: the `({ providerResourceId: { authorityId: "a", canonicalId: "r" + String(index) }, })` result consumed by `Array.from`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (_, index) => ({
         providerResourceId: { authorityId: "a", canonicalId: "r" + String(index) },
       })),
     };
@@ -2311,6 +4298,14 @@ test("inventory projection bounds 10k by 10k resource matches without pairwise w
     const member = deploymentMember(entry, "api");
     assert.equal(
       entry.diagnostics.some(
+        /**
+         * Tests the current diagnostic against the requested condition.
+         *
+         * Inputs: `diagnostic`.
+         * Outputs: the `String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED"` result consumed by `entry.diagnostics.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (diagnostic) => String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED",
       ),
       true,
@@ -2322,19 +4317,73 @@ test("inventory projection bounds 10k by 10k resource matches without pairwise w
   });
 });
 
-test("maximum legal deployment membership reserves compact fallback and aggregate status capacity", async () => {
-  await withWorkspaceFixture(async (fixture) => {
-    const repositoryIds = Array.from({ length: 5 }, (_, index) => "r" + String(index));
-    await Promise.all(repositoryIds.map((id) =>
+test("maximum legal deployment membership reserves compact fallback and aggregate status capacity",
+  /**
+   * Exercises the “maximum legal deployment membership reserves compact fallback and aggregate status capacity” scenario through `withWorkspaceFixture`, `from`, `String`, `all`, `map`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “maximum legal deployment membership reserves compact fallback and aggregate status capacity”.
+   * Outputs: Normal completion only after the “maximum legal deployment membership reserves compact fallback and aggregate status capacity” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `from`, `String`, `all`, `map`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “maximum legal deployment membership reserves compact fallback and aggregate status capacity”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `Array.from`, `Promise.all`, `repositoryIds.map`, `writeFile`, `JSON.stringify`, `readLocalWorkspaceManifest`, including the fixture filesystem changes.
+     */
+    async (fixture) => {
+    const repositoryIds = Array.from({ length: 5 },
+      /**
+       * Constructs one generated fixture element.
+       *
+       * Inputs: `_`, `index`.
+       * Outputs: the `"r" + String(index)` result consumed by `Array.from`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (_, index) => "r" + String(index));
+    await Promise.all(repositoryIds.map(
+      /**
+       * Projects a report value from the current id.
+       *
+       * Inputs: `id`.
+       * Outputs: the `mkdir(join(fixture.root, id, "src"), { recursive: true })` result consumed by `repositoryIds.map`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (id) =>
       mkdir(join(fixture.root, id, "src"), { recursive: true }),
     ));
-    const deployments = Array.from({ length: 10_000 }, (_, index) => ({
+    const deployments = Array.from({ length: 10_000 },
+      /**
+       * Constructs one generated fixture element.
+       *
+       * Inputs: `_`, `index`.
+       * Outputs: the `({ id: "d" + String(index), repositories: repositoryIds, })` result consumed by `Array.from`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (_, index) => ({
       id: "d" + String(index),
       repositories: repositoryIds,
     }));
     await writeFile(fixture.manifestPath, JSON.stringify({
       schemaVersion: "workspace-manifest/v1",
-      repositories: repositoryIds.map((id) => ({ id, root: "../" + id })),
+      repositories: repositoryIds.map(
+        /**
+         * Projects a report value from the current id.
+         *
+         * Inputs: `id`.
+         * Outputs: the `({ id, root: "../" + id })` result consumed by `repositoryIds.map`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (id) => ({ id, root: "../" + id })),
       deployments,
     }), "utf8");
     const document = await readLocalWorkspaceManifest(fixture.manifestPath);
@@ -2343,20 +4392,65 @@ test("maximum legal deployment membership reserves compact fallback and aggregat
     const result = await scanWorkspace(document.request);
     assert.equal(result.deployments.length, 10_000);
     assert.equal(
-      result.deployments.reduce((count, entry) => count + entry.members.length, 0),
+      result.deployments.reduce(
+        /**
+         * Accumulates facts for the current entry.
+         *
+         * Inputs: `count`, `entry`.
+         * Outputs: the next accumulator value `count + entry.members.length`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (count, entry) => count + entry.members.length, 0),
       50_000,
     );
-    assert.equal(result.deployments.every((entry) => entry.diagnostics.length <= 1), true);
+    assert.equal(result.deployments.every(
+      /**
+       * Tests the current entry against the requested condition.
+       *
+       * Inputs: `entry`.
+       * Outputs: the `entry.diagnostics.length <= 1` result consumed by `result.deployments.every`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (entry) => entry.diagnostics.length <= 1), true);
     assert.ok(emittedWorkspaceGraphFacts(result) <= 100_000);
-    assert.ok(result.deployments.some((entry) =>
+    assert.ok(result.deployments.some(
+      /**
+       * Tests the current entry against the requested condition.
+       *
+       * Inputs: `entry`.
+       * Outputs: the `entry.members.some(isBudgetFallbackMember)` result consumed by `result.deployments.some`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (entry) =>
       entry.members.some(isBudgetFallbackMember),
     ));
     assert.equal(JSON.stringify(result).includes(fixture.root), false);
   });
 });
 
-test("invocation document cache reuses verified reads and caps unique input bytes before parse", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("invocation document cache reuses verified reads and caps unique input bytes before parse",
+  /**
+   * Exercises the “invocation document cache reuses verified reads and caps unique input bytes before parse” scenario through `withWorkspaceFixture`, `join`, `mkdir`, `alloc`, `all`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “invocation document cache reuses verified reads and caps unique input bytes before parse”.
+   * Outputs: Normal completion only after the “invocation document cache reuses verified reads and caps unique input bytes before parse” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `join`, `mkdir`, `alloc`, `all`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “invocation document cache reuses verified reads and caps unique input bytes before parse”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `join`, `mkdir`, `Buffer.alloc`, `Promise.all`, `writeFile`, `JSON.stringify`, including the fixture filesystem changes.
+     */
+    async (fixture) => {
     const inputRoot = join(fixture.infraRoot, "input-budget");
     await mkdir(inputRoot, { recursive: true });
     const invalidBytes = Buffer.alloc(4 * 1024 * 1024, 0x20);
@@ -2364,11 +4458,29 @@ test("invocation document cache reuses verified reads and caps unique input byte
       writeFile(join(inputRoot, "repeat.json"), invalidBytes),
       writeFile(join(inputRoot, "overflow.json"), invalidBytes),
       writeFile(join(inputRoot, "inventory.json"), JSON.stringify(inventorySnapshot([])), "utf8"),
-      ...Array.from({ length: 23 }, (_, index) =>
+      ...Array.from({ length: 23 },
+        /**
+         * Constructs one generated fixture element.
+         *
+         * Inputs: `_`, `index`.
+         * Outputs: the `writeFile(join(inputRoot, "unique-" + String(index) + ".json"), invalidBytes)` result consumed by `Array.from`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (_, index) =>
         writeFile(join(inputRoot, "unique-" + String(index) + ".json"), invalidBytes),
       ),
     ]);
-    const scope = (id: string) => ({
+    const scope =
+      /**
+       * Verifies “invocation document cache reuses verified reads and caps unique input bytes before parse”.
+       *
+       * Inputs: `id`.
+       * Outputs: a promise that settles after its awaited workspace operations and assertions.
+       * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+       * Side effects: runs no helper.
+       */
+      (id: string) => ({
       repositoryId: "api",
       scope: {
         id: "input-budget-" + id,
@@ -2378,7 +4490,16 @@ test("invocation document cache reuses verified reads and caps unique input byte
         channel: "environment" as const,
       },
     });
-    const deploymentFor = (id: string, binding: string) => ({
+    const deploymentFor =
+      /**
+       * Verifies “invocation document cache reuses verified reads and caps unique input bytes before parse”.
+       *
+       * Inputs: `id`, `binding`.
+       * Outputs: a promise that settles after its awaited workspace operations and assertions.
+       * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+       * Side effects: runs `scope`.
+       */
+      (id: string, binding: string) => ({
       id,
       repositories: ["api"],
       inputs: {
@@ -2390,7 +4511,16 @@ test("invocation document cache reuses verified reads and caps unique input byte
     const deployments = [
       deploymentFor("cache-00", "repeat.json"),
       deploymentFor("cache-01", "repeat.json"),
-      ...Array.from({ length: 23 }, (_, index) =>
+      ...Array.from({ length: 23 },
+        /**
+         * Constructs one generated fixture element.
+         *
+         * Inputs: `_`, `index`.
+         * Outputs: the `deploymentFor("input-" + String(index).padStart(2, "0"), "unique-" + String(index) + ".json")` result consumed by `Array.from`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (_, index) =>
         deploymentFor("input-" + String(index).padStart(2, "0"), "unique-" + String(index) + ".json"),
       ),
       deploymentFor("input-z", "overflow.json"),
@@ -2407,12 +4537,28 @@ test("invocation document cache reuses verified reads and caps unique input byte
     const overflow = deployment(result, "input-z");
     assert.equal(
       deploymentMember(cachedSecond, "api").diagnostics.some(
+        /**
+         * Tests the current diagnostic against the requested condition.
+         *
+         * Inputs: `diagnostic`.
+         * Outputs: the `String(diagnostic) === "APP_LOCAL_INPUT_BUDGET_EXCEEDED"` result consumed by `deploymentMember(cachedSecond, "api").diagnostics.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (diagnostic) => String(diagnostic) === "APP_LOCAL_INPUT_BUDGET_EXCEEDED",
       ),
       false,
     );
     assert.equal(
       deploymentMember(overflow, "api").diagnostics.some(
+        /**
+         * Tests the current diagnostic against the requested condition.
+         *
+         * Inputs: `diagnostic`.
+         * Outputs: the `String(diagnostic) === "APP_LOCAL_INPUT_BUDGET_EXCEEDED"` result consumed by `deploymentMember(overflow, "api").diagnostics.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (diagnostic) => String(diagnostic) === "APP_LOCAL_INPUT_BUDGET_EXCEEDED",
       ),
       true,
@@ -2421,8 +4567,26 @@ test("invocation document cache reuses verified reads and caps unique input byte
   });
 });
 
-test("an evicted descriptor payload cannot silently mix a later input snapshot", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("an evicted descriptor payload cannot silently mix a later input snapshot",
+  /**
+   * Exercises the “an evicted descriptor payload cannot silently mix a later input snapshot” scenario through `withWorkspaceFixture`, `join`, `mkdir`, `stringify`, `bindingManifest`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “an evicted descriptor payload cannot silently mix a later input snapshot”.
+   * Outputs: Normal completion only after the “an evicted descriptor payload cannot silently mix a later input snapshot” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `join`, `mkdir`, `stringify`, `bindingManifest`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “an evicted descriptor payload cannot silently mix a later input snapshot”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `join`, `mkdir`, `JSON.stringify`, `bindingManifest`, `inventorySnapshot`, `Promise.all`, including the fixture filesystem changes.
+     */
+    async (fixture) => {
     const inputRoot = join(fixture.infraRoot, "descriptor-snapshot");
     await mkdir(inputRoot, { recursive: true });
     const targetBindings = join(inputRoot, "target-bindings.json");
@@ -2445,7 +4609,16 @@ test("an evicted descriptor payload cannot silently mix a later input snapshot",
       },
     };
     const fillerCount = Math.ceil(MAX_WORKSPACE_INVOCATION_DOCUMENT_CACHE_ENTRIES / 2);
-    const fillers = Array.from({ length: fillerCount }, (_, index) => ({
+    const fillers = Array.from({ length: fillerCount },
+      /**
+       * Constructs one generated fixture element.
+       *
+       * Inputs: `_`, `index`.
+       * Outputs: the `({ id: "descriptor-filler-" + String(index).padStart(4, "0"), repositories: ["api"], inputs: { bindings: "../infra/descriptor-snapshot/filler-" + String(index) + "-bindings.json", inventory:` result consumed by `Array.from`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (_, index) => ({
       id: "descriptor-filler-" + String(index).padStart(4, "0"),
       repositories: ["api"],
       inputs: {
@@ -2457,6 +4630,14 @@ test("an evicted descriptor payload cannot silently mix a later input snapshot",
     for (let offset = 0; offset < fillerCount; offset += 64) {
       await Promise.all(Array.from(
         { length: Math.min(64, fillerCount - offset) },
+        /**
+         * Constructs one generated fixture element.
+         *
+         * Inputs: `_`, `localIndex`.
+         * Outputs: the `{ const index = offset + localIndex; await Promise.all([ writeFile(join(inputRoot, "filler-" + String(index) + "-bindings.json"), bindingsText, "utf8"), writeFile(join(inputRoot, "filler-" +` result consumed by `Array.from`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         async (_, localIndex) => {
           const index = offset + localIndex;
           await Promise.all([
@@ -2555,28 +4736,90 @@ test("an evicted descriptor payload cannot silently mix a later input snapshot",
       );
       assert.equal(
         analysis.diagnostics.some(
+          /**
+           * Tests the current diagnostic against the requested condition.
+           *
+           * Inputs: `diagnostic`.
+           * Outputs: the `String(diagnostic) === "APP_LOCAL_INPUT_SNAPSHOT_CHANGED"` result consumed by `analysis.diagnostics.some`.
+           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+           * Side effects: none; it derives the current-item result.
+           */
           (diagnostic) => String(diagnostic) === "APP_LOCAL_INPUT_SNAPSHOT_CHANGED",
         ),
         true,
       );
-      assert.equal(analysis.result.records.some((record) => record.coverage === "complete"), false);
+      assert.equal(analysis.result.records.some(
+        /**
+         * Tests the current record against the requested condition.
+         *
+         * Inputs: `record`.
+         * Outputs: the `record.coverage === "complete"` result consumed by `analysis.result.records.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (record) => record.coverage === "complete"), false);
       assert.equal(JSON.stringify(analysis).includes(fixture.root), false);
       assert.equal(JSON.stringify(analysis).includes(mutationMarker), false);
     }
   });
 });
 
-test("coverage-gap fanout is budgeted without retaining a partial member gap graph", async () => {
-  await withWorkspaceFixture(async (fixture) => {
-    const repositoryIds = Array.from({ length: 100 }, (_, index) => "gap-" + String(index));
-    await Promise.all(repositoryIds.map(async (id) => {
+test("coverage-gap fanout is budgeted without retaining a partial member gap graph",
+  /**
+   * Exercises the “coverage-gap fanout is budgeted without retaining a partial member gap graph” scenario through `withWorkspaceFixture`, `from`, `String`, `all`, `map`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “coverage-gap fanout is budgeted without retaining a partial member gap graph”.
+   * Outputs: Normal completion only after the “coverage-gap fanout is budgeted without retaining a partial member gap graph” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Creates, changes, or removes test-owned fixture files through `withWorkspaceFixture`, `from`, `String`, `all`, `map`.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Verifies “coverage-gap fanout is budgeted without retaining a partial member gap graph”.
+     *
+     * Inputs: `fixture`.
+     * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Side effects: runs `Array.from`, `Promise.all`, `repositoryIds.map`, `join`, `mkdir`, `writeFile`.
+     */
+    async (fixture) => {
+    const repositoryIds = Array.from({ length: 100 },
+      /**
+       * Constructs one generated fixture element.
+       *
+       * Inputs: `_`, `index`.
+       * Outputs: the `"gap-" + String(index)` result consumed by `Array.from`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (_, index) => "gap-" + String(index));
+    await Promise.all(repositoryIds.map(
+      /**
+       * Projects a report value from the current id.
+       *
+       * Inputs: `id`.
+       * Outputs: the `{ const sourceRoot = join(fixture.root, id, "src"); await mkdir(sourceRoot, { recursive: true }); await writeFile(join(sourceRoot, "index.ts"), "export const value = process.env.GAP_FANOUT_K` result consumed by `repositoryIds.map`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      async (id) => {
       const sourceRoot = join(fixture.root, id, "src");
       await mkdir(sourceRoot, { recursive: true });
       await writeFile(join(sourceRoot, "index.ts"), "export const value = process.env.GAP_FANOUT_KEY;\n", "utf8");
     }));
     const inputRoot = join(fixture.infraRoot, "coverage-fanout");
     await mkdir(inputRoot, { recursive: true });
-    const malformedCandidates = Array.from({ length: 1_001 }, () => ({
+    const malformedCandidates = Array.from({ length: 1_001 },
+      /**
+       * Constructs one generated fixture element.
+       *
+       * Inputs: no arguments.
+       * Outputs: the `({ invalid: "x".repeat(5_000), })` result consumed by `Array.from`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      () => ({
       invalid: "x".repeat(5_000),
     }));
     await Promise.all([
@@ -2587,7 +4830,16 @@ test("coverage-gap fanout is budgeted without retaining a partial member gap gra
       ),
       writeFile(join(inputRoot, "inventory.json"), JSON.stringify(inventorySnapshot([])), "utf8"),
     ]);
-    const memberScopes = repositoryIds.map((repositoryId) => ({
+    const memberScopes = repositoryIds.map(
+      /**
+       * Projects a report value from the current repositoryId.
+       *
+       * Inputs: `repositoryId`.
+       * Outputs: the `({ repositoryId, scope: { id: "coverage-" + repositoryId, componentId: "coverage-" + repositoryId, phase: "runtime", stage: { kind: "all" }, channel: "environment", }, })` result consumed by `repositoryIds.map`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (repositoryId) => ({
       repositoryId,
       scope: {
         id: "coverage-" + repositoryId,
@@ -2599,7 +4851,16 @@ test("coverage-gap fanout is budgeted without retaining a partial member gap gra
     }));
     await writeFile(fixture.manifestPath, JSON.stringify({
       schemaVersion: "workspace-manifest/v2",
-      repositories: repositoryIds.map((id) => ({ id, root: "../" + id })),
+      repositories: repositoryIds.map(
+        /**
+         * Projects a report value from the current id.
+         *
+         * Inputs: `id`.
+         * Outputs: the `({ id, root: "../" + id })` result consumed by `repositoryIds.map`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
+        (id) => ({ id, root: "../" + id })),
       deployments: [{
         id: "coverage-fanout",
         repositories: repositoryIds,
@@ -2616,6 +4877,14 @@ test("coverage-gap fanout is budgeted without retaining a partial member gap gra
     const fanout = deployment(result, "coverage-fanout");
     assert.equal(
       fanout.diagnostics.some(
+        /**
+         * Tests the current diagnostic against the requested condition.
+         *
+         * Inputs: `diagnostic`.
+         * Outputs: the `String(diagnostic) === "WORKSPACE_DEPLOYMENT_COVERAGE_GAP_FANOUT_EXCEEDED"` result consumed by `fanout.diagnostics.some`.
+         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+         * Side effects: none; it derives the current-item result.
+         */
         (diagnostic) => String(diagnostic) === "WORKSPACE_DEPLOYMENT_COVERAGE_GAP_FANOUT_EXCEEDED",
       ),
       true,
@@ -2624,20 +4893,55 @@ test("coverage-gap fanout is budgeted without retaining a partial member gap gra
       assert.equal(member.status, "incomplete");
       assert.equal(
         member.diagnostics.some(
+          /**
+           * Tests the current diagnostic against the requested condition.
+           *
+           * Inputs: `diagnostic`.
+           * Outputs: the `String(diagnostic) === "WORKSPACE_MEMBER_COVERAGE_GAP_FANOUT_EXCEEDED"` result consumed by `member.diagnostics.some`.
+           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+           * Side effects: none; it derives the current-item result.
+           */
           (diagnostic) => String(diagnostic) === "WORKSPACE_MEMBER_COVERAGE_GAP_FANOUT_EXCEEDED",
         ),
         true,
       );
       assert.equal(
-        member.reconciliation.records.some((record) => record.coverage === "complete"),
+        member.reconciliation.records.some(
+          /**
+           * Tests the current record against the requested condition.
+           *
+           * Inputs: `record`.
+           * Outputs: the `record.coverage === "complete"` result consumed by `member.reconciliation.records.some`.
+           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+           * Side effects: none; it derives the current-item result.
+           */
+          (record) => record.coverage === "complete"),
         false,
       );
     }
   });
 });
 
-test("runtime deployment attestations bind sources and reject hostile capabilities", async () => {
-  await withWorkspaceFixture(async (fixture) => {
+test("runtime deployment attestations bind sources and reject hostile capabilities",
+  /**
+   * Exercises the “runtime deployment attestations bind sources and reject hostile capabilities” scenario through `withWorkspaceFixture`, `readLocalWorkspaceManifest`, `fail`, `beginVerifiedWorkspaceInvocation`, `attestVerifiedWorkspaceRepositoryMembers`.
+   *
+   * Inputs: No callback parameters; it closes over the fixture and imports established for “runtime deployment attestations bind sources and reject hostile capabilities”.
+   * Outputs: Normal completion only after the “runtime deployment attestations bind sources and reject hostile capabilities” assertions hold; setup, assertion, and awaited-operation failures propagate.
+   * Does not handle: It neither touches a user workspace nor retains the `withWorkspaceFixture` layout after its callback; it limits the check to the constructed fixture, named operation, and assertions.
+   * Side effects: Throws the deliberate test value or propagates the error expressed in its body.
+   */
+  async () => {
+  await withWorkspaceFixture(
+    /**
+     * Exercises “runtime deployment attestations bind sources and reject hostile capabilities” through the `withWorkspaceFixture` callback and invokes `readLocalWorkspaceManifest`, `fail`, `beginVerifiedWorkspaceInvocation`, `attestVerifiedWorkspaceRepositoryMembers`, `notEqual`.
+     *
+     * Inputs: Receives `fixture` from the `withWorkspaceFixture` callback.
+     * Outputs: Throws the deliberate test error or completes as consumed by the `withWorkspaceFixture` callback.
+     * Does not handle: It does not create, dispose, or retain the temporary fixture; withWorkspaceFixture owns that lifecycle while this callback uses only its issued paths and test-local assertions.
+     * Side effects: Throws the deliberate sentinel or propagates the error expressed in its body.
+     */
+    async (fixture) => {
     const document = await readLocalWorkspaceManifest(fixture.manifestPath);
     if (document.ok === false) {
       assert.fail(document.code);
@@ -2674,7 +4978,16 @@ test("runtime deployment attestations bind sources and reject hostile capabiliti
     if (attestation === undefined || workerAttestation === undefined) {
       assert.fail("expected runtime attestations");
     }
-    const fixedFailure = (error: unknown): boolean =>
+    const fixedFailure =
+      /**
+       * Recognizes materialization failure without exposing the hostile capability sentinel.
+       *
+       * Inputs: The `error` rejected by attestation preparation or reconciliation in this scenario.
+       * Outputs: True only for the fixed materialization message whose text omits the proxy sentinel.
+       * Does not handle: Invoking the rejected operation, altering a capability, or recovering the error.
+       * Side effects: Reads the error message and performs a string containment check.
+       */
+      (error: unknown): boolean =>
       error instanceof Error &&
       error.message === "APP_SAFETY_MATERIALIZATION_FAILED" &&
       !error.message.includes("capability-proxy-sentinel");
@@ -2727,6 +5040,14 @@ test("runtime deployment attestations bind sources and reject hostile capabiliti
       independentInvocation,
     );
     assert.throws(
+      /**
+       * Triggers the expected assertion failure.
+       *
+       * Inputs: no arguments.
+       * Outputs: the operation result if it unexpectedly succeeds; the assertion receives any failure.
+       * Does not handle: decide whether the captured failure matches the assertion.
+       * Side effects: executes `prepareIssuedLocalDeploymentReconciliation(standaloneAttestation, attestationPreflight)`.
+       */
       () => prepareIssuedLocalDeploymentReconciliation(standaloneAttestation, attestationPreflight),
       fixedFailure,
     );
@@ -2742,6 +5063,14 @@ test("runtime deployment attestations bind sources and reject hostile capabiliti
       fixedFailure,
     );
     assert.throws(
+      /**
+       * Triggers the expected assertion failure.
+       *
+       * Inputs: no arguments.
+       * Outputs: the operation result if it unexpectedly succeeds; the assertion receives any failure.
+       * Does not handle: decide whether the captured failure matches the assertion.
+       * Side effects: executes `prepareIssuedLocalDeploymentReconciliation(attestation, standalonePreflight)`.
+       */
       () => prepareIssuedLocalDeploymentReconciliation(attestation, standalonePreflight),
       fixedFailure,
     );
@@ -2749,12 +5078,36 @@ test("runtime deployment attestations bind sources and reject hostile capabiliti
     registerDeploymentAttestation(workerAttestation);
     const trapSentinel = "capability-proxy-sentinel";
     const hostileTraps: ProxyHandler<object> = {
+      /**
+       * Implements the hostile proxy's property-read trap for capability materialization.
+       *
+       * Inputs: Proxy property access supplies target, property key, and receiver; this trap ignores them.
+       * Outputs: Never returns: it throws the capability-proxy sentinel.
+       * Does not handle: It neither resolves a capability value nor selects when access occurs; the materializer's attempted property read is the only trigger under test.
+       * Side effects: Throws the deliberate sentinel error.
+       */
       get() {
         throw new Error(trapSentinel);
       },
+      /**
+       * Implements the hostile proxy's descriptor-read trap for capability materialization.
+       *
+       * Inputs: Reflective descriptor lookup supplies target and property key; this trap ignores them.
+       * Outputs: Never returns: it throws the capability-proxy sentinel.
+       * Does not handle: It neither resolves a descriptor nor controls the surrounding assertion; only hostile descriptor access is represented.
+       * Side effects: Throws the deliberate sentinel error.
+       */
       getOwnPropertyDescriptor() {
         throw new Error(trapSentinel);
       },
+      /**
+       * Implements the hostile proxy's key-enumeration trap for capability materialization.
+       *
+       * Inputs: Reflective enumeration supplies the proxy target; this trap ignores it.
+       * Outputs: Never returns: it throws the capability-proxy sentinel.
+       * Does not handle: It neither enumerates keys nor controls the surrounding assertion; only hostile enumeration access is represented.
+       * Side effects: Throws the deliberate sentinel error.
+       */
       ownKeys() {
         throw new Error(trapSentinel);
       },
@@ -2789,7 +5142,16 @@ test("runtime deployment attestations bind sources and reject hostile capabiliti
     // Public analysis is a detached frozen view. A proxy mutation attempt must
     // fail locally and cannot reach the private source snapshot used below.
     const publicReference = apiAnalysis.reconciliationInput.references[0] as { requested: unknown };
-    assert.throws(() => {
+    assert.throws(
+      /**
+       * Triggers the expected assertion failure.
+       *
+       * Inputs: no arguments.
+       * Outputs: the operation result if it unexpectedly succeeds; the assertion receives any failure.
+       * Does not handle: decide whether the captured failure matches the assertion.
+       * Side effects: executes `{ publicReference.requested = new Proxy(Object.create(null), hostileTraps); }`.
+       */
+      () => {
       publicReference.requested = new Proxy(Object.create(null), hostileTraps);
     });
     assert.equal(Object.isFrozen(apiAnalysis.reconciliationInput.references), true);
@@ -2878,6 +5240,14 @@ test("runtime deployment attestations bind sources and reject hostile capabiliti
       structuredClone(attestationPreflight),
     ]) {
       assert.throws(
+        /**
+         * Triggers the expected assertion failure.
+         *
+         * Inputs: no arguments.
+         * Outputs: the operation result if it unexpectedly succeeds; the assertion receives any failure.
+         * Does not handle: decide whether the captured failure matches the assertion.
+         * Side effects: executes `prepareIssuedLocalDeploymentReconciliation(hostile, attestationPreflight)`.
+         */
         () => prepareIssuedLocalDeploymentReconciliation(hostile, attestationPreflight),
         fixedFailure,
       );
@@ -2915,7 +5285,16 @@ test("runtime deployment attestations bind sources and reject hostile capabiliti
     const rewritten = await reconcilePreparedLocalDeploymentMember(rewrittenPrepared, rewrittenHandle);
     assert.equal(rewritten.reconciliationInput.bindingCandidates.length, 1);
     const candidate = rewritten.reconciliationInput.bindingCandidates[0] as { destination: unknown };
-    assert.throws(() => {
+    assert.throws(
+      /**
+       * Triggers the expected assertion failure.
+       *
+       * Inputs: no arguments.
+       * Outputs: the operation result if it unexpectedly succeeds; the assertion receives any failure.
+       * Does not handle: decide whether the captured failure matches the assertion.
+       * Side effects: executes `{ candidate.destination = new Proxy(Object.create(null), hostileTraps); }`.
+       */
+      () => {
       candidate.destination = new Proxy(Object.create(null), hostileTraps);
     });
     const repeated = await reconcilePreparedLocalDeploymentMember(rewrittenPrepared, rewrittenHandle);
@@ -2924,10 +5303,26 @@ test("runtime deployment attestations bind sources and reject hostile capabiliti
     const analysisModule = await import("../src/app/analysis.js");
     assert.equal("issueLocalDeploymentPreparation" in analysisModule, false);
     assert.throws(
+      /**
+       * Triggers the expected assertion failure.
+       *
+       * Inputs: no arguments.
+       * Outputs: the operation result if it unexpectedly succeeds; the assertion receives any failure.
+       * Does not handle: decide whether the captured failure matches the assertion.
+       * Side effects: executes `prepareIssuedLocalDeploymentReconciliation(rawDocumentProxy, attestationPreflight)`.
+       */
       () => prepareIssuedLocalDeploymentReconciliation(rawDocumentProxy, attestationPreflight),
       fixedFailure,
     );
     assert.throws(
+      /**
+       * Triggers the expected assertion failure.
+       *
+       * Inputs: no arguments.
+       * Outputs: the operation result if it unexpectedly succeeds; the assertion receives any failure.
+       * Does not handle: decide whether the captured failure matches the assertion.
+       * Side effects: executes `prepareIssuedLocalDeploymentReconciliation(rawMemberArrayProxy, attestationPreflight)`.
+       */
       () => prepareIssuedLocalDeploymentReconciliation(rawMemberArrayProxy, attestationPreflight),
       fixedFailure,
     );
@@ -2938,6 +5333,14 @@ test("runtime deployment attestations bind sources and reject hostile capabiliti
   });
 });
 
+/**
+ * Assembles the closedModelDocumentForWorkspaceRuntime test value.
+ *
+ * Inputs: no arguments.
+ * Outputs: the fixture value returned by `closedModelDocumentForWorkspaceRuntime`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: none; it allocates only in-memory test data.
+ */
 function closedModelDocumentForWorkspaceRuntime(): object {
   return {
     schemaVersion: "closed-provisioning-model/v1",
@@ -2971,12 +5374,29 @@ function closedModelDocumentForWorkspaceRuntime(): object {
   };
 }
 
+/**
+ * Assembles the closedModelDocumentForSharedWorkspaceRuntime test value.
+ *
+ * Inputs: no arguments.
+ * Outputs: the fixture value returned by `closedModelDocumentForSharedWorkspaceRuntime`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: invokes `["api", "worker"].map`.
+ */
 function closedModelDocumentForSharedWorkspaceRuntime(): object {
   return {
     schemaVersion: "closed-provisioning-model/v1",
     inputId: "shared-closed-model-input",
     maxFiniteKeyDomain: 8,
-    scopes: ["api", "worker"].map((repositoryId) => ({
+    scopes: ["api", "worker"].map(
+      /**
+       * Projects a report value from the current repositoryId.
+       *
+       * Inputs: `repositoryId`.
+       * Outputs: the `({ scope: productionMemberExecutionScope(repositoryId), declaredStages: ["production"], closed: true, approvedFirstPartyRoots: [repositoryId], bindingRoots: ["infra/shared-production/binding` result consumed by `["api", "worker"].map`.
+       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
+       * Side effects: none; it derives the current-item result.
+       */
+      (repositoryId) => ({
       scope: productionMemberExecutionScope(repositoryId),
       declaredStages: ["production"],
       closed: true,
@@ -2998,6 +5418,14 @@ function closedModelDocumentForSharedWorkspaceRuntime(): object {
   };
 }
 
+/**
+ * Assembles the writeDeploymentProvisioning test value.
+ *
+ * Inputs: `fixture`, `deploymentId`, `bindings`, `inventory`.
+ * Outputs: the completion result produced by `writeDeploymentProvisioning`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: changes test-owned filesystem state through `Promise.all`, `writeFile`, `join`, `JSON.stringify`.
+ */
 async function writeDeploymentProvisioning(
   fixture: WorkspaceFixture,
   deploymentId: string,
@@ -3018,6 +5446,14 @@ async function writeDeploymentProvisioning(
   ]);
 }
 
+/**
+ * Assembles the bindingManifest test value.
+ *
+ * Inputs: `candidates`.
+ * Outputs: the fixture value returned by `bindingManifest`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: none; it allocates only in-memory test data.
+ */
 function bindingManifest(candidates: readonly object[]): object {
   return {
     schemaVersion: "binding-manifest/v1",
@@ -3027,6 +5463,14 @@ function bindingManifest(candidates: readonly object[]): object {
   };
 }
 
+/**
+ * Assembles the inventorySnapshot test value.
+ *
+ * Inputs: `items`.
+ * Outputs: the fixture value returned by `inventorySnapshot`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: none; it allocates only in-memory test data.
+ */
 function inventorySnapshot(items: readonly object[]): object {
   return {
     schemaVersion: "inventory-snapshot/v1",
@@ -3049,6 +5493,14 @@ interface FixtureExecutionScope {
   readonly channel: "environment";
 }
 
+/**
+ * Assembles the bindingCandidate test value.
+ *
+ * Inputs: `repositoryId`, `resourceId`, `authorityId`, `scope`, `resolution`, `appliesWhenStage`, `idSuffix`, `precedenceRank`.
+ * Outputs: the fixture value returned by `bindingCandidate`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: none; it allocates only in-memory test data.
+ */
 function bindingCandidate(
   repositoryId: string,
   resourceId: string,
@@ -3081,6 +5533,14 @@ function bindingCandidate(
   };
 }
 
+/**
+ * Assembles the inventoryItem test value.
+ *
+ * Inputs: `repositoryId`, `resourceId`, `authorityId`, `scope`.
+ * Outputs: the fixture value returned by `inventoryItem`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: none; it allocates only in-memory test data.
+ */
 function inventoryItem(
   repositoryId: string,
   resourceId: string,
@@ -3096,6 +5556,14 @@ function inventoryItem(
   };
 }
 
+/**
+ * Assembles the unscopedInventoryItem test value.
+ *
+ * Inputs: `resourceId`, `authorityId`.
+ * Outputs: the fixture value returned by `unscopedInventoryItem`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: none; it allocates only in-memory test data.
+ */
 function unscopedInventoryItem(
   resourceId: string,
   authorityId = "fixture-authority",
@@ -3108,6 +5576,14 @@ function unscopedInventoryItem(
   };
 }
 
+/**
+ * Assembles the memberExecutionScope test value.
+ *
+ * Inputs: `repositoryId`, `executionScopeId`, `stage`.
+ * Outputs: the fixture value returned by `memberExecutionScope`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: none; it allocates only in-memory test data.
+ */
 function memberExecutionScope(
   repositoryId: string,
   executionScopeId = repositoryId,
@@ -3122,6 +5598,14 @@ function memberExecutionScope(
   };
 }
 
+/**
+ * Assembles the productionMemberExecutionScope test value.
+ *
+ * Inputs: `repositoryId`.
+ * Outputs: the fixture value returned by `productionMemberExecutionScope`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: invokes `memberExecutionScope`.
+ */
 function productionMemberExecutionScope(repositoryId: string): FixtureExecutionScope {
   return memberExecutionScope(repositoryId, repositoryId, {
     kind: "exact",
@@ -3129,6 +5613,14 @@ function productionMemberExecutionScope(repositoryId: string): FixtureExecutionS
   });
 }
 
+/**
+ * Assembles the deploymentWithMemberScope test value.
+ *
+ * Inputs: `deploymentId`.
+ * Outputs: the fixture value returned by `deploymentWithMemberScope`.
+ * Does not handle: validate unrelated production input or suppress assertion failures.
+ * Side effects: invokes `memberExecutionScope`.
+ */
 function deploymentWithMemberScope(deploymentId: string): object {
   return {
     id: deploymentId,
