@@ -94,6 +94,14 @@ export class WorkspaceReportError extends Error {
     | "WORKSPACE_REPORT_DUPLICATE_DEPLOYMENT"
     | "WORKSPACE_REPORT_DUPLICATE_DEPLOYMENT_MEMBER";
 
+  /**
+   * Constructs the fixed error used for the workspace report builder's selected shallow input violations.
+   *
+   * Inputs: One allowlisted workspace-report failure code.
+   * Outputs: A WorkspaceReportError whose name, message, and code equal that value.
+   * Does not handle: Wrapping arbitrary errors, retaining rejected input, assigning user-facing remediation, or ensuring every malformed nested report/key/member/array value becomes this error instead of a native exception.
+   * Side effects: Initializes the Error base object.
+   */
   public constructor(code: WorkspaceReportError["code"]) {
     super(code);
     this.name = "WorkspaceReportError";

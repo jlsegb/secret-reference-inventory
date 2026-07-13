@@ -26,15 +26,59 @@ import {
   type ReportingInput,
 } from "../src/reporters/index.js";
 
-const id = (value: string): SafeIdentifier => value as SafeIdentifier;
-const code = (value: string): SafeDiagnosticCode => value as SafeDiagnosticCode;
-const path = (value: string): SafePath => value as SafePath;
-const timestamp = (value: string): SafeTimestamp => value as SafeTimestamp;
+const id = /**
+ * Brands a fixture-only string as a safe identifier for controlled test data.
+ *
+ * Inputs: A literal fixture identifier string.
+ * Outputs: The same value cast to SafeIdentifier.
+ * Does not handle: Runtime identifier validation or production safety checks.
+ * Side effects: None.
+ */ (value: string): SafeIdentifier => value as SafeIdentifier;
+const code = /**
+ * Brands a fixture-only diagnostic string for controlled test data.
+ *
+ * Inputs: A literal fixture diagnostic code.
+ * Outputs: The same value cast to SafeDiagnosticCode.
+ * Does not handle: Runtime diagnostic validation or production safety checks.
+ * Side effects: None.
+ */ (value: string): SafeDiagnosticCode => value as SafeDiagnosticCode;
+const path = /**
+ * Brands a fixture-only relative path for controlled reporter input.
+ *
+ * Inputs: A literal safe fixture path.
+ * Outputs: The same value cast to SafePath.
+ * Does not handle: Filesystem validation, traversal checks, or production path safety.
+ * Side effects: None.
+ */ (value: string): SafePath => value as SafePath;
+const timestamp = /**
+ * Brands a fixture timestamp for controlled inventory-snapshot data.
+ *
+ * Inputs: A literal ISO-like fixture timestamp.
+ * Outputs: The same value cast to SafeTimestamp.
+ * Does not handle: Timestamp parsing, timezone conversion, or production validation.
+ * Side effects: None.
+ */ (value: string): SafeTimestamp => value as SafeTimestamp;
 
+/**
+ * Creates an environment logical-key fixture with a branded name.
+ *
+ * Inputs: A test key name.
+ * Outputs: An env-namespace LogicalKey using the fixture id helper.
+ * Does not handle: Namespace variants, key validation, or value lookup.
+ * Side effects: None.
+ */
 function key(name: string): LogicalKey {
   return { namespace: "env", name: id(name) };
 }
 
+/**
+ * Creates a runtime environment execution-scope fixture for one named consumer.
+ *
+ * Inputs: A test scope name.
+ * Outputs: An exact-production runtime environment scope whose id and component id share that name.
+ * Does not handle: Build/test scopes, nonenvironment delivery channels, or scope validation.
+ * Side effects: None.
+ */
 function scope(name: string): ExecutionScope {
   return {
     id: id(name),
@@ -45,6 +89,14 @@ function scope(name: string): ExecutionScope {
   };
 }
 
+/**
+ * Creates an always-applicable binding selector for the provided fixture scope.
+ *
+ * Inputs: One execution scope fixture.
+ * Outputs: A binding appliesWhen predicate matching that scope's unit, phase, stage, and channel.
+ * Does not handle: Conditional selectors, precedence, or multiple target scopes.
+ * Side effects: None.
+ */
 function selector(target: ExecutionScope): BindingCandidate["appliesWhen"] {
   return {
     executionUnitIds: [target.id],
@@ -55,6 +107,14 @@ function selector(target: ExecutionScope): BindingCandidate["appliesWhen"] {
   };
 }
 
+/**
+ * Builds an exact secret-manager binding fixture for a scope/key/resource combination.
+ *
+ * Inputs: A target scope, logical destination key, and canonical provider resource suffix.
+ * Outputs: One comparable exact BindingCandidate with fixed fixture authority and precedence.
+ * Does not handle: Binding resolution, inventory snapshots, or conditional delivery.
+ * Side effects: None.
+ */
 function binding(target: ExecutionScope, destination: LogicalKey, resource: string): BindingCandidate {
   return {
     id: id(`binding-${target.id}-${destination.name}`),
@@ -69,6 +129,14 @@ function binding(target: ExecutionScope, destination: LogicalKey, resource: stri
   };
 }
 
+/**
+ * Builds a direct-read source-reference fixture with one safe location and evidence entry.
+ *
+ * Inputs: Reference id, requested logical key, and relative source filename.
+ * Outputs: A server-exposure literal SecretReference with fixed read semantics.
+ * Does not handle: Dynamic references, multiple locations, or source parsing.
+ * Side effects: None.
+ */
 function reference(referenceId: string, destination: LogicalKey, file: string): SecretReference {
   return {
     id: id(referenceId),
@@ -99,6 +167,14 @@ function reference(referenceId: string, destination: LogicalKey, file: string): 
   };
 }
 
+/**
+ * Creates a direct demand-edge fixture connecting a source reference to one scope.
+ *
+ * Inputs: Target execution scope and referenced source id.
+ * Outputs: A direct DemandEdge with an empty fixture evidence chain.
+ * Does not handle: Indirect demand, evidence construction, or source-reference validation.
+ * Side effects: None.
+ */
 function demand(target: ExecutionScope, referenceId: string): DemandEdge {
   return {
     id: id(`demand-${target.id}-${referenceId}`),
@@ -109,6 +185,14 @@ function demand(target: ExecutionScope, referenceId: string): DemandEdge {
   };
 }
 
+/**
+ * Assembles the common reconciliation fixture used by reporter rendering assertions.
+ *
+ * Inputs: None.
+ * Outputs: ReportingInput containing shared, inventory-only, and dynamic lookup scenarios.
+ * Does not handle: Filesystem discovery, adapter parsing, or provider access.
+ * Side effects: Invokes the pure reconcile and binding-resolution helpers in memory.
+ */
 function fixture(): ReportingInput {
   const api = scope("api");
   const worker = scope("worker");
@@ -166,7 +250,14 @@ function fixture(): ReportingInput {
   const inventory: InventorySnapshot = {
     authorityId: id("authority-a"),
     asOf: timestamp("2026-07-12T00:00:00Z"),
-    items: candidates.flatMap((candidate) =>
+    items: candidates.flatMap(/**
+     * Converts each fixture binding with a resource id into its inventory item.
+     *
+     * Inputs: One binding candidate from the fixture collection.
+     * Outputs: A singleton declared-scope item or an empty array for resource-less bindings.
+     * Does not handle: Snapshot validation, provider lookup, or duplicate resources.
+     * Side effects: None.
+     */ (candidate) =>
       candidate.providerResourceId === undefined
         ? []
         : [{ providerResourceId: candidate.providerResourceId, declaredScopes: [candidate.scope] }],
@@ -192,7 +283,14 @@ function fixture(): ReportingInput {
   };
 }
 
-test("terminal and versioned JSON group sources deterministically and mark shared use", () => {
+test("terminal and versioned JSON group sources deterministically and mark shared use", /**
+ * Asserts stable source grouping, shared-consumer markers, and readable terminal evidence.
+ *
+ * Inputs: None; builds the common reporting fixture.
+ * Outputs: A completed synchronous test after JSON and terminal assertions pass.
+ * Does not handle: Dynamic lookup behavior, malformed values, or SARIF schema coverage.
+ * Side effects: Invokes in-memory reconciliation and renderers only.
+ */ () => {
   const input = fixture();
   const first = renderJson(input);
   const second = renderJson(input);
@@ -203,7 +301,14 @@ test("terminal and versioned JSON group sources deterministically and mark share
     groups: Array<{ key: { name: string }; shared: boolean; consumers: unknown[]; sources: unknown[] }>;
   };
   assert.equal(parsed.schemaVersion, "secret-reference-inventory/report/v1");
-  const database = parsed.groups.find((group) => group.key.name === "DATABASE_URL");
+  const database = parsed.groups.find(/**
+   * Locates the shared database group in parsed fixture output.
+   *
+   * Inputs: One parsed JSON group.
+   * Outputs: True when the group has the expected database key name.
+   * Does not handle: Shared-use verification or source counting.
+   * Side effects: None.
+   */ (group) => group.key.name === "DATABASE_URL");
   assert.equal(database?.shared, true);
   assert.equal(database?.consumers.length, 2);
   assert.equal(database?.sources.length, 2);
@@ -216,7 +321,14 @@ test("terminal and versioned JSON group sources deterministically and mark share
   assert.match(terminal, /src\/api\.ts:1:1/);
 });
 
-test("dynamic output distinguishes finite/pattern likely keys from unbounded user-controlled lookups", () => {
+test("dynamic output distinguishes finite/pattern likely keys from unbounded user-controlled lookups", /**
+ * Asserts that report formats distinguish bounded candidate keys from unbounded user-selected lookup state.
+ *
+ * Inputs: None; builds the common reporting fixture.
+ * Outputs: A completed synchronous test after JSON, terminal, and SARIF assertions pass.
+ * Does not handle: Binding precedence, inventory-only reporting, or malformed report input.
+ * Side effects: Invokes in-memory reconciliation and renderers only.
+ */ () => {
   const input = fixture();
   const parsed = JSON.parse(renderJson(input)) as {
     dynamicLookups: Array<{
@@ -226,11 +338,46 @@ test("dynamic output distinguishes finite/pattern likely keys from unbounded use
       origin: string;
     }>;
   };
-  const finite = parsed.dynamicLookups.find((lookup) => lookup.id === "dynamic-finite");
-  assert.deepEqual(finite?.likelyKeys.map((item) => item.name), ["FINITE_A", "FINITE_B"]);
-  const pattern = parsed.dynamicLookups.find((lookup) => lookup.id === "dynamic-pattern");
-  assert.deepEqual(pattern?.likelyKeys.map((item) => item.name), ["SERVICE_US"]);
-  const unbounded = parsed.dynamicLookups.find((lookup) => lookup.id === "dynamic-unbounded");
+  const finite = parsed.dynamicLookups.find(/**
+   * Finds the finite dynamic fixture entry.
+   *
+   * Inputs: One parsed dynamic lookup.
+   * Outputs: True for the fixture's finite lookup id.
+   * Does not handle: Likely-key comparison or domain validation.
+   * Side effects: None.
+   */ (lookup) => lookup.id === "dynamic-finite");
+  assert.deepEqual(finite?.likelyKeys.map(/**
+   * Extracts a likely key name for sequence comparison.
+   *
+   * Inputs: One parsed likely-key object.
+   * Outputs: Its name field.
+   * Does not handle: Key sanitization or ordering.
+   * Side effects: None.
+   */ (item) => item.name), ["FINITE_A", "FINITE_B"]);
+  const pattern = parsed.dynamicLookups.find(/**
+   * Finds the pattern dynamic fixture entry.
+   *
+   * Inputs: One parsed dynamic lookup.
+   * Outputs: True for the fixture's pattern lookup id.
+   * Does not handle: Pattern-format validation or likely-key comparison.
+   * Side effects: None.
+   */ (lookup) => lookup.id === "dynamic-pattern");
+  assert.deepEqual(pattern?.likelyKeys.map(/**
+   * Extracts a pattern likely-key name for sequence comparison.
+   *
+   * Inputs: One parsed likely-key object.
+   * Outputs: Its name field.
+   * Does not handle: Key sanitization or ordering.
+   * Side effects: None.
+   */ (item) => item.name), ["SERVICE_US"]);
+  const unbounded = parsed.dynamicLookups.find(/**
+   * Finds the unbounded user-controlled dynamic fixture entry.
+   *
+   * Inputs: One parsed dynamic lookup.
+   * Outputs: True for the fixture's unbounded lookup id.
+   * Does not handle: Domain reason validation or source evidence inspection.
+   * Side effects: None.
+   */ (lookup) => lookup.id === "dynamic-unbounded");
   assert.equal(unbounded?.domain.kind, "unbounded");
   assert.deepEqual(unbounded?.likelyKeys, []);
 
@@ -240,12 +387,26 @@ test("dynamic output distinguishes finite/pattern likely keys from unbounded use
 
   const sarif = buildSarif(input);
   assert.equal(sarif.version, "2.1.0");
-  const userControlled = sarif.runs[0]?.results.find((result) => result.ruleId === "SRI005");
+  const userControlled = sarif.runs[0]?.results.find(/**
+   * Locates the SARIF result reserved for user-controlled dynamic lookups.
+   *
+   * Inputs: One SARIF result emitted by the fixture renderer.
+   * Outputs: True for rule SRI005.
+   * Does not handle: Severity, message, or location validation.
+   * Side effects: None.
+   */ (result) => result.ruleId === "SRI005");
   assert.match(userControlled?.message.text ?? "", /no key name is inferred/);
   assert.doesNotMatch(JSON.stringify(userControlled), /UNBOUNDED_INPUT_KEY/);
 });
 
-test("SARIF and explain output retain typed axes and safe evidence chains", () => {
+test("SARIF and explain output retain typed axes and safe evidence chains", /**
+ * Asserts typed axes and safe evidence survive SARIF and explain rendering.
+ *
+ * Inputs: None; builds the common reporting fixture.
+ * Outputs: A completed synchronous test after format-specific assertions pass.
+ * Does not handle: Terminal grouping, redaction of malformed brands, or output file writes.
+ * Side effects: Invokes in-memory reconciliation and renderers only.
+ */ () => {
   const input = fixture();
   const sarifText = renderSarif(input);
   assert.match(sarifText, /SRI001/);
@@ -263,7 +424,14 @@ test("SARIF and explain output retain typed axes and safe evidence chains", () =
   assert.doesNotMatch(dynamicExplain, /UNBOUNDED_INPUT_KEY/);
 });
 
-test("reporters redact malformed branded identifiers and paths rather than leaking sentinel text", () => {
+test("reporters redact malformed branded identifiers and paths rather than leaking sentinel text", /**
+ * Verifies renderers recheck maliciously branded data before any textual serialization.
+ *
+ * Inputs: None; constructs an in-memory result containing credential-like and high-entropy strings.
+ * Outputs: A completed synchronous test after all formats omit sentinels and include opaque markers.
+ * Does not handle: File-output redaction or arbitrary secret-pattern coverage.
+ * Side effects: Invokes in-memory report renderers only.
+ */ () => {
   const sentinel = "sk_live_51Jf2QfZxR3AqVbC8NwY";
   const entropySentinel = "Q7mP2xR9vL4cN8aK5zT1wH6dB3yF0jS";
   const unsafeScope = {

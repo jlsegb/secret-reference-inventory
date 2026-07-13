@@ -49,7 +49,14 @@ const SARIF_RULES: readonly SarifRule[] = [
   },
 ];
 
-/** Deterministic, human-readable summary with source and dynamic sections. */
+/**
+ * Renders the safe reconciliation report as a human-readable terminal summary.
+ *
+ * Inputs: Reporting input accepted by the JSON report model.
+ * Outputs: A newline-terminated no-groups message when the report has no groups; otherwise, a table and optional source section in the ordering supplied by buildJsonReport. Dynamic lookup sections follow either form; default-locale collation ties there retain earlier input order.
+ * Does not handle: Writing to stdout, terminal color, source snippets, raw-fact serialization, or imposing a total cross-runtime ordering.
+ * Side effects: Builds an in-memory derived report only.
+ */
 export function renderTerminal(input: ReportingInput): string {
   const report = buildJsonReport(input);
   const lines: string[] = ["Secret reference inventory", ""];
@@ -57,19 +64,38 @@ export function renderTerminal(input: ReportingInput): string {
   if (report.groups.length === 0) {
     lines.push("No named source or bound-inventory references found.");
   } else {
-    const rows = report.groups.flatMap((group) =>
-      group.uses.map((use, index) => [
-        index === 0 ? formatKey(group.key) : "",
-        use.scope === undefined ? "<unscoped>" : formatScope(use.scope),
-        group.shared ? "shared" : "",
-        use.targetDiscovery,
-        use.demand,
-        use.binding,
-        use.inventory,
-        use.coverage,
-        use.constraint,
-        use.disposition,
-      ]),
+    const rows = report.groups.flatMap(
+      /**
+       * Expands one report group into its terminal table rows.
+       *
+       * Inputs: One sorted reference group.
+       * Outputs: A row for each use with the key displayed only on the first row.
+       * Does not handle: Column sizing, escaping, or source-section rendering.
+       * Side effects: None.
+       */
+      (group) =>
+        group.uses.map(
+          /**
+           * Formats one grouped use as a fixed-order table row.
+           *
+           * Inputs: A JSON use and its position within its reference group.
+           * Outputs: Ten display-safe table cells.
+           * Does not handle: Width padding, multiline content, or shared-use determination.
+           * Side effects: None.
+           */
+          (use, index) => [
+            index === 0 ? formatKey(group.key) : "",
+            use.scope === undefined ? "<unscoped>" : formatScope(use.scope),
+            group.shared ? "shared" : "",
+            use.targetDiscovery,
+            use.demand,
+            use.binding,
+            use.inventory,
+            use.coverage,
+            use.constraint,
+            use.disposition,
+          ],
+        ),
     );
     lines.push(
       renderTable(
@@ -89,7 +115,17 @@ export function renderTerminal(input: ReportingInput): string {
       ),
     );
 
-    const groupsWithSources = report.groups.filter((group) => group.sources.length > 0);
+    const groupsWithSources = report.groups.filter(
+      /**
+       * Keeps only groups that have source-occurrence data for the terminal source section.
+       *
+       * Inputs: One JSON reference group.
+       * Outputs: True when it has at least one safe source occurrence.
+       * Does not handle: Source deduplication or path formatting.
+       * Side effects: None.
+       */
+      (group) => group.sources.length > 0,
+    );
     if (groupsWithSources.length > 0) {
       lines.push("", "Sources");
       for (const group of groupsWithSources) {
@@ -128,12 +164,26 @@ export function renderTerminal(input: ReportingInput): string {
   return `${lines.join("\n")}\n`;
 }
 
-/** Versioned, deterministic JSON; the object has no source text or values. */
+/**
+ * Serializes the safe report DTO as pretty, newline-terminated versioned JSON.
+ *
+ * Inputs: Reporting input accepted by the report model.
+ * Outputs: Indented JSON text with a trailing newline.
+ * Does not handle: Writing files, streaming output, or serializing raw Core facts.
+ * Side effects: Builds the report and serializes it in memory.
+ */
 export function renderJson(input: ReportingInput): string {
   return `${JSON.stringify(buildJsonReport(input), null, 2)}\n`;
 }
 
-/** Standard SARIF 2.1.0 for review tooling. */
+/**
+ * Builds a standardized SARIF log that represents selected report and dynamic-review findings.
+ *
+ * Inputs: Reporting input accepted by the safe report model.
+ * Outputs: One SARIF run with fixed rule metadata and results ordered by compareSarifResult; default-locale comparison ties retain their prior construction order.
+ * Does not handle: SARIF file writes, rule configuration, unselected reconciliation states, or a total cross-runtime result ordering.
+ * Side effects: Builds a derived report and mutates a local result array.
+ */
 export function buildSarif(input: ReportingInput): SarifLog {
   const report = buildJsonReport(input);
   const results: SarifResult[] = [];
@@ -184,11 +234,26 @@ export function buildSarif(input: ReportingInput): SarifLog {
   };
 }
 
+/**
+ * Serializes the generated SARIF log as pretty, newline-terminated JSON.
+ *
+ * Inputs: Reporting input accepted by buildSarif.
+ * Outputs: Indented SARIF JSON text with a trailing newline.
+ * Does not handle: File emission, SARIF schema validation, or raw-fact serialization.
+ * Side effects: Builds and serializes the SARIF object in memory.
+ */
 export function renderSarif(input: ReportingInput): string {
   return `${JSON.stringify(buildSarif(input), null, 2)}\n`;
 }
 
-/** Explain a pre-sanitized key/dynamic selector without ever echoing raw input. */
+/**
+ * Renders a safe explanation for one pre-sanitized logical key or dynamic lookup selector.
+ *
+ * Inputs: Reporting input and a key or dynamic selector already suitable for model matching.
+ * Outputs: A newline-terminated explanation, or a fixed no-match message.
+ * Does not handle: Parsing selectors, echoing raw input, writing output, or source-text display.
+ * Side effects: Builds an in-memory explanation report.
+ */
 export function renderExplain(input: ReportingInput, selector: ExplainSelector): string {
   const explanation = buildExplainReport(input, selector);
   if (explanation === undefined) {
@@ -225,7 +290,17 @@ export function renderExplain(input: ReportingInput, selector: ExplainSelector):
     }
   }
 
-  const evidence = explanation.evidence.filter((item) => item.evidence.length > 0);
+  const evidence = explanation.evidence.filter(
+    /**
+     * Retains explain sections that contain at least one evidence record.
+     *
+     * Inputs: One labeled explain-evidence section.
+     * Outputs: True when the section's evidence array is nonempty.
+     * Does not handle: Evidence deduplication or location rendering.
+     * Side effects: None.
+     */
+    (item) => item.evidence.length > 0,
+  );
   if (evidence.length > 0) {
     lines.push("", "Evidence");
     for (const item of evidence) {
@@ -244,6 +319,14 @@ export function renderExplain(input: ReportingInput, selector: ExplainSelector):
   return `${lines.join("\n")}\n`;
 }
 
+/**
+ * Maps one report use to the SARIF rule, level, and message that warrants a finding.
+ *
+ * Inputs: The containing reference group and one grouped use.
+ * Outputs: A finding descriptor for inventory-only, missing, or inconclusive use states, or undefined.
+ * Does not handle: Dynamic lookups, source location materialization, or SARIF result assembly.
+ * Side effects: None.
+ */
 function sarifFindingForUse(
   group: JsonReferenceGroup,
   use: JsonUse,
@@ -272,6 +355,14 @@ function sarifFindingForUse(
   return undefined;
 }
 
+/**
+ * Converts a dynamic lookup into its dedicated SARIF result and review severity.
+ *
+ * Inputs: One safe JSON dynamic lookup.
+ * Outputs: A SARIF result using SRI004 or SRI005 with safe scope, domain, axes, and optional locations.
+ * Does not handle: Dynamic-expression analysis, likely-key inference, or result ordering.
+ * Side effects: None.
+ */
 function sarifDynamicResult(lookup: JsonDynamicLookup): SarifResult {
   const unbounded = lookup.domain.kind === "unbounded";
   const userControlled = unbounded && lookup.origin === "user-controlled";
@@ -297,46 +388,161 @@ function sarifDynamicResult(lookup: JsonDynamicLookup): SarifResult {
   };
 }
 
+/**
+ * Converts unique source locations into SARIF physical locations when any are available.
+ *
+ * Inputs: Safe source occurrences attached to a report group or dynamic lookup.
+ * Outputs: An object containing unique SARIF locations, or an empty object when no locations exist.
+ * Does not handle: URI canonicalization, source snippets, end-coordinate validation, or enforcing an upper coordinate bound before incrementing.
+ * Side effects: Allocates intermediate location arrays.
+ */
 function sarifLocations(
   sources: readonly JsonSourceOccurrence[],
 ): Pick<SarifResult, "locations"> {
   const locations = sources
-    .map((source) => source.location)
+    .map(
+      /**
+       * Extracts the safe source location from one occurrence.
+       *
+       * Inputs: One JSON source occurrence.
+       * Outputs: Its JSON location.
+       * Does not handle: Coordinate conversion or duplicate removal.
+       * Side effects: None.
+       */
+      (source) => source.location,
+    )
     .filter(
+      /**
+       * Retains only the first occurrence of each path/start-coordinate tuple.
+       *
+       * Inputs: A location, its index, and the full mapped location array.
+       * Outputs: True when no earlier location has the same path, line, and column.
+       * Does not handle: End-coordinate distinctions or URI normalization.
+       * Side effects: Searches the provided array.
+       */
       (location, index, values) =>
         values.findIndex(
+          /**
+           * Compares one candidate location to the coordinate tuple being deduplicated.
+           *
+           * Inputs: One location from the mapped location array.
+           * Outputs: True when its path and start coordinates match the current location.
+           * Does not handle: End-coordinate comparison or safe-path validation.
+           * Side effects: None.
+           */
           (candidate) =>
             candidate.path === location.path &&
             candidate.start.line === location.start.line &&
             candidate.start.column === location.start.column,
         ) === index,
     )
-    .map((location) => ({
-      physicalLocation: {
-        artifactLocation: { uri: location.path },
-        region: {
-          startLine: toSarifCoordinate(location.start.line),
-          startColumn: toSarifCoordinate(location.start.column),
-          endLine: toSarifCoordinate(location.end.line),
-          endColumn: toSarifCoordinate(location.end.column),
+    .map(
+      /**
+       * Converts one unique JSON location to the SARIF physical-location structure.
+       *
+       * Inputs: One safe JSON location with zero-based coordinates.
+       * Outputs: A SARIF location with coordinates transformed by toSarifCoordinate; an input at Number.MAX_SAFE_INTEGER becomes an unsafe integer after the unguarded increment.
+       * Does not handle: Source-region snippets, URI remapping, duplicate removal, or an upper-bound/overflow guard for coordinates.
+       * Side effects: None.
+       */
+      (location) => ({
+        physicalLocation: {
+          artifactLocation: { uri: location.path },
+          region: {
+            startLine: toSarifCoordinate(location.start.line),
+            startColumn: toSarifCoordinate(location.start.column),
+            endLine: toSarifCoordinate(location.end.line),
+            endColumn: toSarifCoordinate(location.end.column),
+          },
         },
-      },
-    }));
+      }),
+    );
   return locations.length === 0 ? {} : { locations };
 }
 
+/**
+ * Renders a rectangular text table by sizing columns to headers and supplied safe cells.
+ *
+ * Inputs: Header cells and zero or more row cell arrays.
+ * Outputs: A newline-joined table with a separator row and trimmed trailing spaces.
+ * Does not handle: ANSI width, multiline cells, escaping, or ragged-row validation.
+ * Side effects: Allocates rendered rows and invokes local rendering callbacks.
+ */
 function renderTable(headers: readonly string[], rows: readonly (readonly string[])[]): string {
-  const widths = headers.map((header, index) =>
-    Math.max(header.length, ...rows.map((row) => (row[index] ?? "").length)),
+  const widths = headers.map(
+    /**
+     * Calculates the display width needed for one table column.
+     *
+     * Inputs: A header cell and its column index.
+     * Outputs: The maximum raw string length among that header and all row cells in the column.
+     * Does not handle: Unicode terminal width, line breaks, or missing-row expansion.
+     * Side effects: Iterates the rows collection.
+     */
+    (header, index) =>
+      Math.max(
+        header.length,
+        ...rows.map(
+          /**
+           * Reads one optional cell's raw length for a selected column.
+           *
+           * Inputs: One row and the captured column index.
+           * Outputs: The selected cell length, treating missing cells as empty.
+           * Does not handle: Cell sanitization or terminal-width calculation.
+           * Side effects: None.
+           */
+          (row) => (row[index] ?? "").length,
+        ),
+      ),
   );
-  const renderRow = (row: readonly string[]): string =>
+  const renderRow = /**
+   * Pads one row's cells to the previously computed column widths.
+   *
+   * Inputs: A header, separator, or data row cell array.
+   * Outputs: One trimmed terminal table line.
+   * Does not handle: Cell escaping, width recomputation, or row validation.
+   * Side effects: None.
+   */ (row: readonly string[]): string =>
     row
-      .map((cell, index) => (cell ?? "").padEnd(widths[index] ?? 0))
+      .map(
+        /**
+         * Pads one cell to its assigned column width.
+         *
+         * Inputs: A cell value and column index.
+         * Outputs: The cell or empty string padded to the captured width.
+         * Does not handle: Unicode display width or column-width calculation.
+         * Side effects: None.
+         */
+        (cell, index) => (cell ?? "").padEnd(widths[index] ?? 0),
+      )
       .join("  ")
       .trimEnd();
-  return [renderRow(headers), renderRow(widths.map((width) => "-".repeat(width))), ...rows.map(renderRow)].join("\n");
+  return [
+    renderRow(headers),
+    renderRow(
+      widths.map(
+        /**
+         * Creates the dashed separator cell for one computed width.
+         *
+         * Inputs: One nonnegative table column width.
+         * Outputs: A string of dashes of that length.
+         * Does not handle: Minimum separator width or display-width adjustments.
+         * Side effects: None.
+         */
+        (width) => "-".repeat(width),
+      ),
+    ),
+    ...rows.map(renderRow),
+  ].join("\n");
 }
 
+/**
+ * Extracts status axes from a use for SARIF properties.
+ *
+ * Inputs: One JSON use entry.
+ * Outputs: Its status-axis object.
+ * Does not handle: Reason serialization, scope extraction, or status computation.
+ * Side effects: None.
+ */
 function axesFromUse(use: JsonUse): JsonAxes {
   return {
     targetDiscovery: use.targetDiscovery,
@@ -349,6 +555,14 @@ function axesFromUse(use: JsonUse): JsonAxes {
   };
 }
 
+/**
+ * Extracts status axes from a dynamic lookup for SARIF properties.
+ *
+ * Inputs: One JSON dynamic lookup.
+ * Outputs: Its status-axis object.
+ * Does not handle: Domain serialization, source locations, or status computation.
+ * Side effects: None.
+ */
 function axesFromDynamic(lookup: JsonDynamicLookup): JsonAxes {
   return {
     targetDiscovery: lookup.targetDiscovery,
@@ -361,14 +575,38 @@ function axesFromDynamic(lookup: JsonDynamicLookup): JsonAxes {
   };
 }
 
+/**
+ * Formats an already-safe logical key for human-facing terminal or SARIF text.
+ *
+ * Inputs: A namespace/name key object.
+ * Outputs: The namespace:name string.
+ * Does not handle: Sanitization, escaping, or namespace validation.
+ * Side effects: None.
+ */
 function formatKey(key: { readonly namespace: string; readonly name: string }): string {
   return `${key.namespace}:${key.name}`;
 }
 
+/**
+ * Formats a safe scope identity with its phase and formatted stage.
+ *
+ * Inputs: One JSON execution scope.
+ * Outputs: An id/phase/stage display string.
+ * Does not handle: Channel display, stage inference, or identifier sanitization.
+ * Side effects: None.
+ */
 function formatScope(scope: JsonScope): string {
   return `${scope.id}/${scope.phase}/${formatStage(scope)}`;
 }
 
+/**
+ * Formats a safe stage predicate for terminal display.
+ *
+ * Inputs: One JSON execution scope containing its stage predicate.
+ * Outputs: Comma-separated exact values, a fixed empty marker, or the predicate kind.
+ * Does not handle: Stage matching, value sanitization, or multiline formatting.
+ * Side effects: None.
+ */
 function formatStage(scope: JsonScope): string {
   if (scope.stage.kind === "exact") {
     return scope.stage.values?.join(",") || "<none>";
@@ -376,14 +614,38 @@ function formatStage(scope: JsonScope): string {
   return scope.stage.kind;
 }
 
+/**
+ * Formats zero-based JSON coordinates as a conventional one-based terminal location.
+ *
+ * Inputs: One safe JSON location.
+ * Outputs: A path:line:column display string with both start coordinates incremented by one.
+ * Does not handle: URI encoding, end-range display, coordinate validation, or an upper-bound guard; a maximum safe coordinate can produce an unsafe integer in output.
+ * Side effects: None.
+ */
 function formatLocation(location: JsonLocation): string {
   return `${location.path}:${location.start.line + 1}:${location.start.column + 1}`;
 }
 
+/**
+ * Converts an accepted nonnegative zero-based coordinate to SARIF's one-based coordinate.
+ *
+ * Inputs: One numeric source coordinate.
+ * Outputs: The coordinate plus one for a nonnegative safe integer, otherwise one; Number.MAX_SAFE_INTEGER becomes an unsafe integer because the addition is not capped.
+ * Does not handle: Upper-bound or overflow enforcement, line/column distinction, or diagnostics.
+ * Side effects: None.
+ */
 function toSarifCoordinate(value: number): number {
   return Number.isSafeInteger(value) && value >= 0 ? value + 1 : 1;
 }
 
+/**
+ * Orders SARIF results by rule, first location URI, then message text.
+ *
+ * Inputs: Two SARIF result objects.
+ * Outputs: A current-runtime default-locale comparator result by rule, first URI, then message text.
+ * Does not handle: Secondary locations, level ordering, full SARIF canonicalization, or a full tie break; a zero result retains prior construction order under stable Array.sort.
+ * Side effects: None.
+ */
 function compareSarifResult(left: SarifResult, right: SarifResult): number {
   const rule = left.ruleId.localeCompare(right.ruleId);
   if (rule !== 0) return rule;
