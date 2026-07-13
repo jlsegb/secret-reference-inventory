@@ -28,7 +28,7 @@ test("local workspace manifest reader accepts explicit JSONC without serializing
      * Does not handle: Removing paths outside `root`, preserving failures for debugging, or changing the reader result.
      * Side effects: Deletes the fixture directory with `recursive` and `force`; cleanup rejection propagates through the test hook.
      */
-    () => rm(root, { recursive: true, force: true }),
+    () => rm(root, { recursive: true, force: true })
   );
   const manifestPath = join(root, "workspace.jsonc");
   await writeFile(
@@ -54,7 +54,7 @@ test("local workspace manifest reader accepts explicit JSONC without serializing
     assert.equal(JSON.stringify(result.request), "{}");
     assert.equal(JSON.stringify(result).includes(root), false);
   }
-  },
+  }
 );
 
 test("invalid manifest input yields a fixed error without retaining source text",
@@ -77,7 +77,7 @@ test("invalid manifest input yields a fixed error without retaining source text"
      * Does not handle: Recovering source text, deleting unrelated files, or changing assertion outcomes.
      * Side effects: Removes the test-owned directory; a cleanup failure propagates through Node's cleanup handling.
      */
-    () => rm(root, { recursive: true, force: true }),
+    () => rm(root, { recursive: true, force: true })
   );
   const manifestPath = join(root, "workspace.json");
   await writeFile(manifestPath, "{ " + SENTINEL, "utf8");
@@ -85,5 +85,5 @@ test("invalid manifest input yields a fixed error without retaining source text"
   const result = await readLocalWorkspaceManifest(manifestPath);
   assert.deepEqual(result, { ok: false, code: "APP_WORKSPACE_MANIFEST_INVALID" });
   assert.equal(JSON.stringify(result).includes(SENTINEL), false);
-  },
+  }
 );

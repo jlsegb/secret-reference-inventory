@@ -25,8 +25,10 @@ export type WorkspaceRelativePath = string & {
 };
 
 /**
- * N3 must resolve this descriptor against the manifest location and perform
- * real-path containment checks before it opens anything.
+ * Runtime resolves this descriptor against the manifest location before it
+ * opens anything. A retained leading `..` may intentionally select a sibling
+ * or other outside-base target; neither this value object nor the workspace
+ * runtime imposes a manifest-base containment policy.
  */
 export interface ManifestRelativeDescriptor {
   readonly kind: "manifest-relative";

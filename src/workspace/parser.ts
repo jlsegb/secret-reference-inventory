@@ -214,10 +214,10 @@ function parseTrustedWorkspaceManifestValue(
 }
 
 /**
- * Parses bounded JSON or JSONC manifest text and issues an opaque manifest capability only after full validation.
+ * Parses JSON or JSONC manifest text and issues an opaque manifest capability only after full validation.
  *
- * Inputs: Manifest text no longer than one MiB.
- * Outputs: An issued v2 manifest token with no diagnostics, or a fixed invalid-json/validation diagnostic result without parse-error text.
+ * Inputs: Any manifest-text string; text longer than one MiB is accepted only far enough to return its fixed failure.
+ * Outputs: An issued v2 manifest token with no diagnostics, or a fixed invalid-json/validation diagnostic result—including invalid-json for oversized text—without parse-error text.
  * Does not handle: Arbitrary object-form input, files, JSONC escape repair, provisioning documents, or error-location/source excerpts.
  * Side effects: Allocates normalized text/JSON structures and stores a successful manifest in the private token registry.
  */
@@ -807,11 +807,11 @@ function parseMemberStage(
 }
 
 /**
- * Converts one validated manifest string into a safe manifest-relative descriptor under root-use policy.
+ * Converts one validated manifest string into a manifest-relative descriptor under root-use policy while retaining intentional leading-parent traversal.
  *
  * Inputs: An optional string, whether the root marker is permitted, diagnostic path, and parse state.
- * Outputs: A frozen descriptor, or undefined for absent/unsafe/root-forbidden input.
- * Does not handle: Filesystem containment, descriptor existence, or input-document parsing.
+ * Outputs: A frozen descriptor, potentially beginning with `..` and therefore able to resolve outside the manifest base, or undefined for absent/unsafe/root-forbidden input.
+ * Does not handle: Filesystem containment, descriptor existence, or input-document parsing; sibling/outside-base selection is preserved for later runtime resolution.
  * Side effects: Appends unsafe-relative-path diagnostics and allocates a descriptor on success.
  */
 function parseDescriptor(
@@ -832,11 +832,11 @@ function parseDescriptor(
 }
 
 /**
- * Normalizes a slash-delimited relative manifest path while rejecting absolute, control, backslash, unsafe-segment, and overlength forms.
+ * Normalizes a slash-delimited manifest-relative path while retaining unresolved leading parent-directory segments for deliberate sibling/outside-base targets and rejecting absolute, control, backslash, display-unsafe, and overlength forms.
  *
  * Inputs: One raw string path from a JSON manifest field.
- * Outputs: A canonical relative path or the root marker, or undefined for a rejected spelling.
- * Does not handle: Filesystem resolution, symlink containment, Unicode normalization, or case-insensitive path policy.
+ * Outputs: A canonical relative path, including preserved leading `..`, or the root marker; returns undefined for a rejected spelling.
+ * Does not handle: Filesystem resolution, manifest-base or symlink containment, Unicode normalization, or case-insensitive path policy.
  * Side effects: Allocates a segment array and normalized joined string.
  */
 function normalizeRelativePath(value: string): WorkspaceRelativePath | undefined {

@@ -147,7 +147,7 @@ test("workspace CLI keeps duplicate keys separate until deployment sharing is ex
      * Drives the isolated manifest through CLI scans and asserts deployment-sharing boundaries.
      *
      * Inputs: `fixture`.
-     * Outputs: A promise that resolves only after the JSON and terminal assertions succeed.
+     * Outputs: Resolves after the JSON and terminal assertions establish the intended CLI sharing boundaries.
      * Does not handle: Creating or disposing the fixture, reading an external repository, or suppressing failures.
      * Side effects: Invokes the injected CLI handlers and test assertions; assertion failures reject this callback.
      */

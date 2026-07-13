@@ -333,9 +333,9 @@ function verifyInvocationRequest(invocation: WorkspaceInvocationContext): Promis
 /**
  * Resolves one manifest-relative provisioning descriptor through bounded snapshot, payload, and descriptor caches.
  *
- * Inputs: An invocation context, its canonical manifest base, and a parser-authored descriptor.
+ * Inputs: An invocation context, its canonical manifest base, and a trusted parser-authored descriptor, which may retain leading `..` and resolve outside that base.
  * Outputs: A promise for checked immutable JSON or a fixed nonleaking read/budget/snapshot failure.
- * Does not handle: Arbitrary descriptor shapes, adapter parsing, cache persistence across invocations, or error-detail propagation.
+ * Does not handle: External/untrusted descriptor validation, manifest-base containment, adapter parsing, cache persistence across invocations, or error-detail propagation.
  * Side effects: May resolve paths, mutate LRU/cache indexes and byte budget, and begin local filesystem I/O.
  */
 function readCachedAttestedJson(
@@ -363,10 +363,10 @@ function readCachedAttestedJson(
 /**
  * Canonicalizes, stats, snapshot-checks, budget-admits, and caches a descriptor cache miss before starting its checked read.
  *
- * Inputs: Invocation context, manifest base, resolved candidate path, and normalized descriptor key.
+ * Inputs: Invocation context, manifest base, an already resolved candidate path (which may be outside the base), and normalized descriptor key.
  * Outputs: A cached/new attested read promise or fixed failed/too-large/budget/snapshot result.
  * Does not handle: JSON schema adaptation, retry policy, path disclosure, or evicted payload recovery without re-attestation.
- * Side effects: Performs realpath/stat I/O, decrements byte budget before reading, and mutates semantic/payload/descriptor cache state.
+ * Side effects: Performs realpath/stat I/O and mutates semantic/payload/descriptor cache state; only a newly admitted payload decrements byte budget and starts a file read, while a matching live payload hit only refreshes cache state.
  */
 async function resolveAndReadCachedAttestedJson(
   invocation: WorkspaceInvocationContext,
@@ -418,10 +418,10 @@ async function resolveAndReadCachedAttestedJson(
 /**
  * Reads exactly a previously statted local JSON file, verifies its post-read identity, bounds its structure, and deep-freezes success.
  *
- * Inputs: A canonical internal path and pre-open numeric file stat snapshot.
+ * Inputs: A canonical internal path and a caller-proven regular-file stat snapshot with a safe nonnegative size no greater than the five-MiB per-document cap; the caller has already admitted and charged those bytes.
  * Outputs: Frozen JSON plus canonical path, or fixed read/invalid-json/entry-limit failure without platform details.
- * Does not handle: Streaming large files, JSON schema validation, value redaction, or retrying short/changed reads.
- * Side effects: Opens, reads, stats, and closes a file descriptor; allocates a byte buffer and freezes every parsed JSON object/array.
+ * Does not handle: Enforcing the byte cap or invocation budget itself, streaming large files, JSON schema validation, value redaction, or retrying short/changed reads.
+ * Side effects: Attempts to open, read, stat, and close a file descriptor; after a successful open it allocates a byte buffer no larger than the caller-proven cap and freezes every parsed JSON object/array.
  */
 async function readAttestedJson(
   canonicalPath: InternalPath,
@@ -709,12 +709,12 @@ function canonicalSemanticFileKey(manifestBase: string, canonicalPath: string): 
 }
 
 /**
- * Resolves a defensively shape-checked parser descriptor against the attested manifest base.
+ * Resolves a trusted parser-produced descriptor against the attested manifest base without imposing containment.
  *
- * Inputs: Manifest-base string and a descriptor candidate.
- * Outputs: A resolved local candidate path, or undefined for null, wrong-kind, empty, backslash, or absolute values.
- * Does not handle: Filesystem containment, canonicalization, descriptor normalization, or error diagnostics.
- * Side effects: Allocates a resolved path string on accepted descriptors.
+ * Inputs: Manifest-base string and a trusted parser-produced descriptor; it is not a hostile Proxy/getter-bearing caller object.
+ * Outputs: A resolved local candidate path, potentially outside the manifest base when a leading `..` is retained, or undefined for ordinary null, wrong-kind, empty, backslash, or absolute values.
+ * Does not handle: Hostile-object/property-access safety, filesystem containment, canonicalization, descriptor normalization, or error diagnostics.
+ * Side effects: Allocates a resolved path string on accepted descriptors; property access may throw if a future caller bypasses the parser trust boundary.
  */
 function resolveManifestRelative(
   manifestBase: string,

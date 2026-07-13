@@ -210,11 +210,11 @@ async function resolveMembers(
 }
 
 /**
- * Resolves and validates one manifest-relative repository directory without accepting arbitrary path forms.
+ * Resolves and validates one trusted manifest-relative repository directory without imposing manifest-base containment.
  *
- * Inputs: The canonical manifest base and one parser-authored manifest-relative root descriptor.
+ * Inputs: The canonical manifest base and one trusted parser-authored root descriptor, whose retained leading `..` may target a sibling/outside-base directory.
  * Outputs: A frozen canonical-root success, unavailable failure, or not-directory failure.
- * Does not handle: Relative-path normalization beyond parser validation, retries, symlink reporting, or conflict detection.
+ * Does not handle: Relative-path normalization beyond parser validation, manifest-base containment, retries, symlink reporting, or conflict detection.
  * Side effects: Resolves a local candidate then performs filesystem realpath and stat I/O; all I/O errors collapse to unavailable.
  */
 async function resolveRepositoryDirectory(
@@ -359,12 +359,12 @@ function compareCanonicalRoots(left: string, right: string): number {
 }
 
 /**
- * Resolves a parser-authored manifest-relative descriptor against an attested base after defensive shape checks.
+ * Resolves a trusted parser-produced manifest-relative descriptor against an attested base without imposing containment.
  *
- * Inputs: A canonical manifest-base string and an unknown descriptor value.
- * Outputs: A resolved local candidate path, or undefined for null, wrong-kind, empty, backslash, or absolute descriptors.
- * Does not handle: Filesystem existence, symlink containment, descriptor normalization, or path diagnostics.
- * Side effects: None beyond constructing a resolved path string.
+ * Inputs: A canonical manifest-base string and a trusted parser-produced descriptor; it is not a hostile Proxy/getter-bearing caller object.
+ * Outputs: A resolved local candidate path, potentially outside the manifest base when a leading `..` is retained, or undefined for ordinary null, wrong-kind, empty, backslash, or absolute descriptors.
+ * Does not handle: Hostile-object/property-access safety, filesystem existence, manifest-base or symlink containment, descriptor normalization, or path diagnostics.
+ * Side effects: Allocates a resolved path string on accepted descriptors; property access may throw if a future caller bypasses the parser trust boundary.
  */
 function resolveManifestRelative(
   manifestBase: string,
