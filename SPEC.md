@@ -3,6 +3,9 @@
 ## Status
 
 Draft technical specification for a public, local-only command-line tool.
+It contains both implemented contracts and target architecture. For current
+commands, schemas, limits, and package exports, use the versioned references in
+the README and `docs/`; target-state sections below are labeled accordingly.
 
 ## 1. Purpose
 
@@ -340,13 +343,14 @@ configuration MUST NOT be evaluated.
 
 ## 6. Architecture
 
+### 6.1 Current implementation
+
 ~~~mermaid
 flowchart LR
-  A["Discover files and boundaries"] --> B["Parallel syntax extraction"]
-  B --> C["Normalized reference facts"]
-  C --> D["Optional TypeScript precision resolution"]
-  D --> E["Import graph and binding correlation"]
-  E --> F["Aggregate, reconcile, and report"]
+  A["Discover files and boundaries"] --> B["TypeScript syntax extraction"]
+  B --> C["Normalized safe facts"]
+  C --> D["Binding/inventory reconciliation"]
+  D --> E["Terminal, JSON, SARIF, or workspace report"]
 ~~~
 
 The codebase is organized around these logical modules:
@@ -354,14 +358,23 @@ The codebase is organized around these logical modules:
 | Module | Responsibility |
 | --- | --- |
 | core | Normalized facts, graph operations, aggregation, confidence, and reconciliation. |
-| cli | File discovery, budgets, configuration, commands, output, and exit codes. |
+| cli | Command parsing, dispatch, help, and exit-code plumbing. |
+| app | Local composition, bounded input reads, source analysis, reconciliation, and output handlers. |
 | safety | SafeFactFactory, identifier validation, opaque facts, and diagnostic sanitization. |
-| ts-adapter | TypeScript/JavaScript extraction, local resolution, and module resolution. |
+| ts-adapter | Syntax-only TypeScript/JavaScript extraction and bounded local key inference. |
 | binding-adapters | Data-only extraction from configured deployment/injection sources. |
 | reporters | Deterministic terminal, JSON, SARIF, and explanation output. |
 
 Parser ASTs are private to adapters. Adapters emit compact normalized facts so
-parsers and languages can change without changing the reporting model.
+parsers and languages can change without changing the reporting model. The
+current runtime does not construct a TypeScript Program, resolve imports, or
+perform a precision phase.
+
+### 6.2 Target architecture
+
+The remaining architecture requirements in this specification describe future
+implementation work. They must not be read as claims about the current runtime
+unless also stated in the versioned user documentation.
 
 ## 7. Parsing and resolution strategy
 
@@ -369,16 +382,18 @@ parsers and languages can change without changing the reporting model.
 
 | Layer | Decision |
 | --- | --- |
-| Runtime | Supported Node LTS, ESM, and TypeScript. |
-| Fast syntax pass | OXC parser for JS, JSX, TS, and TSX, behind an adapter. |
-| Precision/fallback | Raw TypeScript Compiler API for exact project/module semantics. |
+| Runtime | Node.js 24 or newer, ESM, and TypeScript. |
+| Current syntax pass | TypeScript Compiler API syntax tree for JS, JSX, TS, and TSX. |
+| Planned fast syntax pass | OXC parser behind the same adapter contract. |
+| Planned precision phase | Raw TypeScript Compiler API project/module semantics. |
 | Traversal | Native file-system APIs plus gitignore-compatible filtering. |
-| Parallelism | Bounded Node worker-thread pool. |
+| Current parallelism | Workspace source collection with bounded concurrency; deterministic admission remains ordered. |
+| Planned parallelism | Bounded Node worker-thread pool. |
 | Configuration | Schema-validated JSON or JSONC, never executable configuration. |
 | Later polyglot support | Tree-sitter or equivalent language adapters. |
 
-The optimized parser is a performance path, not a public data-model
-dependency. The TypeScript parser remains available as a portability fallback.
+The optimized parser is a planned performance path, not a public data-model
+dependency. The TypeScript parser is the current implementation.
 For every supported syntax form, parser adapters MUST emit equivalent
 normalized facts, locations, resolution classes, and coverage outcomes, or
 emit an explicit unsupported-syntax coverage failure. If parser recovery
@@ -389,14 +404,13 @@ TypeScript adapters.
 
 ### 7.2 Fast reference extraction
 
-The scanner recognizes at least:
+The current scanner recognizes:
 
 - process.env.NAME, bracket access, optional chaining, and destructuring;
 - aliases such as const env = process.env;
-- import.meta.env, Bun, and Deno environment APIs;
+- Bun and Deno environment APIs;
 - safe static string concatenation and constant variables used as keys;
-- known configuration/schema accessors; and
-- direct static secret-manager resource IDs.
+- bounded literal-map selection and string-template key domains.
 
 Environment-object enumeration or forwarding, including Object.keys(process.env),
 for-in iteration, and unbounded object spread, produces an unbounded dynamic
@@ -471,11 +485,11 @@ Canonical real paths stay internal to PathGuard and never cross into facts,
 diagnostics, worker messages, reporters, or cache filenames. Cache filenames
 use non-reportable fingerprints and internal IDs, never raw paths.
 
-### 7.3 Precision phase
+### 7.3 Planned precision phase
 
-The default scan MUST NOT construct a whole-repository TypeScript type checker.
-It performs local lexical-scope checks, constant folding, and bounded aliases
-syntactically.
+The current default scan does not construct a whole-repository TypeScript type
+checker. It performs local lexical-scope checks, constant folding, and bounded
+aliases syntactically. The rest of this section is a planned precision phase.
 
 An opt-in precision phase groups ambiguous candidates by discovered TypeScript
 project/reference graph and uses the raw Compiler API for:
@@ -497,9 +511,9 @@ immutable allowlist and can never produce demand facts. Outside-root targets
 are opaque diagnostics; their source and configuration are not read. Cache
 lookup occurs only after current real-path/root-membership validation.
 
-### 7.4 Custom wrappers
+### 7.4 Planned custom wrappers
 
-Users may define schema-validated declarative accessor rules, including module
+Future versions may define schema-validated declarative accessor rules, including module
 name, exported symbol, argument index, reference kind, and runtime context.
 The initial release has no arbitrary JavaScript plugin API and no remote rule
 packs. An accessor rule that accepts a key argument must preserve its
@@ -888,19 +902,22 @@ Suggested commands:
 
 ~~~text
 secret-usage scan .
-secret-usage explain env:DATABASE_URL
 secret-usage scan . --format json --out usage.json
+secret-usage explain env:DATABASE_URL --scan-report usage.json
 secret-usage reconcile --root . --inventory secrets.json --bindings bindings.json
-secret-usage reconcile --scan-report usage.json --inventory secrets.json --bindings bindings.json
 secret-usage reconcile --root . --inventory secrets.json --bindings bindings.json \
-  --closed-model provisioning-model.json --require-complete
+  --closed-model provisioning-model.json --verification-base /absolute/control-directory \
+  --require-complete
 ~~~
 
-Reconcile accepts exactly one of --root or --scan-report. Its inventory,
-binding, and closed-model inputs have a required schemaVersion and contain
-logical IDs, scopes, stages, mappings, and declared authority only. They MUST
-NOT contain values. Invalid, conflicting, or unsupported input is a distinct
-failure from an incomplete scan or a policy finding.
+The parser accepts exactly one of --root or --scan-report, but report
+rehydration is not implemented in the current CLI, so working reconciliation
+uses --root. Its inventory, binding, and closed-model inputs have a required
+schemaVersion and contain logical IDs, scopes, stages, mappings, and declared
+authority only. They MUST NOT contain values. A closed model also requires an
+explicit absolute --verification-base; the process working directory is never
+implicit verification authority. Invalid, conflicting, or unsupported input is
+a distinct failure from an incomplete scan or a policy finding.
 
 Default output is deterministic and contains relative locations and evidence,
 not values or source snippets:
@@ -914,8 +931,8 @@ env:*                  api                unbounded-user-controlled dynamic unkn
 env:LEGACY_API_KEY     api                absent       exact-declared   inventory-listed-no-static-read complete review
 ~~~
 
-The tool supports name/path redaction for repositories where topology or
-logical names are sensitive. JSON/SARIF include the AggregateResult axes:
+SafeFactFactory automatically redacts unsafe identifier/path material before it
+can enter a fact or report. JSON/SARIF include the AggregateResult axes:
 target discovery, demand, binding, inventory, coverage, constraint, and
 disposition. A renderer MUST NOT move a value from one axis into another.
 Every inventory-derived relation includes its InventorySnapshot authorityId and
@@ -943,17 +960,19 @@ Dynamic environment lookups
     effect: only matching destination-key conclusions require review
 ~~~
 
-CLI exit semantics are stable: invalid input is distinct from incomplete
-coverage, and policy failures are opt-in through an explicit --fail-on value.
-No default exit status asserts that a secret may be deleted.
+CLI exit semantics are stable: --require-complete returns status 2 for
+incomplete coverage, and workspace invalid results also return status 2.
+Command-line errors use 64; local workspace/verification-base validation uses
+65; operational failures use 70. There is no --fail-on option and no default
+exit status asserts that a secret may be deleted.
 
 ## 11. Privacy and secure-locality requirements
 
 - No HTTP, telemetry, analytics, crash reporting, update checks, cloud login,
   or remote inventory lookup.
 - Never read current process-environment values.
-- When environment-file inventory is explicitly requested, extract only
-  left-hand-side names and immediately discard values.
+- Do not read dotenv/environment-file contents for values; provisioning
+  documents are required to be value-free local data.
 - Never print source snippets, parser text, literal values, or secret-value
   hashes in output, diagnostics, fixtures, snapshots, or caches.
 - Do not write a report unless requested; use owner-readable permissions where
@@ -965,8 +984,8 @@ No default exit status asserts that a secret may be deleted.
 - Cache only normalized facts, never source text or secret material. A
   non-reportable file-content cache key is permitted; a secret value or its
   hash is not.
-- Ship without postinstall; pin dependencies and publish an SBOM, provenance,
-  and SECURITY.md.
+- The package has no lifecycle scripts. SBOM, provenance, and SECURITY.md
+  publication are release-process goals, not current runtime behavior.
 
 ## 12. MVP and roadmap
 
@@ -1104,7 +1123,7 @@ an internal AST.
 | OXC and TypeScript parse the same supported fixture | Equivalent normalized facts, locations, and dispositions. |
 | One adapter cannot support a fixture | Explicit unsupported-syntax coverage failure; no silent clean result. |
 | tsconfig extends/project reference/typeRoot/path alias/package export resolves outside approved roots, including root/app-old beside root/app | No outside source/config is opened; out-of-scope diagnostic only. |
-| Sentinel appears in an IaC/binding input, wrapper rule, parser diagnostic, or src/sk_live_SENTINEL.ts path component | SafeFactFactory prevents it from crossing into facts, worker messages, output, or cache filenames. |
+| Sentinel appears in an IaC/binding input, wrapper rule, parser diagnostic, or an unsafe-key path component | SafeFactFactory prevents it from crossing into facts, worker messages, output, or cache filenames. |
 | Source, root/ignore, tsconfig reference, wrapper rule, component, binding model, parser revision, scan mode, or SafeFactFactory policy changes after a cache hit | Affected cache layer is invalidated and recomputed. |
 | Interrupted, concurrent, corrupt, version-mismatched, or wrong-fingerprint cache entry | Later scan discards/recomputes it and remains deterministic. |
 

@@ -114,11 +114,13 @@ for (const dependency of requiredBundledDependencies) {
     fail("a bundled runtime dependency is missing from the package");
   }
 }
+const packagedDocumentationPath = /^docs\/(?:[a-z0-9][a-z0-9.-]*\/)*[a-z0-9][a-z0-9.-]*\.md$/u;
 for (const path of packedFiles) {
   const allowed =
     path === "package.json" ||
     path === "README.md" ||
     path === "LICENSE" ||
+    packagedDocumentationPath.test(path) ||
     path.startsWith("dist/") ||
     requiredBundledDependencies.some((dependency) =>
       path.startsWith(`node_modules/${dependency}/`),

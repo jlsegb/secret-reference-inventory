@@ -70,6 +70,7 @@
     "dist/viewer/**/*.d.ts",
     "dist/workspace/**/*.js",
     "dist/workspace/**/*.d.ts",
+    "docs/**/*.md",
     "LICENSE",
     "README.md"
   ],
