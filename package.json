@@ -72,7 +72,8 @@
     "dist/workspace/**/*.d.ts",
     "docs/**/*.md",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "SECURITY.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node ./scripts/write-cli-launcher.mjs",
