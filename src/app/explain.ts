@@ -7,8 +7,8 @@ import { AppError } from "./types.js";
  * Produces a terminal explanation for one safe reference selected from an untrusted rendered JSON report.
  *
  * Inputs: A parsed explain command and an unknown report value expected to be ordinary JSON-shaped data.
- * Outputs: A newline-terminated explanation string, or throws `AppError` for unsupported format, selector, or ordinary JSON-shaped invalid report fields.
- * Does not handle: Reading report files, rehydrating Core facts, rendering non-terminal formats, exposing secret values, or containing raw exceptions from exotic objects, Proxies, or getters reached through direct report property access.
+ * Outputs: A newline-terminated explanation string, or throws `AppError` only for a non-terminal format, invalid selector, a missing/wrong selected top-level `groups` or `dynamicLookups` array, or an invalid domain on the selected dynamic lookup. Malformed optional/nested ordinary-JSON group/key/uses/sources entries are omitted or produce no match instead.
+ * Does not handle: Reading report files, rehydrating Core facts, rendering non-terminal formats, exposing secret values, validating every optional/nested report entry, or containing raw exceptions from exotic objects, Proxies, or getters reached through direct report property access.
  * Side effects: Allocates a `SafeFactFactory` and validates only in-memory report fields.
  */
 export function explainRenderedJsonReport(

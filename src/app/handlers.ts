@@ -241,12 +241,12 @@ async function handleWorkspaceScan(
 }
 
 /**
- * Scans a local workspace and starts a loopback report viewer whenever the derived workspace exit status is zero.
+ * Scans a local workspace and starts a loopback report viewer only after a status-eligible report also materializes a viewer request.
  *
  * Inputs: A UI command, CLI output port, optional workspace scan port, and a viewer starter.
- * Outputs: `0` after emitting the loopback URL, scan-derived status, or `70` for viewer failures/limits; incomplete reports remain launch-eligible unless `requireComplete` makes their status nonzero.
- * Does not handle: Opening a browser, serving non-loopback clients, or retaining a viewer after failed URL emission.
- * Side effects: Reads local workspace inputs, starts and may close a local HTTP viewer, and writes a URL or fixed error to CLI streams.
+ * Outputs: `0` only after emitting the loopback URL; a nonzero scan-derived status skips viewer work, while request/start/URL-emission failures produce `70` with the applicable fixed viewer diagnostic when `stderr` succeeds. Status zero is launch eligibility rather than proof that a listener was constructed: incomplete reports remain eligible without `requireComplete`, and `workspaceReportToViewerRequest` may throw before startup.
+ * Does not handle: Opening a browser, serving non-loopback clients, retaining a viewer after failed URL emission, or observing promise-returning stream callbacks outside `CliIo`'s `void` contract.
+ * Side effects: Reads local workspace inputs; materializes a viewer request; starts and may close a local HTTP viewer; writes the URL to `stdout`; and writes fixed diagnostics to `stderr`. A synchronous `stdout` exception during URL emission is caught as a viewer failure after a close attempt and maps to `APP_WORKSPACE_VIEWER_FAILED`/`70` if `stderr` works; synchronous `stderr` exceptions propagate.
  */
 async function handleUi(
   command: UiCommand,
