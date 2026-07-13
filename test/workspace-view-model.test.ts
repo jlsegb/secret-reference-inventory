@@ -82,12 +82,12 @@ test("workspace viewer model supports repository/result navigation without sourc
   );
   t.after(
     /**
-     * Schedules temporary fixture removal.
+     * Registers loopback viewer-server shutdown after the navigation test finishes.
      *
      * Inputs: no arguments.
-     * Outputs: the cleanup promise returned by `viewer.close()`, registered with `t.after`.
-     * Does not handle: create the temporary path or decide whether the test passes.
-     * Side effects: performs the recursive filesystem removal requested by `viewer.close()`.
+     * Outputs: The promise returned by `viewer.close`, consumed by the Node test cleanup hook.
+     * Does not handle: Deleting files, creating another viewer, or altering assertion results.
+     * Side effects: Initiates closure of this viewer's HTTP server.
      */
     () => viewer.close());
   const page = await request(viewer);
@@ -116,12 +116,12 @@ test("viewer repository limit includes the synthetic deployments repository",
     summary: { repositories: 100, deployments: 1, incomplete: false },
     repositories: Array.from({ length: 100 },
       /**
-       * Constructs one generated fixture element.
+       * Builds one complete repository report entry used to cross the viewer repository cap.
        *
        * Inputs: `_`, `index`.
-       * Outputs: the `({ id: "repository-" + String(index + 1), state: "complete" as const, diagnostics: [], })` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+       * Outputs: A distinct complete repository object named from the zero-based `index`.
+       * Does not handle: Adding deployments, checking the cap, or mutating the input array.
+       * Side effects: Allocates the one in-memory fixture object.
        */
       (_, index) => ({
       id: "repository-" + String(index + 1),
@@ -149,12 +149,12 @@ test("viewer repository limit includes the synthetic deployments repository",
      */
     () => workspaceReportToViewerRequest(report, undefined),
     /**
-     * Verifies “viewer repository limit includes the synthetic deployments repository”.
+     * Matches the exact viewer error emitted when the synthetic deployments row exceeds the repository cap.
      *
      * Inputs: `error`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs no helper.
+     * Outputs: True only for `VIEWER_REPOSITORY_LIMIT_EXCEEDED` viewer request errors.
+     * Does not handle: Throwing the error, matching unrelated failures, or starting a viewer.
+     * Side effects: Uses `instanceof` and reads the error code without mutation or I/O.
      */
     (error: unknown) =>
       error instanceof ViewerRequestError && error.code === "VIEWER_REPOSITORY_LIMIT_EXCEEDED",
@@ -182,12 +182,12 @@ test("viewer result limit includes each synthetic repository Overview row",
         schemaVersion: "secret-reference-inventory/report/v1",
         groups: Array.from({ length: 1_000 },
           /**
-           * Constructs one generated fixture element.
+           * Builds one empty secret-result group so the test reaches the viewer result-row cap.
            *
            * Inputs: `_`, `index`.
-           * Outputs: the `({ key: { namespace: "env" as const, name: "KEY_" + String(index + 1) }, shared: false, consumers: [], sources: [], uses: [], })` result consumed by `Array.from`.
-           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-           * Side effects: none; it derives the current-item result.
+           * Outputs: A single nonshared empty group with a unique `env:KEY_<n>` key.
+           * Does not handle: Validating report brands, adding references, or checking result limits.
+           * Side effects: Allocates an in-memory group and key object.
            */
           (_, index) => ({
           key: { namespace: "env" as const, name: "KEY_" + String(index + 1) },
@@ -214,12 +214,12 @@ test("viewer result limit includes each synthetic repository Overview row",
      */
     () => workspaceReportToViewerRequest(report, undefined),
     /**
-     * Verifies “viewer result limit includes each synthetic repository Overview row”.
+     * Matches the viewer error raised when synthetic repository overview rows exceed the result cap.
      *
      * Inputs: `error`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs no helper.
+     * Outputs: True only for `VIEWER_RESULT_LIMIT_EXCEEDED` viewer request errors.
+     * Does not handle: Throwing the error, matching another failure, or materializing HTML.
+     * Side effects: Uses `instanceof` and reads the error code without mutation or I/O.
      */
     (error: unknown) =>
       error instanceof ViewerRequestError && error.code === "VIEWER_RESULT_LIMIT_EXCEEDED",
@@ -238,12 +238,12 @@ test("viewer result limit includes each deployment member partition row",
   () => {
   const memberIds = Array.from({ length: 1_000 },
     /**
-     * Constructs one generated fixture element.
+     * Produces a unique member ID used to create one thousand deployment partitions.
      *
      * Inputs: `_`, `index`.
-     * Outputs: the `"member-" + String(index + 1)` result consumed by `Array.from`.
-     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-     * Side effects: none; it derives the current-item result.
+     * Outputs: The deterministic `member-<n>` identifier for the supplied index.
+     * Does not handle: Building member objects, checking viewer limits, or accessing other indices.
+     * Side effects: Allocates the identifier string.
      */
     (_, index) => "member-" + String(index + 1));
   const report: WorkspaceJsonReport = {
@@ -258,12 +258,12 @@ test("viewer result limit includes each deployment member partition row",
       diagnostics: [],
       members: memberIds.map(
         /**
-         * Projects a report value from the current repositoryId.
+         * Converts one generated member ID into the matching complete deployment-member record.
          *
          * Inputs: `repositoryId`.
-         * Outputs: the `({ repositoryId, state: "complete" as const, diagnostics: [], })` result consumed by `memberIds.map`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+         * Outputs: An in-memory complete member record retaining `repositoryId`.
+         * Does not handle: Creating repository rows, adding diagnostics, or checking the viewer cap.
+         * Side effects: Allocates the member record.
          */
         (repositoryId) => ({
         repositoryId,
@@ -284,12 +284,12 @@ test("viewer result limit includes each deployment member partition row",
      */
     () => workspaceReportToViewerRequest(report, undefined),
     /**
-     * Verifies “viewer result limit includes each deployment member partition row”.
+     * Matches the viewer error raised when deployment-member partitions exceed the result cap.
      *
      * Inputs: `error`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs no helper.
+     * Outputs: True only for `VIEWER_RESULT_LIMIT_EXCEEDED` viewer request errors.
+     * Does not handle: Throwing the error, matching a different failure, or starting a server.
+     * Side effects: Uses `instanceof` and reads the error code without mutation or I/O.
      */
     (error: unknown) =>
       error instanceof ViewerRequestError && error.code === "VIEWER_RESULT_LIMIT_EXCEEDED",
@@ -331,12 +331,12 @@ test("workspace request construction never forwards path-like or structured shor
   );
   t.after(
     /**
-     * Schedules temporary fixture removal.
+     * Registers closure of the label-redaction test's loopback viewer server.
      *
      * Inputs: no arguments.
-     * Outputs: the cleanup promise returned by `viewer.close()`, registered with `t.after`.
-     * Does not handle: create the temporary path or decide whether the test passes.
-     * Side effects: performs the recursive filesystem removal requested by `viewer.close()`.
+     * Outputs: The `viewer.close` promise, owned by the Node test cleanup hook.
+     * Does not handle: Deleting fixture paths, generating another request, or determining test status.
+     * Side effects: Begins HTTP-server shutdown for the local viewer.
      */
     () => viewer.close());
   const page = await request(viewer);
@@ -347,12 +347,12 @@ test("workspace request construction never forwards path-like or structured shor
 });
 
 /**
- * Assembles the request test value.
+ * Fetches and buffers the local viewer page used for navigation and redaction assertions.
  *
  * Inputs: `viewer`.
- * Outputs: the fixture value returned by `request`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `Promise`.
+ * Outputs: A promise resolving to the complete viewer response decoded as UTF-8.
+ * Does not handle: Redirect policy, HTTP status validation, or page-content assertions.
+ * Side effects: Starts a loopback HTTP GET and installs response/error listeners.
  */
 async function request(viewer: LocalReportViewer): Promise<string> {
   return new Promise(
@@ -367,12 +367,12 @@ async function request(viewer: LocalReportViewer): Promise<string> {
     (resolve, reject) => {
     const request = get(viewer.url,
       /**
-       * Derives the callback result.
+       * Installs listeners that buffer one viewer HTTP response and settle the enclosing request promise.
        *
        * Inputs: `response`.
-       * Outputs: the value of `{ const chunks: Buffer[] = []; response.on("data", (chunk: Buffer) => chunks.push(chunk)); response.on("error", reject); response.on("end", () => resolve(Buffer.concat(chunks).toString("utf8`.
-       * Does not handle: orchestrate the surrounding operation after this callback returns.
-       * Side effects: none; it evaluates the stated expression.
+       * Outputs: `void`; the registered event handlers later resolve a UTF-8 page or reject on response error.
+       * Does not handle: Starting an additional request, checking redaction, or retaining buffers after resolution.
+       * Side effects: Adds data/error/end listeners and captures received buffers in `chunks`.
        */
       (response) => {
       const chunks: Buffer[] = [];

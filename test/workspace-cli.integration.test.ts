@@ -20,22 +20,22 @@ import { startLocalReportViewer, type LocalReportViewer } from "../src/viewer/in
 
 const id =
   /**
-   * Derives the callback result.
+   * Brands a fixture repository or deployment identifier for the injected scan port.
    *
    * Inputs: `value`.
-   * Outputs: the value of `value as SafeIdentifier`.
-   * Does not handle: orchestrate the surrounding operation after this callback returns.
-   * Side effects: none; it evaluates the stated expression.
+   * Outputs: The supplied test string typed as `SafeIdentifier`.
+   * Does not handle: Runtime identifier validation or workspace scanning.
+   * Side effects: None; the TypeScript assertion is erased at runtime.
    */
   (value: string): SafeIdentifier => value as SafeIdentifier;
 const diagnostic =
   /**
-   * Derives the callback result.
+   * Brands a fixture diagnostic code for the injected scan port.
    *
    * Inputs: `value`.
-   * Outputs: the value of `value as SafeDiagnosticCode`.
-   * Does not handle: orchestrate the surrounding operation after this callback returns.
-   * Side effects: none; it evaluates the stated expression.
+   * Outputs: The supplied test string typed as `SafeDiagnosticCode`.
+   * Does not handle: Runtime diagnostic validation or workspace scanning.
+   * Side effects: None; the TypeScript assertion is erased at runtime.
    */
   (value: string): SafeDiagnosticCode => value as SafeDiagnosticCode;
 const emptyReconciliation: ReconciliationResult = { records: [], scopeCoverage: [] };
@@ -46,19 +46,19 @@ test("workspace scan writes a deterministic versioned report and returns incompl
    *
    * Inputs: `t`.
    * Outputs: a promise that settles after its awaited workspace operations and assertions.
-   * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+   * Does not handle: Recovering fixture, CLI, or assertion failures; those reject the test callback.
    * Side effects: runs `writeManifest`, `t.after`, `runCli`, `createLocalCliHandlers`, `scanPort`, `assert.equal`.
    */
   async (t) => {
   const manifestPath = await writeManifest();
   t.after(
     /**
-     * Schedules temporary fixture removal.
+     * Deletes the temporary manifest directory after the deterministic report test.
      *
      * Inputs: no arguments.
      * Outputs: the cleanup promise returned by `rmParent(manifestPath)`, registered with `t.after`.
-     * Does not handle: create the temporary path or decide whether the test passes.
-     * Side effects: performs the recursive filesystem removal requested by `rmParent(manifestPath)`.
+     * Does not handle: Creating the directory, removing sibling fixtures, or deciding test status.
+     * Side effects: Recursively removes the test-owned manifest parent directory.
      */
     () => rmParent(manifestPath));
   const stdout: string[] = [];
@@ -110,12 +110,12 @@ test("workspace scan writes a deterministic versioned report and returns incompl
   assert.equal(report.summary.incomplete, true);
   assert.deepEqual(report.repositories.map(
     /**
-     * Projects a report value from the current repository.
+     * Extracts the sole serialized repository ID for the JSON report assertion.
      *
      * Inputs: `repository`.
-     * Outputs: the `repository.id` result consumed by `report.repositories.map`.
-     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-     * Side effects: none; it derives the current-item result.
+     * Outputs: The current serialized repository's `id`.
+     * Does not handle: Sorting records, inspecting diagnostics, or evaluating the outer assertion.
+     * Side effects: Reads the record ID without mutation or I/O.
      */
     (repository) => repository.id), ["api"]);
   assert.equal(stdout.join("").includes(manifestPath), false);
@@ -127,19 +127,19 @@ test("workspace scan uses the default N3 local port when no test port is injecte
    *
    * Inputs: `t`.
    * Outputs: a promise that settles after its awaited workspace operations and assertions.
-   * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+   * Does not handle: Recovering manifest, CLI, or assertion failures; the test runner observes them.
    * Side effects: runs `writeManifest`, `t.after`, `runCli`, `createLocalCliHandlers`, `assert.equal`, `stderr.join`.
    */
   async (t) => {
   const manifestPath = await writeManifest();
   t.after(
     /**
-     * Schedules temporary fixture removal.
+     * Deletes the temporary manifest directory after the default-port scan test.
      *
      * Inputs: no arguments.
      * Outputs: the cleanup promise returned by `rmParent(manifestPath)`, registered with `t.after`.
-     * Does not handle: create the temporary path or decide whether the test passes.
-     * Side effects: performs the recursive filesystem removal requested by `rmParent(manifestPath)`.
+     * Does not handle: Creating the fixture, deleting unrelated paths, or choosing test status.
+     * Side effects: Recursively removes the test-owned manifest parent directory.
      */
     () => rmParent(manifestPath));
   const stdout: string[] = [];
@@ -202,12 +202,12 @@ test("workspace UI launches a loopback-only viewer from derived report data",
   const manifestPath = await writeManifest();
   t.after(
     /**
-     * Schedules temporary fixture removal.
+     * Deletes the temporary manifest directory after the loopback UI test.
      *
      * Inputs: no arguments.
      * Outputs: the cleanup promise returned by `rmParent(manifestPath)`, registered with `t.after`.
-     * Does not handle: create the temporary path or decide whether the test passes.
-     * Side effects: performs the recursive filesystem removal requested by `rmParent(manifestPath)`.
+     * Does not handle: Creating the fixture, deleting other paths, or closing the viewer server.
+     * Side effects: Recursively removes the test-owned manifest parent directory.
      */
     () => rmParent(manifestPath));
   const launched: LocalReportViewer[] = [];
@@ -218,12 +218,12 @@ test("workspace UI launches a loopback-only viewer from derived report data",
       workspaceScan: scanPort("complete"),
       startViewer:
         /**
-         * Verifies “workspace UI launches a loopback-only viewer from derived report data”.
+         * Starts the injected loopback viewer and records its handle for subsequent server shutdown.
          *
          * Inputs: `request`.
-         * Outputs: a promise that settles after its awaited workspace operations and assertions.
-         * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-         * Side effects: runs `startLocalReportViewer`, `launched.push`.
+         * Outputs: The started `LocalReportViewer` expected by the CLI handler.
+         * Does not handle: Validating rendered content, closing the server, or exposing a non-loopback host.
+         * Side effects: Starts a local viewer and appends its handle to `launched`.
          */
         async (request) => {
         const viewer = await startLocalReportViewer(request);
@@ -244,31 +244,31 @@ test("workspace UI launches a loopback-only viewer from derived report data",
       /**
        * Discards one CLI output fragment.
        *
-       * Inputs: no arguments.
+       * Inputs: The emitted stderr text, deliberately not bound by this test hook.
        * Outputs: `undefined`, which `runCli` ignores.
        * Does not handle: inspect, format, retain, or recover emitted text.
-       * Side effects: none; the hook intentionally ignores its supplied text.
+       * Side effects: None; the emitted text is intentionally discarded.
        */
       () => undefined },
   );
   t.after(
     /**
-     * Schedules temporary fixture removal.
+     * Closes every viewer server started by the loopback UI test.
      *
      * Inputs: no arguments.
-     * Outputs: the cleanup promise returned by `{ await Promise.all(launched.map( (viewer) => viewer.close())); }`, registered with `t.after`.
-     * Does not handle: create the temporary path or decide whether the test passes.
-     * Side effects: performs the recursive filesystem removal requested by `{ await Promise.all(launched.map( (viewer) => viewer.close())); }`.
+     * Outputs: A promise that resolves after all recorded `LocalReportViewer` servers close.
+     * Does not handle: Deleting the manifest directory, creating a viewer, or determining test status.
+     * Side effects: Calls each viewer's HTTP-server close method.
      */
     async () => {
     await Promise.all(launched.map(
       /**
-       * Projects a report value from the current viewer.
+       * Starts shutdown of one viewer server during the aggregate cleanup.
        *
        * Inputs: `viewer`.
-       * Outputs: the `viewer.close()` result consumed by `launched.map`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+       * Outputs: This viewer's close promise.
+       * Does not handle: Closing another viewer, deleting fixture files, or swallowing close failures.
+       * Side effects: Begins closing the current viewer's HTTP server.
        */
       (viewer) => viewer.close()));
   });
@@ -296,12 +296,12 @@ test("workspace invalid input and required-complete UI return nonzero without la
   const root = await mkdtemp(join(tmpdir(), "secret-usage-workspace-cli-invalid-"));
   t.after(
     /**
-     * Schedules temporary fixture removal.
+     * Removes the invalid-input test's temporary root directory.
      *
      * Inputs: no arguments.
      * Outputs: the cleanup promise returned by `rm(root, { recursive: true, force: true })`, registered with `t.after`.
-     * Does not handle: create the temporary path or decide whether the test passes.
-     * Side effects: performs the recursive filesystem removal requested by `rm(root, { recursive: true, force: true })`.
+     * Does not handle: Creating the root, deleting outside the test root, or deciding test status.
+     * Side effects: Recursively deletes the test-owned root with force enabled.
      */
     () => rm(root, { recursive: true, force: true }));
   const invalidPath = join(root, "missing.json");
@@ -313,10 +313,10 @@ test("workspace invalid input and required-complete UI return nonzero without la
       /**
        * Discards one CLI output fragment.
        *
-       * Inputs: no arguments.
+       * Inputs: The emitted stdout text, deliberately not bound by this test hook.
        * Outputs: `undefined`, which `runCli` ignores.
        * Does not handle: inspect, format, retain, or recover emitted text.
-       * Side effects: none; the hook intentionally ignores its supplied text.
+       * Side effects: None; the emitted text is deliberately discarded.
        */
       () => undefined, stderr:
       /**
@@ -336,12 +336,12 @@ test("workspace invalid input and required-complete UI return nonzero without la
   const manifestPath = await writeManifest();
   t.after(
     /**
-     * Schedules temporary fixture removal.
+     * Removes the manifest fixture created for the require-complete UI case.
      *
      * Inputs: no arguments.
      * Outputs: the cleanup promise returned by `rmParent(manifestPath)`, registered with `t.after`.
-     * Does not handle: create the temporary path or decide whether the test passes.
-     * Side effects: performs the recursive filesystem removal requested by `rmParent(manifestPath)`.
+     * Does not handle: Creating the fixture, removing an unrelated root, or deciding test status.
+     * Side effects: Recursively removes the test-owned manifest parent directory.
      */
     () => rmParent(manifestPath));
   let launched = false;
@@ -367,19 +367,19 @@ test("workspace invalid input and required-complete UI return nonzero without la
       /**
        * Discards one CLI output fragment.
        *
-       * Inputs: no arguments.
+       * Inputs: The emitted stdout text, deliberately not bound by this test hook.
        * Outputs: `undefined`, which `runCli` ignores.
        * Does not handle: inspect, format, retain, or recover emitted text.
-       * Side effects: none; the hook intentionally ignores its supplied text.
+       * Side effects: None; the emitted text is deliberately discarded.
        */
       () => undefined, stderr:
       /**
        * Discards one CLI output fragment.
        *
-       * Inputs: no arguments.
+       * Inputs: The emitted stderr text, deliberately not bound by this test hook.
        * Outputs: `undefined`, which `runCli` ignores.
        * Does not handle: inspect, format, retain, or recover emitted text.
-       * Side effects: none; the hook intentionally ignores its supplied text.
+       * Side effects: None; the emitted text is deliberately discarded.
        */
       () => undefined },
   );
@@ -393,19 +393,19 @@ test("workspace UI rejects synthetic-row viewer overflow before starting a liste
    *
    * Inputs: `t`.
    * Outputs: a promise that settles after its awaited workspace operations and assertions.
-   * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+   * Does not handle: Recovering fixture, CLI, or assertion failures; the test runner observes them.
    * Side effects: runs `writeManifest`, `t.after`, `runCli`, `createLocalCliHandlers`, `overflowingScanPort`, `assert.equal`.
    */
   async (t) => {
   const manifestPath = await writeManifest();
   t.after(
     /**
-     * Schedules temporary fixture removal.
+     * Deletes the temporary manifest directory after the viewer-overflow test.
      *
      * Inputs: no arguments.
      * Outputs: the cleanup promise returned by `rmParent(manifestPath)`, registered with `t.after`.
-     * Does not handle: create the temporary path or decide whether the test passes.
-     * Side effects: performs the recursive filesystem removal requested by `rmParent(manifestPath)`.
+     * Does not handle: Creating the fixture, deleting unrelated paths, or deciding test status.
+     * Side effects: Recursively removes the test-owned manifest parent directory.
      */
     () => rmParent(manifestPath));
   let launched = false;
@@ -433,10 +433,10 @@ test("workspace UI rejects synthetic-row viewer overflow before starting a liste
       /**
        * Discards one CLI output fragment.
        *
-       * Inputs: no arguments.
+       * Inputs: The emitted stdout text, deliberately not bound by this test hook.
        * Outputs: `undefined`, which `runCli` ignores.
        * Does not handle: inspect, format, retain, or recover emitted text.
-       * Side effects: none; the hook intentionally ignores its supplied text.
+       * Side effects: None; the emitted text is deliberately discarded.
        */
       () => undefined, stderr:
       /**
@@ -468,12 +468,12 @@ test("workspace UI closes a started viewer when writing its URL fails",
   const manifestPath = await writeManifest();
   t.after(
     /**
-     * Schedules temporary fixture removal.
+     * Deletes the temporary manifest directory after the stdout-failure viewer test.
      *
      * Inputs: no arguments.
      * Outputs: the cleanup promise returned by `rmParent(manifestPath)`, registered with `t.after`.
-     * Does not handle: create the temporary path or decide whether the test passes.
-     * Side effects: performs the recursive filesystem removal requested by `rmParent(manifestPath)`.
+     * Does not handle: Creating the fixture, deleting unrelated paths, or deciding test status.
+     * Side effects: Recursively removes the test-owned manifest parent directory.
      */
     () => rmParent(manifestPath));
   const stderr: string[] = [];
@@ -485,23 +485,23 @@ test("workspace UI closes a started viewer when writing its URL fails",
       workspaceScan: scanPort("complete"),
       startViewer:
         /**
-         * Verifies “workspace UI closes a started viewer when writing its URL fails”.
+         * Supplies a started loopback viewer whose close operation is observable by this test.
          *
-         * Inputs: no arguments.
-         * Outputs: a promise that settles after its awaited workspace operations and assertions.
-         * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-         * Side effects: runs `URL`.
+         * Inputs: The viewer request, which this synthetic implementation does not inspect.
+         * Outputs: A `LocalReportViewer`-shaped object at the fixed loopback URL.
+         * Does not handle: Binding a real server, materializing viewer HTML, or closing the viewer.
+         * Side effects: Allocates a `URL` object for the synthetic viewer handle.
          */
         async () => ({
         address: { host: "127.0.0.1", port: 12345 },
         url: new URL("http://127.0.0.1:12345/"),
         /**
-         * Verifies “workspace UI closes a started viewer when writing its URL fails”.
+         * Records that the CLI invoked shutdown on the synthetic viewer after stdout failed.
          *
          * Inputs: no arguments.
-         * Outputs: a promise that settles after its awaited workspace operations and assertions.
-         * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-         * Side effects: runs no helper.
+         * Outputs: A fulfilled promise after incrementing the close-call counter.
+         * Does not handle: Closing a real server, retrying output, or translating the stdout failure.
+         * Side effects: Increments the test-local `closeCalls` counter.
          */
         async close(): Promise<void> {
           closeCalls += 1;
@@ -545,19 +545,19 @@ test("workspace UI collapses adversarial report getters to a fixed error before 
    *
    * Inputs: `t`.
    * Outputs: a promise that settles after its awaited workspace operations and assertions.
-   * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+   * Does not handle: Recovering setup, getter, CLI, or assertion failures; the test runner observes them.
    * Side effects: runs `writeManifest`, `t.after`, `Object.create`, `Object.defineProperty`, `runCli`, `createLocalCliHandlers`.
    */
   async (t) => {
   const manifestPath = await writeManifest();
   t.after(
     /**
-     * Schedules temporary fixture removal.
+     * Deletes the adversarial-getter test's temporary manifest directory.
      *
      * Inputs: no arguments.
      * Outputs: the cleanup promise returned by `rmParent(manifestPath)`, registered with `t.after`.
-     * Does not handle: create the temporary path or decide whether the test passes.
-     * Side effects: performs the recursive filesystem removal requested by `rmParent(manifestPath)`.
+     * Does not handle: Creating the fixture, deleting outside its parent, or deciding test status.
+     * Side effects: Recursively removes the test-owned manifest parent directory.
      */
     () => rmParent(manifestPath));
   const sentinel = "/private/sk_live_WORKSPACE_REPORT_TRAP_123456789";
@@ -585,12 +585,12 @@ test("workspace UI collapses adversarial report getters to a fixed error before 
     createLocalCliHandlers({
       workspaceScan: {
         /**
-         * Verifies “workspace UI collapses adversarial report getters to a fixed error before viewer launch”.
+         * Returns the hostile report object so CLI materialization triggers its `repositories` getter.
          *
          * Inputs: no arguments.
-         * Outputs: a promise that settles after its awaited workspace operations and assertions.
-         * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-         * Side effects: runs no helper.
+         * Outputs: The exact `hostileResult` object, without reading its getter.
+         * Does not handle: Materializing viewer data, catching the getter error, or starting a viewer.
+         * Side effects: Returns the already allocated hostile object; property access happens only later.
          */
         async scan() {
           return hostileResult;
@@ -614,10 +614,10 @@ test("workspace UI collapses adversarial report getters to a fixed error before 
       /**
        * Discards one CLI output fragment.
        *
-       * Inputs: no arguments.
+       * Inputs: The emitted stdout text, deliberately not bound by this test hook.
        * Outputs: `undefined`, which `runCli` ignores.
        * Does not handle: inspect, format, retain, or recover emitted text.
-       * Side effects: none; the hook intentionally ignores its supplied text.
+       * Side effects: None; the emitted text is deliberately discarded.
        */
       () => undefined, stderr:
       /**
@@ -639,24 +639,24 @@ test("workspace UI collapses adversarial report getters to a fixed error before 
 });
 
 /**
- * Assembles the scanPort test value.
+ * Builds an injected workspace scan port that returns one repository at the requested status.
  *
  * Inputs: `status`.
- * Outputs: the fixture value returned by `scanPort`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: none; it allocates only in-memory test data.
+ * Outputs: A scan port whose `scan` method returns the deterministic fixture report.
+ * Does not handle: Reading a manifest, running static analysis, or emitting CLI output.
+ * Side effects: Allocates the port object and closes over the requested status.
  */
 function scanPort(
   status: "complete" | "incomplete",
 ): WorkspaceScanPort<WorkspaceScanReportSource> {
   return {
     /**
-     * Assembles the scan test value.
+     * Returns the one-repository fixture report for this injected scan request.
      *
-     * Inputs: no arguments.
-     * Outputs: the fixture value returned by `scan`.
-     * Does not handle: validate unrelated production input or suppress assertion failures.
-     * Side effects: invokes `id`, `diagnostic`.
+     * Inputs: No arguments; the port interface supplies no request payload here.
+     * Outputs: A fulfilled promise containing the requested complete/incomplete repository report.
+     * Does not handle: Inspecting a manifest, creating deployments, or retrying a scan.
+     * Side effects: Calls the local fixture-brand helpers and allocates the report object.
      */
     async scan() {
       return {
@@ -681,22 +681,22 @@ function scanPort(
 }
 
 /**
- * Assembles the overflowingScanPort test value.
+ * Builds an injected scan port with enough synthetic rows to exceed the viewer model's limit.
  *
  * Inputs: no arguments.
- * Outputs: the completion result produced by `overflowingScanPort`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `Array.from`.
+ * Outputs: A port whose scan result contains 100 repositories and their synthetic deployment.
+ * Does not handle: Materializing a viewer, scanning files, or emitting a CLI response.
+ * Side effects: Generates in-memory repository and member fixture arrays.
  */
 function overflowingScanPort(): WorkspaceScanPort<WorkspaceScanReportSource> {
   const repositories = Array.from({ length: 100 },
     /**
-     * Constructs one generated fixture element.
+     * Builds one complete repository fact to force the synthetic viewer-row limit.
      *
      * Inputs: `_`, `index`.
-     * Outputs: the `({ id: id("repository-" + String(index + 1)), status: "complete" as const, diagnostics: [], reconciliation: emptyReconciliation, references: [], demandEdges: [], dynamicLookupEdges: [], })` result consumed by `Array.from`.
-     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-     * Side effects: none; it derives the current-item result.
+     * Outputs: An in-memory complete scan result with a unique branded repository ID.
+     * Does not handle: Building deployments, invoking the scanner, or checking viewer limits.
+     * Side effects: Allocates the fixture result object and its empty fact arrays.
      */
     (_, index) => ({
     id: id("repository-" + String(index + 1)),
@@ -709,12 +709,12 @@ function overflowingScanPort(): WorkspaceScanPort<WorkspaceScanReportSource> {
   }));
   return {
     /**
-     * Assembles the scan test value.
+     * Returns the prebuilt overflowing report to the injected CLI scan handler.
      *
-     * Inputs: no arguments.
-     * Outputs: the fixture value returned by `scan`.
-     * Does not handle: validate unrelated production input or suppress assertion failures.
-     * Side effects: invokes `id`, `repositories.map`.
+     * Inputs: No arguments; this fixture ignores the scan request.
+     * Outputs: A fulfilled promise containing the synthetic repository/deployment report.
+     * Does not handle: Scanning a manifest, recomputing rows, or checking the viewer limit.
+     * Side effects: Allocates the report wrapper while reusing the prebuilt repositories.
      */
     async scan() {
       return {
@@ -725,23 +725,23 @@ function overflowingScanPort(): WorkspaceScanPort<WorkspaceScanReportSource> {
           diagnostics: [],
           repositoryIds: repositories.map(
             /**
-             * Projects a report value from the current repository.
+             * Extracts every generated repository ID for the synthetic deployment declaration.
              *
              * Inputs: `repository`.
-             * Outputs: the `repository.id` result consumed by `repositories.map`.
-             * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-             * Side effects: none; it derives the current-item result.
+             * Outputs: The current generated repository's branded `id`.
+             * Does not handle: Constructing member partitions, mutating repositories, or running a scan.
+             * Side effects: Reads the repository ID without mutation or I/O.
              */
             (repository) => repository.id),
           sharedKeys: [],
           members: repositories.map(
             /**
-             * Projects a report value from the current repository.
+             * Clones one repository's scan facts into the matching deployment-member partition.
              *
              * Inputs: `repository`.
-             * Outputs: the `({ repositoryId: repository.id, status: repository.status, diagnostics: repository.diagnostics, reconciliation: repository.reconciliation, references: repository.references, demandEdges: rep` result consumed by `repositories.map`.
-             * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-             * Side effects: none; it derives the current-item result.
+             * Outputs: A member record sharing the current repository's immutable scan fact references.
+             * Does not handle: Deep cloning facts, adding shared keys, or changing source repository objects.
+             * Side effects: Allocates the member wrapper object.
              */
             (repository) => ({
             repositoryId: repository.id,
@@ -759,12 +759,12 @@ function overflowingScanPort(): WorkspaceScanPort<WorkspaceScanReportSource> {
 }
 
 /**
- * Assembles the writeManifest test value.
+ * Creates a minimal v2 workspace manifest in a new test-owned temporary directory.
  *
  * Inputs: no arguments.
- * Outputs: the completion result produced by `writeManifest`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: changes test-owned filesystem state through `mkdtemp`, `join`, `tmpdir`, `writeFile`, `[ "{", ' "schemaVersion": "workspace-manifest/v2",', ' "repositories": [{ "id": `.
+ * Outputs: A path to the written `workspace.jsonc` fixture.
+ * Does not handle: Parsing the manifest, registering cleanup, or writing a production workspace.
+ * Side effects: Creates a temporary directory and writes a manifest file beneath it.
  */
 async function writeManifest(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "secret-usage-workspace-cli-"));
@@ -785,24 +785,24 @@ async function writeManifest(): Promise<string> {
 }
 
 /**
- * Assembles the rmParent test value.
+ * Recursively removes the parent directory of a test-created manifest file.
  *
  * Inputs: `file`.
- * Outputs: the completion result produced by `rmParent`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: changes test-owned filesystem state through `rm`, `dirname`.
+ * Outputs: A promise fulfilled after forced recursive deletion completes.
+ * Does not handle: Checking ownership, deleting an arbitrary sibling, or suppressing deletion failures.
+ * Side effects: Deletes the filesystem directory returned by `dirname(file)`.
  */
 async function rmParent(file: string): Promise<void> {
   await rm(dirname(file), { recursive: true, force: true });
 }
 
 /**
- * Assembles the request test value.
+ * Fetches a loopback CLI viewer URL and buffers its status and UTF-8 page body.
  *
  * Inputs: `url`.
- * Outputs: the fixture value returned by `request`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `Promise`.
+ * Outputs: A promise resolving to the HTTP response status and complete page body.
+ * Does not handle: Redirects, request timeout policy, or page-content validation.
+ * Side effects: Starts a loopback HTTP GET and registers response/error listeners.
  */
 async function request(url: URL): Promise<{ readonly status: number; readonly body: string }> {
   return new Promise(
@@ -817,12 +817,12 @@ async function request(url: URL): Promise<{ readonly status: number; readonly bo
     (resolve, reject) => {
     const request = get(url,
       /**
-       * Derives the callback result.
+       * Installs listeners that accumulate one CLI viewer HTTP response and settle the enclosing promise.
        *
        * Inputs: `response`.
-       * Outputs: the value of `{ const chunks: Buffer[] = []; response.on("data", (chunk: Buffer) => chunks.push(chunk)); response.on("error", reject); response.on("end", () => { resolve({ status: response.statusCode ?? 0`.
-       * Does not handle: orchestrate the surrounding operation after this callback returns.
-       * Side effects: none; it evaluates the stated expression.
+       * Outputs: `void`; data/end listeners later resolve status and UTF-8 body, while error rejects.
+       * Does not handle: Issuing a second request, checking page content, or retaining chunks after settlement.
+       * Side effects: Registers response event handlers and captures received buffers in a local array.
        */
       (response) => {
       const chunks: Buffer[] = [];

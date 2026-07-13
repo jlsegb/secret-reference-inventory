@@ -18,7 +18,7 @@ test("multi-repository fixture uses safe sibling roots and explicit deployment l
    *
    * Inputs: no arguments.
    * Outputs: a promise that settles after its awaited workspace operations and assertions.
-   * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+   * Does not handle: Recovering fixture setup or assertion failures; the Node test runner observes them.
    * Side effects: runs `withWorkspaceFixture`.
    */
   async () => {
@@ -28,7 +28,7 @@ test("multi-repository fixture uses safe sibling roots and explicit deployment l
      *
      * Inputs: `fixture`.
      * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Does not handle: Owning fixture creation or deletion, inspecting external paths, or suppressing assertion failures.
      * Side effects: runs `realpath`, `relative(controlRoot, apiRoot).split(sep).join`, `relative(controlRoot, apiRoot).split`, `relative`, `assert.equal`, `readFile`.
      */
     async (fixture) => {
@@ -44,12 +44,12 @@ test("multi-repository fixture uses safe sibling roots and explicit deployment l
       assert.deepEqual(
         unrelated.value.deployments.map(
           /**
-           * Projects a report value from the current deployment.
+           * Extracts each parsed deployment's repository list for fixture-layout verification.
            *
            * Inputs: `deployment`.
-           * Outputs: the `deployment.repositories` result consumed by `unrelated.value.deployments.map`.
-           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-           * Side effects: none; it derives the current-item result.
+           * Outputs: The current parsed deployment's declared `repositories` array.
+           * Does not handle: Parsing the manifest, examining other deployment objects, or writing fixtures.
+           * Side effects: Reads one parsed value property without mutation or I/O.
            */
           (deployment) => deployment.repositories),
         [["api"], ["worker"], ["dynamic"], ["broken"]],
@@ -85,7 +85,7 @@ test("fixture isolates parser failure and user-controlled lookup behavior",
      *
      * Inputs: `fixture`.
      * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
+     * Does not handle: Owning fixture cleanup, performing CLI dispatch, or suppressing parser/scan assertion failures.
      * Side effects: runs `Promise.all`, `scanLocalRoot`, `assert.equal`, `broken.result.scopeCoverage.some`, `assert.deepEqual`.
      */
     async (fixture) => {
@@ -97,12 +97,12 @@ test("fixture isolates parser failure and user-controlled lookup behavior",
     assert.equal(
       broken.result.scopeCoverage.some(
         /**
-         * Tests the current coverage against the requested condition.
+         * Detects the incomplete coverage record expected from the broken fixture repository.
          *
          * Inputs: `coverage`.
-         * Outputs: the `coverage.state === "incomplete"` result consumed by `broken.result.scopeCoverage.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+         * Outputs: True exactly for a coverage entry whose state is `incomplete`.
+         * Does not handle: Aggregating coverage, changing the report, or evaluating other entries.
+         * Side effects: Reads the entry state without mutation or I/O.
          */
         (coverage) => coverage.state === "incomplete"),
       true,

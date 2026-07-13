@@ -13,22 +13,22 @@ import {
 
 const id =
   /**
-   * Derives the callback result.
+   * Brands a fixture identifier for reporting-adapter input.
    *
    * Inputs: `value`.
-   * Outputs: the value of `value as SafeIdentifier`.
-   * Does not handle: orchestrate the surrounding operation after this callback returns.
-   * Side effects: none; it evaluates the stated expression.
+   * Outputs: The supplied string typed as `SafeIdentifier` for this test's trusted fixture input.
+   * Does not handle: Validating identifier grammar or producing a runtime-safe brand.
+   * Side effects: None; TypeScript erases the assertion at runtime.
    */
   (value: string): SafeIdentifier => value as SafeIdentifier;
 const diagnostic =
   /**
-   * Derives the callback result.
+   * Brands a fixture diagnostic code for reporting-adapter input.
    *
    * Inputs: `value`.
-   * Outputs: the value of `value as SafeDiagnosticCode`.
-   * Does not handle: orchestrate the surrounding operation after this callback returns.
-   * Side effects: none; it evaluates the stated expression.
+   * Outputs: The supplied string typed as `SafeDiagnosticCode` for this test's trusted fixture input.
+   * Does not handle: Validating diagnostic-code grammar or producing a runtime-safe brand.
+   * Side effects: None; TypeScript erases the assertion at runtime.
    */
   (value: string): SafeDiagnosticCode => value as SafeDiagnosticCode;
 const reconciliation: ReconciliationResult = { records: [], scopeCoverage: [] };
@@ -82,12 +82,12 @@ test("N3 scan reporting adapter accepts only normalized result facts",
   assert.deepEqual(
     input.deployments[0]?.members.map(
       /**
-       * Projects a report value from the current member.
+       * Extracts the normalized member identifier to verify the reporting adapter preserves it.
        *
        * Inputs: `member`.
-       * Outputs: the `member.repositoryId` result consumed by `input.deployments[0]?.members.map`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+       * Outputs: This member's `repositoryId`, in source order for the deep-equality assertion.
+       * Does not handle: Inspecting other members, validating the report, or changing the assertion target.
+       * Side effects: Reads one member property without mutating it or performing I/O.
        */
       (member) => member.repositoryId),
     ["api"],

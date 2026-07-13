@@ -15,22 +15,22 @@ import {
 
 const id =
   /**
-   * Derives the callback result.
+   * Brands a fixture identifier accepted by the workspace reporter input type.
    *
    * Inputs: `value`.
-   * Outputs: the value of `value as SafeIdentifier`.
-   * Does not handle: orchestrate the surrounding operation after this callback returns.
-   * Side effects: none; it evaluates the stated expression.
+   * Outputs: The supplied fixture string as `SafeIdentifier`.
+   * Does not handle: Runtime identifier validation or report construction.
+   * Side effects: None; the TypeScript assertion has no runtime operation.
    */
   (value: string): SafeIdentifier => value as SafeIdentifier;
 const diagnostic =
   /**
-   * Derives the callback result.
+   * Brands a fixture diagnostic accepted by the workspace reporter input type.
    *
    * Inputs: `value`.
-   * Outputs: the value of `value as SafeDiagnosticCode`.
-   * Does not handle: orchestrate the surrounding operation after this callback returns.
-   * Side effects: none; it evaluates the stated expression.
+   * Outputs: The supplied fixture string as `SafeDiagnosticCode`.
+   * Does not handle: Runtime diagnostic validation or report construction.
+   * Side effects: None; the TypeScript assertion has no runtime operation.
    */
   (value: string): SafeDiagnosticCode => value as SafeDiagnosticCode;
 
@@ -79,12 +79,12 @@ test("workspace reports are deterministic, versioned, and sort independent resul
   assert.equal(report.schemaVersion, WORKSPACE_REPORT_SCHEMA_VERSION);
   assert.deepEqual(report.repositories.map(
     /**
-     * Projects a report value from the current repository.
+     * Collects emitted repository IDs to assert the reporter's deterministic sort order.
      *
      * Inputs: `repository`.
-     * Outputs: the `repository.id` result consumed by `report.repositories.map`.
-     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-     * Side effects: none; it derives the current-item result.
+     * Outputs: The current serialized repository's `id`.
+     * Does not handle: Sorting, inspecting sibling records, or updating the outer assertion.
+     * Side effects: Reads one report field without mutation or I/O.
      */
     (repository) => repository.id), ["api", "worker"]);
   assert.equal(report.summary.incomplete, true);
@@ -92,12 +92,12 @@ test("workspace reports are deterministic, versioned, and sort independent resul
   assert.deepEqual(
     report.deployments[0]?.sharedKeys.map(
       /**
-       * Projects a report value from the current key.
+       * Collects each sorted shared-key name for the deterministic-output assertion.
        *
        * Inputs: `key`.
-       * Outputs: the `key.name` result consumed by `report.deployments[0]?.sharedKeys.map`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+       * Outputs: The current shared key's `name`.
+       * Does not handle: Sorting shared keys, inspecting other keys, or evaluating the assertion.
+       * Side effects: Reads one key property without mutation or I/O.
        */
       (key) => key.name),
     ["API_KEY", "DATABASE_URL"],
@@ -105,12 +105,12 @@ test("workspace reports are deterministic, versioned, and sort independent resul
   assert.deepEqual(
     report.deployments[0]?.members.map(
       /**
-       * Projects a report value from the current member.
+       * Collects deployment member IDs to assert the reporter preserves sorted membership.
        *
        * Inputs: `member`.
-       * Outputs: the `member.repositoryId` result consumed by `report.deployments[0]?.members.map`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+       * Outputs: The current member's `repositoryId`.
+       * Does not handle: Sorting members, inspecting other members, or evaluating the assertion.
+       * Side effects: Reads one member property without mutation or I/O.
        */
       (member) => member.repositoryId),
     ["api", "worker"],
@@ -157,12 +157,12 @@ test("workspace reporter rejects contradictory deployment member identities",
      */
     () => buildWorkspaceJsonReport(input),
     /**
-     * Verifies “workspace reporter rejects contradictory deployment member identities”.
+     * Accepts only the reporter's duplicate-member validation error.
      *
      * Inputs: `error`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs no helper.
+     * Outputs: True when the thrown value has the expected duplicate-member message.
+     * Does not handle: Throwing the error, testing unrelated failures, or formatting a report.
+     * Side effects: Performs an `instanceof` check and reads `message`; it does not mutate input or perform I/O.
      */
     (error: unknown) =>
       error instanceof Error && error.message === "WORKSPACE_REPORT_DUPLICATE_DEPLOYMENT_MEMBER",
@@ -201,12 +201,12 @@ test("workspace reporter rejects duplicate declared deployment repository identi
      */
     () => buildWorkspaceJsonReport(input),
     /**
-     * Verifies “workspace reporter rejects duplicate declared deployment repository identities”.
+     * Accepts only the reporter's invalid-input error for duplicate declared repositories.
      *
      * Inputs: `error`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs no helper.
+     * Outputs: True when the thrown value has the expected invalid-input message.
+     * Does not handle: Throwing the error, testing unrelated failures, or constructing a report.
+     * Side effects: Performs an `instanceof` check and reads `message`; it does not mutate input or perform I/O.
      */
     (error: unknown) =>
       error instanceof Error && error.message === "WORKSPACE_REPORT_INVALID_INPUT",

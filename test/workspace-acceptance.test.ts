@@ -62,34 +62,34 @@ async function runWorkspaceCli(
 }
 
 /**
- * Assembles the parseWorkspaceReport test value.
+ * Parses JSON-mode CLI output into the workspace report shape used by acceptance assertions.
  *
  * Inputs: `run`.
- * Outputs: the fixture value returned by `parseWorkspaceReport`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `JSON.parse`.
+ * Outputs: The parsed `WorkspaceJsonReport` represented by captured stdout.
+ * Does not handle: Schema validation, malformed JSON recovery, or redaction checks.
+ * Side effects: Invokes `JSON.parse`, which may throw a syntax error.
  */
 function parseWorkspaceReport(run: CliRun): WorkspaceJsonReport {
   return JSON.parse(run.stdout) as WorkspaceJsonReport;
 }
 
 /**
- * Assembles the findRepository test value.
+ * Locates a named repository record and fails the acceptance test if it is absent.
  *
  * Inputs: `report`, `id`.
- * Outputs: the fixture value returned by `findRepository`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `report.repositories.find`, `assert.notEqual`.
+ * Outputs: The repository record whose ID matches `id`.
+ * Does not handle: Normalizing IDs, selecting deployments, or recovering a missing record.
+ * Side effects: Searches the report and throws through `assert.notEqual` when no match exists.
  */
 function findRepository(report: WorkspaceJsonReport, id: string) {
   const entry = report.repositories.find(
     /**
-     * Tests the current candidate against the requested condition.
+     * Selects the repository record whose serialized ID matches the requested fixture ID.
      *
      * Inputs: `candidate`.
-     * Outputs: the `candidate.id === id` result consumed by `report.repositories.find`.
-     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-     * Side effects: none; it derives the current-item result.
+     * Outputs: True only for the matching repository candidate.
+     * Does not handle: Asserting that a match exists, searching another collection, or normalizing IDs.
+     * Side effects: Reads the candidate ID without mutation or I/O.
      */
     (candidate) => candidate.id === id);
   assert.notEqual(entry, undefined, "expected repository " + id);
@@ -97,22 +97,22 @@ function findRepository(report: WorkspaceJsonReport, id: string) {
 }
 
 /**
- * Assembles the findDeployment test value.
+ * Locates a named deployment record and fails the acceptance test if it is absent.
  *
  * Inputs: `report`, `id`.
- * Outputs: the fixture value returned by `findDeployment`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `report.deployments.find`, `assert.notEqual`.
+ * Outputs: The deployment record whose ID matches `id`.
+ * Does not handle: Normalizing IDs, selecting repositories, or recovering a missing record.
+ * Side effects: Searches the report and throws through `assert.notEqual` when no match exists.
  */
 function findDeployment(report: WorkspaceJsonReport, id: string) {
   const entry = report.deployments.find(
     /**
-     * Tests the current candidate against the requested condition.
+     * Selects the deployment record whose serialized ID matches the requested fixture ID.
      *
      * Inputs: `candidate`.
-     * Outputs: the `candidate.id === id` result consumed by `report.deployments.find`.
-     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-     * Side effects: none; it derives the current-item result.
+     * Outputs: True only for the matching deployment candidate.
+     * Does not handle: Asserting that a match exists, searching repositories, or normalizing IDs.
+     * Side effects: Reads the candidate ID without mutation or I/O.
      */
     (candidate) => candidate.id === id);
   assert.notEqual(entry, undefined, "expected deployment " + id);
@@ -120,12 +120,12 @@ function findDeployment(report: WorkspaceJsonReport, id: string) {
 }
 
 /**
- * Assembles the assertNoFixtureLeak test value.
+ * Asserts that a CLI/UI text result contains none of this fixture's private path markers.
  *
  * Inputs: `text`, `fixture`.
- * Outputs: the completion result produced by `assertNoFixtureLeak`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `assert.equal`, `text.includes`.
+ * Outputs: `void` if the output leaks neither root, manifest path, nor private source marker.
+ * Does not handle: Redacting the text, checking unrelated secrets, or recovering failed assertions.
+ * Side effects: Reads substrings and throws through strict assertions on a leak.
  */
 function assertNoFixtureLeak(text: string, fixture: WorkspaceFixture): void {
   assert.equal(text.includes(fixture.root), false);
@@ -145,12 +145,12 @@ test("workspace CLI keeps duplicate keys separate until deployment sharing is ex
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “workspace CLI keeps duplicate keys separate until deployment sharing is explicit”.
+     * Drives the isolated manifest through CLI scans and asserts deployment-sharing boundaries.
      *
      * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `runWorkspaceCli`, `assert.equal`, `assertNoFixtureLeak`, `parseWorkspaceReport`, `findRepository`, `findDeployment`.
+     * Outputs: A promise that resolves only after the JSON and terminal assertions succeed.
+     * Does not handle: Creating or disposing the fixture, reading an external repository, or suppressing failures.
+     * Side effects: Invokes the injected CLI handlers and test assertions; assertion failures reject this callback.
      */
     async (fixture) => {
     const unrelated = await runWorkspaceCli([
@@ -201,12 +201,12 @@ test("workspace CLI keeps duplicate keys separate until deployment sharing is ex
     assert.deepEqual(
       sharedDeployment?.members.map(
         /**
-         * Projects a report value from the current member.
+         * Extracts each shared deployment member ID for the explicit-sharing assertion.
          *
          * Inputs: `member`.
-         * Outputs: the `member.repositoryId` result consumed by `sharedDeployment?.members.map`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+         * Outputs: The current shared member's `repositoryId`.
+         * Does not handle: Adding members, sorting them, or evaluating the enclosing assertion.
+         * Side effects: Reads one member field without mutation or I/O.
          */
         (member) => member.repositoryId),
       ["api", "worker"],
@@ -242,33 +242,33 @@ test("workspace UI serves only derived fixture data over loopback",
   async (t) => {
   await withWorkspaceFixture(
     /**
-     * Exercises “workspace UI serves only derived fixture data over loopback” through the `withWorkspaceFixture` callback and invokes `after`, `all`, `map`, `close`, `runWorkspaceCli`.
+     * Starts the fixture UI, records its server handle, and asserts its loopback response is derived-only.
      *
      * Inputs: Receives `fixture` from the `withWorkspaceFixture` callback.
-     * Outputs: Returns the pushed-array length to the `withWorkspaceFixture` callback.
-     * Does not handle: It does not create, dispose, or retain the temporary fixture; withWorkspaceFixture owns that lifecycle while this callback uses only its issued paths and test-local assertions.
-     * Side effects: Starts, observes, or closes the loopback test resource through `after`, `all`, `map`, `close`, `runWorkspaceCli`.
+     * Outputs: A promise that resolves after the CLI/UI assertions; its resolved value is ignored by `withWorkspaceFixture`.
+     * Does not handle: Owning fixture deletion, binding non-loopback listeners, or suppressing assertion failures.
+     * Side effects: Registers server cleanup, starts an injected local viewer, performs one HTTP request, and appends its handle to `launched`.
      */
     async (fixture) => {
     const launched: LocalReportViewer[] = [];
     t.after(
       /**
-       * Schedules temporary fixture removal.
+       * Closes every loopback viewer server recorded during this test after it completes.
        *
        * Inputs: no arguments.
-       * Outputs: the cleanup promise returned by `{ await Promise.all(launched.map( (viewer) => viewer.close())); }`, registered with `t.after`.
-       * Does not handle: create the temporary path or decide whether the test passes.
-       * Side effects: performs the recursive filesystem removal requested by `{ await Promise.all(launched.map( (viewer) => viewer.close())); }`.
+       * Outputs: A cleanup promise that resolves after all recorded viewer servers close.
+       * Does not handle: Deleting the temporary fixture directory, creating viewers, or changing test assertions.
+       * Side effects: Invokes each viewer's server-close operation; failures reject the registered cleanup.
        */
       async () => {
       await Promise.all(launched.map(
         /**
-         * Projects a report value from the current viewer.
+         * Requests shutdown of one viewer server during the test cleanup sweep.
          *
          * Inputs: `viewer`.
-         * Outputs: the `viewer.close()` result consumed by `launched.map`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+         * Outputs: The promise returned by this viewer's `close` method.
+         * Does not handle: Closing other viewers, deleting fixture files, or deciding cleanup order.
+         * Side effects: Begins closure of the viewer's HTTP server.
          */
         (viewer) => viewer.close()));
     });
@@ -278,12 +278,12 @@ test("workspace UI serves only derived fixture data over loopback",
       {
         startViewer:
           /**
-           * Verifies “workspace UI serves only derived fixture data over loopback”.
+           * Starts the injected loopback viewer and retains its close handle for test cleanup.
            *
            * Inputs: `request`.
-           * Outputs: a promise that settles after its awaited workspace operations and assertions.
-           * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-           * Side effects: runs `startLocalReportViewer`, `launched.push`.
+           * Outputs: The newly started `LocalReportViewer` returned to the CLI handler.
+           * Does not handle: Validating viewer HTML, closing the server, or exposing a non-loopback listener.
+           * Side effects: Calls `startLocalReportViewer` and appends the server handle to `launched`.
            */
           async (request) => {
           const viewer = await startLocalReportViewer(request);
@@ -315,12 +315,12 @@ test("workspace UI serves only derived fixture data over loopback",
 });
 
 /**
- * Assembles the request test value.
+ * Fetches one loopback viewer page and buffers its status, headers, and UTF-8 response body.
  *
  * Inputs: `url`.
- * Outputs: the fixture value returned by `request`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `Promise`.
+ * Outputs: A promise for the completed HTTP status, headers, and response body.
+ * Does not handle: Redirects, request timeout policy, or response-content validation.
+ * Side effects: Starts an HTTP GET and registers response/error listeners.
  */
 async function request(url: URL): Promise<{
   readonly status: number;
@@ -339,12 +339,12 @@ async function request(url: URL): Promise<{
     (resolve, reject) => {
     const request = get(url,
       /**
-       * Derives the callback result.
+       * Attaches body/error/end listeners to one HTTP response and settles the enclosing request promise.
        *
        * Inputs: `response`.
-       * Outputs: the value of `{ const chunks: Buffer[] = []; response.on("data", (chunk: Buffer) => chunks.push(chunk)); response.on("error", reject); response.on("end", () => { resolve({ status: response.statusCode ?? 0`.
-       * Does not handle: orchestrate the surrounding operation after this callback returns.
-       * Side effects: none; it evaluates the stated expression.
+       * Outputs: `void`; later response events resolve with status, headers, and UTF-8 body or reject on error.
+       * Does not handle: Starting another request, validating headers, or retaining chunks after settlement.
+       * Side effects: Registers three response listeners, buffers data chunks, and gives event handlers access to `resolve` and `reject`.
        */
       (response) => {
       const chunks: Buffer[] = [];

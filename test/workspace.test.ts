@@ -26,12 +26,12 @@ interface RawMemberScope {
 }
 
 /**
- * Assembles the memberScope test value.
+ * Builds one raw manifest member-scope declaration for parser tests.
  *
  * Inputs: `repositoryId`, `executionScopeId`, `stage`.
- * Outputs: the fixture value returned by `memberScope`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: none; it allocates only in-memory test data.
+ * Outputs: A runtime/environment scope attached to the requested repository ID.
+ * Does not handle: Parser validation, stage normalization, or descriptor resolution.
+ * Side effects: Allocates an in-memory raw scope object.
  */
 function memberScope(
   repositoryId: string,
@@ -51,12 +51,12 @@ function memberScope(
 }
 
 /**
- * Assembles the validManifest test value.
+ * Builds a valid v2 workspace manifest used as the baseline parser fixture.
  *
  * Inputs: no arguments.
- * Outputs: the fixture value returned by `validManifest`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `memberScope`.
+ * Outputs: A manifest object with three repositories and both provisioned and scan-only deployments.
+ * Does not handle: JSON serialization, parser invocation, or filesystem resolution.
+ * Side effects: Calls `memberScope` and allocates nested fixture objects.
  */
 function validManifest(): object {
   return {
@@ -86,34 +86,34 @@ function validManifest(): object {
 }
 
 /**
- * Assembles the parseManifest test value.
+ * Serializes an object fixture and submits it to the public workspace-manifest text parser.
  *
  * Inputs: `value`.
- * Outputs: the fixture value returned by `parseManifest`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `parseWorkspaceManifestText`, `JSON.stringify`.
+ * Outputs: The parser's success/failure result for the serialized fixture.
+ * Does not handle: Reading a manifest file, JSONC comments, or error recovery.
+ * Side effects: Serializes with `JSON.stringify` and invokes the parser.
  */
 function parseManifest(value: object): ReturnType<typeof parseWorkspaceManifestText> {
   return parseWorkspaceManifestText(JSON.stringify(value));
 }
 
 /**
- * Assembles the diagnosticCodes test value.
+ * Extracts parser diagnostic codes for concise invalid-manifest assertions.
  *
  * Inputs: `result`.
- * Outputs: the fixture value returned by `diagnosticCodes`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `result.diagnostics.map`.
+ * Outputs: The diagnostic `code` strings in parser-emitted order.
+ * Does not handle: Deduplicating diagnostics, asserting expected values, or parsing input.
+ * Side effects: Maps the parser's in-memory diagnostic array.
  */
 function diagnosticCodes(result: ReturnType<typeof parseWorkspaceManifestText>): string[] {
   return result.diagnostics.map(
     /**
-     * Projects a report value from the current diagnostic.
+     * Extracts parser diagnostic codes so cardinality tests can assert fixed failure classes.
      *
      * Inputs: `diagnostic`.
-     * Outputs: the `diagnostic.code` result consumed by `result.diagnostics.map`.
-     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-     * Side effects: none; it derives the current-item result.
+     * Outputs: The current parser diagnostic's `code` string.
+     * Does not handle: Deduplicating diagnostics, evaluating test assertions, or parsing input.
+     * Side effects: Reads one diagnostic property without mutation or I/O.
      */
     (diagnostic) => diagnostic.code);
 }
@@ -169,12 +169,12 @@ test("parses a versioned multi-repository JSONC workspace manifest",
   assert.deepEqual(
     result.value.repositories.map(
       /**
-       * Projects a report value from the current repository.
+       * Reduces each parsed repository to the root fields relevant to JSONC root-normalization assertions.
        *
        * Inputs: `repository`.
-       * Outputs: the `({ id: repository.id, root: repository.root, })` result consumed by `result.value.repositories.map`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+       * Outputs: A new object containing the parsed repository ID and normalized root descriptor.
+       * Does not handle: Parsing another repository, modifying parsed output, or resolving filesystem paths.
+       * Side effects: Allocates one assertion projection object.
        */
       (repository) => ({
       id: repository.id,
@@ -188,12 +188,12 @@ test("parses a versioned multi-repository JSONC workspace manifest",
   assert.deepEqual(
     result.value.deployments.map(
       /**
-       * Projects a report value from the current deployment.
+       * Reduces each parsed deployment to the fields that verify v2 input descriptor normalization.
        *
        * Inputs: `deployment`.
-       * Outputs: the `({ id: deployment.id, repositories: deployment.repositories, inputs: deployment.inputs, })` result consumed by `result.value.deployments.map`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+       * Outputs: A new object retaining the deployment ID, member IDs, and normalized inputs.
+       * Does not handle: Resolving descriptors, changing parsed state, or evaluating the assertion.
+       * Side effects: Allocates one assertion projection object.
        */
       (deployment) => ({
       id: deployment.id,
@@ -375,12 +375,12 @@ test("v2 provisioning maps repositories to explicit, non-overlapping execution s
   assert.deepEqual(
     distinctTargets.value.deployments[0]?.inputs?.memberScopes.map(
       /**
-       * Projects a report value from the current entry.
+       * Retains each repository/scope identity pair to prove the declared execution targets differ.
        *
        * Inputs: `entry`.
-       * Outputs: the `({ repositoryId: entry.repositoryId, executionScopeId: entry.scope.id, })` result consumed by `distinctTargets.value.deployments[0]?.inputs?.memberScopes.map`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+       * Outputs: A projection with the member's repository ID and exact execution-scope ID.
+       * Does not handle: Validating overlap, inspecting other scope fields, or changing the parsed manifest.
+       * Side effects: Allocates one projection object.
        */
       (entry) => ({
       repositoryId: entry.repositoryId,
@@ -640,12 +640,12 @@ test("bounds manifest repository, deployment, and membership cardinality before 
     schemaVersion: WORKSPACE_MANIFEST_SCHEMA_VERSION,
     repositories: Array.from({ length: MAX_WORKSPACE_REPOSITORIES + 1 },
       /**
-       * Constructs one generated fixture element.
+       * Creates one distinct repository declaration beyond the parser's repository cardinality limit.
        *
        * Inputs: `_`, `index`.
-       * Outputs: the `({ id: "repo" + String(index), root: "repositories/repo" + String(index), })` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+       * Outputs: A repository ID/root pair derived from the current index.
+       * Does not handle: Building deployments, parsing the manifest, or writing a filesystem fixture.
+       * Side effects: Allocates one repository declaration.
        */
       (_, index) => ({
       id: "repo" + String(index),
@@ -664,12 +664,12 @@ test("bounds manifest repository, deployment, and membership cardinality before 
     repositories: [{ id: "api", root: "repositories/api" }],
     deployments: Array.from({ length: MAX_WORKSPACE_DEPLOYMENTS + 1 },
       /**
-       * Constructs one generated fixture element.
+       * Creates one deployment declaration beyond the parser's deployment cardinality limit.
        *
        * Inputs: `_`, `index`.
-       * Outputs: the `({ id: "deployment" + String(index), repositories: ["api"], })` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+       * Outputs: A deployment with a unique ID and the existing `api` member.
+       * Does not handle: Adding repositories, parsing the manifest, or inspecting sibling deployments.
+       * Side effects: Allocates one deployment declaration.
        */
       (_, index) => ({
       id: "deployment" + String(index),
@@ -691,12 +691,12 @@ test("bounds manifest repository, deployment, and membership cardinality before 
         repositories: Array.from(
           { length: MAX_WORKSPACE_DEPLOYMENT_MEMBERS + 1 },
           /**
-           * Constructs one generated fixture element.
+           * Supplies the repeated `api` member that intentionally exceeds the per-deployment member limit.
            *
            * Inputs: no arguments.
-           * Outputs: the `"api"` result consumed by `Array.from`.
-           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-           * Side effects: none; it derives the current-item result.
+           * Outputs: The literal repository ID `api` for this array slot.
+           * Does not handle: Creating repository definitions, reading the index, or deduplicating members.
+           * Side effects: None; returns an interned literal without I/O or mutation.
            */
           () => "api",
         ),
@@ -712,12 +712,12 @@ test("bounds manifest repository, deployment, and membership cardinality before 
   const repositoryDefinitions = Array.from(
     { length: MAX_WORKSPACE_REPOSITORIES },
     /**
-     * Constructs one generated fixture element.
+     * Creates a short repository declaration used to exercise total-membership accounting rather than input-size limits.
      *
      * Inputs: `_`, `index`.
-     * Outputs: the `({ // Keep the serialized manifest below the public text-parser byte cap so // this exercises aggregate membership accounting rather than input size. id: "r" + String(index), root: "r" + Str` result consumed by `Array.from`.
-     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-     * Side effects: none; it derives the current-item result.
+     * Outputs: A compact ID/root pair for the current index.
+     * Does not handle: Extending the member list, parsing the manifest, or allocating a large payload.
+     * Side effects: Allocates one compact repository declaration.
      */
     (_, index) => ({
       // Keep the serialized manifest below the public text-parser byte cap so
@@ -728,12 +728,12 @@ test("bounds manifest repository, deployment, and membership cardinality before 
   );
   const memberIds = repositoryDefinitions.map(
     /**
-     * Projects a report value from the current repository.
+     * Extracts all compact repository IDs to reuse them as every deployment's members.
      *
      * Inputs: `repository`.
-     * Outputs: the `repository.id` result consumed by `repositoryDefinitions.map`.
-     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-     * Side effects: none; it derives the current-item result.
+     * Outputs: The current compact repository's ID.
+     * Does not handle: Copying root values, parsing the manifest, or modifying the repository definition.
+     * Side effects: Reads one ID field without mutation or I/O.
      */
     (repository) => repository.id);
   const tooManyTotalMembers = parseManifest({
@@ -745,12 +745,12 @@ test("bounds manifest repository, deployment, and membership cardinality before 
           Math.floor(MAX_WORKSPACE_TOTAL_DEPLOYMENT_MEMBERS / memberIds.length) + 1,
       },
       /**
-       * Constructs one generated fixture element.
+       * Creates one deployment that reuses all compact members to exceed total membership accounting.
        *
        * Inputs: `_`, `index`.
-       * Outputs: the `({ id: "d" + String(index), repositories: memberIds, })` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+       * Outputs: A uniquely named deployment that references the shared `memberIds` array.
+       * Does not handle: Cloning members, inspecting other deployments, or invoking parser validation.
+       * Side effects: Allocates one deployment object while retaining the shared member array.
        */
       (_, index) => ({
         id: "d" + String(index),

@@ -54,12 +54,12 @@ import {
 
 
 /**
- * Assembles the scanFixture test value.
+ * Reads an isolated fixture manifest and runs the workspace runtime against its issued request.
  *
  * Inputs: `fixture`.
- * Outputs: the fixture value returned by `scanFixture`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `readLocalWorkspaceManifest`, `assert.fail`, `scanWorkspace`.
+ * Outputs: A promise for the complete workspace scan result.
+ * Does not handle: Recovering invalid manifests, modifying fixture files, or configuring adapters.
+ * Side effects: Reads the manifest, may fail the test, and invokes the workspace scanner.
  */
 async function scanFixture(fixture: WorkspaceFixture) {
   const document = await readLocalWorkspaceManifest(fixture.manifestPath);
@@ -71,12 +71,12 @@ async function scanFixture(fixture: WorkspaceFixture) {
 
 /*  Test-only lower-layer helper; runtime itself always preflights before input I/O. */
 /**
- * Assembles the attestDeploymentInputSnapshot test value.
+ * Performs the two deployment-attestation phases directly for lower-layer cache and snapshot tests.
  *
  * Inputs: `invocation`, `deploymentId`, `repositoryMembers`.
- * Outputs: the fixture value returned by `attestDeploymentInputSnapshot`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `attestVerifiedWorkspaceDeploymentMembers`, `attestVerifiedWorkspaceDeploymentInputs`.
+ * Outputs: An issued preparation token after input attestation, or `undefined` when member issuance fails.
+ * Does not handle: Source preflight, reconciliation, or retrying a failed local input read.
+ * Side effects: May read declared provisioning documents through the attestation functions.
  */
 async function attestDeploymentInputSnapshot(
   invocation: unknown,
@@ -94,12 +94,12 @@ async function attestDeploymentInputSnapshot(
 }
 
 /**
- * Assembles the repository test value.
+ * Finds a named repository scan result and fails the test if the result is absent.
  *
  * Inputs: `result`, `id`.
- * Outputs: the fixture value returned by `repository`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `result.repositories.find`, `assert.notEqual`.
+ * Outputs: The repository result with the requested ID.
+ * Does not handle: Normalizing IDs, selecting deployments, or recovering a missing result.
+ * Side effects: Searches the result array and throws through `assert.notEqual` if not found.
  */
 function repository(
   result: Awaited<ReturnType<typeof scanWorkspace>>,
@@ -107,12 +107,12 @@ function repository(
 ): Awaited<ReturnType<typeof scanWorkspace>>["repositories"][number] {
   const entry = result.repositories.find(
     /**
-     * Tests the current candidate against the requested condition.
-     *
-     * Inputs: `candidate`.
-     * Outputs: the `candidate.id === id` result consumed by `result.repositories.find`.
-     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-     * Side effects: none; it derives the current-item result.
+    * Tests the current candidate against the requested condition.
+    *
+    * Inputs: `candidate`.
+    * Outputs: the `candidate.id === id` result consumed by `result.repositories.find`.
+     * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+     * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
      */
     (candidate) => candidate.id === id);
   assert.notEqual(entry, undefined, "expected repository " + id);
@@ -120,12 +120,12 @@ function repository(
 }
 
 /**
- * Assembles the deployment test value.
+ * Finds a named deployment scan result and fails the test if the result is absent.
  *
  * Inputs: `result`, `id`.
- * Outputs: the fixture value returned by `deployment`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `result.deployments.find`, `assert.notEqual`.
+ * Outputs: The deployment result with the requested ID.
+ * Does not handle: Normalizing IDs, selecting repository results, or recovering a missing deployment.
+ * Side effects: Searches the deployment array and throws through `assert.notEqual` if not found.
  */
 function deployment(
   result: Awaited<ReturnType<typeof scanWorkspace>>,
@@ -133,12 +133,12 @@ function deployment(
 ): Awaited<ReturnType<typeof scanWorkspace>>["deployments"][number] {
   const entry = result.deployments.find(
     /**
-     * Tests the current candidate against the requested condition.
-     *
-     * Inputs: `candidate`.
-     * Outputs: the `candidate.id === id` result consumed by `result.deployments.find`.
-     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-     * Side effects: none; it derives the current-item result.
+    * Tests the current candidate against the requested condition.
+    *
+    * Inputs: `candidate`.
+    * Outputs: the `candidate.id === id` result consumed by `result.deployments.find`.
+     * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+     * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
      */
     (candidate) => candidate.id === id);
   assert.notEqual(entry, undefined, "expected deployment " + id);
@@ -146,12 +146,12 @@ function deployment(
 }
 
 /**
- * Assembles the deploymentMember test value.
+ * Finds one repository member inside a deployment result and fails the test if it is absent.
  *
  * Inputs: `entry`, `repositoryId`.
- * Outputs: the fixture value returned by `deploymentMember`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `entry.members.find`, `assert.notEqual`.
+ * Outputs: The deployment member with the requested repository ID.
+ * Does not handle: Cross-deployment search, ID normalization, or recovery from a missing member.
+ * Side effects: Searches member entries and throws through `assert.notEqual` if not found.
  */
 function deploymentMember(
   entry: ReturnType<typeof deployment>,
@@ -159,12 +159,12 @@ function deploymentMember(
 ): ReturnType<typeof deployment>["members"][number] {
   const member = entry.members.find(
     /**
-     * Tests the current candidate against the requested condition.
-     *
-     * Inputs: `candidate`.
-     * Outputs: the `candidate.repositoryId === repositoryId` result consumed by `entry.members.find`.
-     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-     * Side effects: none; it derives the current-item result.
+    * Tests the current candidate against the requested condition.
+    *
+    * Inputs: `candidate`.
+    * Outputs: the `candidate.repositoryId === repositoryId` result consumed by `entry.members.find`.
+     * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+     * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
      */
     (candidate) => candidate.repositoryId === repositoryId);
   assert.notEqual(member, undefined, "expected deployment member " + repositoryId);
@@ -172,34 +172,34 @@ function deploymentMember(
 }
 
 /**
- * Assembles the emittedReconciliationGraphFacts test value.
+ * Counts retained reconciliation graph facts to enforce runtime projection-budget bounds.
  *
  * Inputs: `reconciliation`.
- * Outputs: the completion result produced by `emittedReconciliationGraphFacts`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `reconciliation.records.reduce`, `reconciliation.scopeCoverage.reduce`.
+ * Outputs: The aggregate number of retained record, reason, reference, dynamic, and coverage facts.
+ * Does not handle: Validating reconciliation semantics, modifying records, or scanning sources.
+ * Side effects: Reduces in-memory graph arrays only.
  */
 function emittedReconciliationGraphFacts(
   reconciliation: Awaited<ReturnType<typeof scanWorkspace>>["repositories"][number]["reconciliation"],
 ): number {
   const recordFacts = reconciliation.records.reduce(
     /**
-     * Accumulates facts for the current record.
-     *
-     * Inputs: `total`, `record`.
-     * Outputs: the next accumulator value `{ const reasons = record.reasons.reduce( (reasonTotal, reason) => reasonTotal + 1 + (reason.gapIds?.length ?? 0) + (reason.candidateIds?.length ?? 0), 0, ); const references = record.kind ==`.
-     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-     * Side effects: none; it derives the current-item result.
+    * Accumulates facts for the current record.
+    *
+    * Inputs: `total`, `record`.
+    * Outputs: the next accumulator value `{ const reasons = record.reasons.reduce( (reasonTotal, reason) => reasonTotal + 1 + (reason.gapIds?.length ?? 0) + (reason.candidateIds?.length ?? 0), 0, ); const references = record.kind ==`.
+     * Does not handle: Controlling collection traversal, iteration order, or mutation of the source facts.
+     * Side effects: Computes an in-memory total from callback inputs without mutating records or performing I/O.
      */
     (total, record) => {
     const reasons = record.reasons.reduce(
       /**
-       * Accumulates facts for the current reason.
-       *
-       * Inputs: `reasonTotal`, `reason`.
-       * Outputs: the next accumulator value `reasonTotal + 1 + (reason.gapIds?.length ?? 0) + (reason.candidateIds?.length ?? 0)`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Accumulates facts for the current reason.
+      *
+      * Inputs: `reasonTotal`, `reason`.
+      * Outputs: the next accumulator value `reasonTotal + 1 + (reason.gapIds?.length ?? 0) + (reason.candidateIds?.length ?? 0)`.
+       * Does not handle: Controlling collection traversal, iteration order, or mutation of the source facts.
+       * Side effects: Computes an in-memory total from callback inputs without mutating records or performing I/O.
        */
       (reasonTotal, reason) =>
         reasonTotal +
@@ -214,12 +214,12 @@ function emittedReconciliationGraphFacts(
   }, 0);
   return recordFacts + reconciliation.scopeCoverage.reduce(
     /**
-     * Accumulates facts for the current coverage.
-     *
-     * Inputs: `total`, `coverage`.
-     * Outputs: the next accumulator value `total + 1 + coverage.gapIds.length`.
-     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-     * Side effects: none; it derives the current-item result.
+    * Accumulates facts for the current coverage.
+    *
+    * Inputs: `total`, `coverage`.
+    * Outputs: the next accumulator value `total + 1 + coverage.gapIds.length`.
+     * Does not handle: Controlling collection traversal, iteration order, or mutation of the source facts.
+     * Side effects: Computes an in-memory total from callback inputs without mutating records or performing I/O.
      */
     (total, coverage) => total + 1 + coverage.gapIds.length,
     0,
@@ -227,71 +227,71 @@ function emittedReconciliationGraphFacts(
 }
 
 /**
- * Assembles the evidenceGraphFacts test value.
+ * Counts one evidence node plus its retained locations for graph-budget assertions.
  *
  * Inputs: `evidence`.
- * Outputs: the fixture value returned by `evidenceGraphFacts`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `evidence.reduce`.
+ * Outputs: The total evidence-node and location count.
+ * Does not handle: Validating evidence provenance, mutating locations, or traversing nested source data.
+ * Side effects: Reduces an in-memory evidence array.
  */
 function evidenceGraphFacts(
   evidence: readonly { readonly locations: readonly unknown[] }[],
 ): number {
   return evidence.reduce(
     /**
-     * Accumulates facts for the current entry.
-     *
-     * Inputs: `total`, `entry`.
-     * Outputs: the next accumulator value `total + 1 + entry.locations.length`.
-     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-     * Side effects: none; it derives the current-item result.
+    * Accumulates facts for the current entry.
+    *
+    * Inputs: `total`, `entry`.
+    * Outputs: the next accumulator value `total + 1 + entry.locations.length`.
+     * Does not handle: Controlling collection traversal, iteration order, or mutation of the source facts.
+     * Side effects: Computes an in-memory total from callback inputs without mutating records or performing I/O.
      */
     (total, entry) => total + 1 + entry.locations.length, 0);
 }
 
 /**
- * Assembles the referenceGraphFacts test value.
+ * Counts the graph contribution of one retained secret reference.
  *
  * Inputs: `reference`.
- * Outputs: the fixture value returned by `referenceGraphFacts`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `evidenceGraphFacts`.
+ * Outputs: One reference node plus its evidence contribution.
+ * Does not handle: Validating references, changing evidence, or querying source files.
+ * Side effects: Calls `evidenceGraphFacts` on in-memory data.
  */
 function referenceGraphFacts(reference: SecretReference): number {
   return 1 + evidenceGraphFacts(reference.evidenceChain);
 }
 
 /**
- * Assembles the demandEdgeGraphFacts test value.
+ * Counts the graph contribution of one retained demand edge.
  *
  * Inputs: `edge`.
- * Outputs: the fixture value returned by `demandEdgeGraphFacts`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `evidenceGraphFacts`.
+ * Outputs: The edge node/endpoint contribution plus its evidence contribution.
+ * Does not handle: Validating edge semantics, changing evidence, or source analysis.
+ * Side effects: Calls `evidenceGraphFacts` on in-memory data.
  */
 function demandEdgeGraphFacts(edge: DemandEdge): number {
   return 2 + evidenceGraphFacts(edge.evidenceChain);
 }
 
 /**
- * Assembles the dynamicLookupGraphFacts test value.
+ * Counts the graph contribution of one retained dynamic lookup edge.
  *
  * Inputs: `edge`.
- * Outputs: the fixture value returned by `dynamicLookupGraphFacts`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `evidenceGraphFacts`.
+ * Outputs: The edge contribution including likely-key and evidence counts.
+ * Does not handle: Resolving lookup domains, mutating likely keys, or source analysis.
+ * Side effects: Reads the edge and calls `evidenceGraphFacts`.
  */
 function dynamicLookupGraphFacts(edge: DynamicLookupEdge): number {
   return 2 + edge.likelyKeys.length + evidenceGraphFacts(edge.evidenceChain);
 }
 
 /**
- * Assembles the emittedResultGraphFacts test value.
+ * Counts every graph fact retained in one repository or deployment-member analysis result.
  *
  * Inputs: `entry`.
- * Outputs: the fixture value returned by `emittedResultGraphFacts`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `entry.references.reduce`, `entry.demandEdges.reduce`, `entry.dynamicLookupEdges.reduce`, `emittedReconciliationGraphFacts`.
+ * Outputs: The total diagnostics, reference, demand, dynamic, and reconciliation graph-fact count.
+ * Does not handle: Mutating result data, verifying correctness, or producing a report.
+ * Side effects: Reduces in-memory result arrays and calls graph-count helpers.
  */
 function emittedResultGraphFacts(entry: {
   readonly diagnostics: readonly unknown[];
@@ -304,32 +304,32 @@ function emittedResultGraphFacts(entry: {
     entry.diagnostics.length +
     entry.references.reduce(
       /**
-       * Accumulates facts for the current reference.
-       *
-       * Inputs: `total`, `reference`.
-       * Outputs: the next accumulator value `total + referenceGraphFacts(reference)`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Accumulates facts for the current reference.
+      *
+      * Inputs: `total`, `reference`.
+      * Outputs: the next accumulator value `total + referenceGraphFacts(reference)`.
+       * Does not handle: Controlling collection traversal, iteration order, or mutation of the source facts.
+       * Side effects: Computes an in-memory total from callback inputs without mutating records or performing I/O.
        */
       (total, reference) => total + referenceGraphFacts(reference), 0) +
     entry.demandEdges.reduce(
       /**
-       * Accumulates facts for the current edge.
-       *
-       * Inputs: `total`, `edge`.
-       * Outputs: the next accumulator value `total + demandEdgeGraphFacts(edge)`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Accumulates facts for the current edge.
+      *
+      * Inputs: `total`, `edge`.
+      * Outputs: the next accumulator value `total + demandEdgeGraphFacts(edge)`.
+       * Does not handle: Controlling collection traversal, iteration order, or mutation of the source facts.
+       * Side effects: Computes an in-memory total from callback inputs without mutating records or performing I/O.
        */
       (total, edge) => total + demandEdgeGraphFacts(edge), 0) +
     entry.dynamicLookupEdges.reduce(
       /**
-       * Accumulates facts for the current edge.
-       *
-       * Inputs: `total`, `edge`.
-       * Outputs: the next accumulator value `total + dynamicLookupGraphFacts(edge)`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Accumulates facts for the current edge.
+      *
+      * Inputs: `total`, `edge`.
+      * Outputs: the next accumulator value `total + dynamicLookupGraphFacts(edge)`.
+       * Does not handle: Controlling collection traversal, iteration order, or mutation of the source facts.
+       * Side effects: Computes an in-memory total from callback inputs without mutating records or performing I/O.
        */
       (total, edge) => total + dynamicLookupGraphFacts(edge), 0) +
     emittedReconciliationGraphFacts(entry.reconciliation)
@@ -337,24 +337,24 @@ function emittedResultGraphFacts(entry: {
 }
 
 /**
- * Assembles the emittedDeploymentGraphFacts test value.
+ * Counts all retained graph facts across the workspace's deployment results and members.
  *
  * Inputs: `result`.
- * Outputs: the fixture value returned by `emittedDeploymentGraphFacts`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `result.deployments.reduce`.
+ * Outputs: The aggregate deployment shared-key, diagnostic, and member graph-fact count.
+ * Does not handle: Counting standalone repositories, modifying results, or scanning input.
+ * Side effects: Reduces deployment/member arrays in memory.
  */
 function emittedDeploymentGraphFacts(
   result: Awaited<ReturnType<typeof scanWorkspace>>,
 ): number {
   return result.deployments.reduce(
     /**
-     * Accumulates facts for the current deployment.
-     *
-     * Inputs: `total`, `deployment`.
-     * Outputs: the next accumulator value `total + deployment.sharedKeys.length + deployment.diagnostics.length + deployment.members.reduce( (memberTotal, member) => memberTotal + emittedResultGraphFacts(member), 0, )`.
-     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-     * Side effects: none; it derives the current-item result.
+    * Accumulates facts for the current deployment.
+    *
+    * Inputs: `total`, `deployment`.
+    * Outputs: the next accumulator value `total + deployment.sharedKeys.length + deployment.diagnostics.length + deployment.members.reduce( (memberTotal, member) => memberTotal + emittedResultGraphFacts(member), 0, )`.
+     * Does not handle: Controlling collection traversal, iteration order, or mutation of the source facts.
+     * Side effects: Computes an in-memory total from callback inputs without mutating records or performing I/O.
      */
     (total, deployment) =>
     total +
@@ -362,12 +362,12 @@ function emittedDeploymentGraphFacts(
     deployment.diagnostics.length +
     deployment.members.reduce(
       /**
-       * Accumulates facts for the current member.
-       *
-       * Inputs: `memberTotal`, `member`.
-       * Outputs: the next accumulator value `memberTotal + emittedResultGraphFacts(member)`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Accumulates facts for the current member.
+      *
+      * Inputs: `memberTotal`, `member`.
+      * Outputs: the next accumulator value `memberTotal + emittedResultGraphFacts(member)`.
+       * Does not handle: Controlling collection traversal, iteration order, or mutation of the source facts.
+       * Side effects: Computes an in-memory total from callback inputs without mutating records or performing I/O.
        */
       (memberTotal, member) => memberTotal + emittedResultGraphFacts(member),
       0,
@@ -376,12 +376,12 @@ function emittedDeploymentGraphFacts(
 }
 
 /**
- * Assembles the emittedWorkspaceGraphFacts test value.
+ * Counts all graph facts retained by a complete workspace result for budget-bound assertions.
  *
  * Inputs: `result`.
- * Outputs: the fixture value returned by `emittedWorkspaceGraphFacts`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `result.repositories.reduce`, `emittedDeploymentGraphFacts`.
+ * Outputs: The combined repository and deployment graph-fact count.
+ * Does not handle: Validating reports, mutating results, or scanning a workspace.
+ * Side effects: Reduces repository results and calls `emittedDeploymentGraphFacts`.
  */
 function emittedWorkspaceGraphFacts(
   result: Awaited<ReturnType<typeof scanWorkspace>>,
@@ -389,12 +389,12 @@ function emittedWorkspaceGraphFacts(
   return (
     result.repositories.reduce(
       /**
-       * Accumulates facts for the current repository.
-       *
-       * Inputs: `total`, `repository`.
-       * Outputs: the next accumulator value `total + emittedResultGraphFacts(repository)`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Accumulates facts for the current repository.
+      *
+      * Inputs: `total`, `repository`.
+      * Outputs: the next accumulator value `total + emittedResultGraphFacts(repository)`.
+       * Does not handle: Controlling collection traversal, iteration order, or mutation of the source facts.
+       * Side effects: Computes an in-memory total from callback inputs without mutating records or performing I/O.
        */
       (total, repository) => total + emittedResultGraphFacts(repository),
       0,
@@ -404,12 +404,12 @@ function emittedWorkspaceGraphFacts(
 
 /*  A compact fallback is the invocation floor: one empty incomplete status. */
 /**
- * Assembles the isBudgetFallbackResult test value.
+ * Recognizes the compact incomplete result emitted when the graph budget is exhausted.
  *
  * Inputs: `member`.
- * Outputs: the fixture value returned by `isBudgetFallbackResult`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: none; it allocates only in-memory test data.
+ * Outputs: True only for the prescribed empty incomplete fallback shape.
+ * Does not handle: Explaining the exhaustion cause, validating other result fields, or changing the result.
+ * Side effects: Reads member fields without mutation or I/O.
  */
 function isBudgetFallbackResult(
   member: {
@@ -441,24 +441,24 @@ function isBudgetFallbackResult(
 }
 
 /**
- * Assembles the isBudgetFallbackMember test value.
+ * Applies the compact-fallback shape check to a deployment member result.
  *
  * Inputs: `member`.
- * Outputs: the fixture value returned by `isBudgetFallbackMember`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `isBudgetFallbackResult`.
+ * Outputs: The fallback-shape predicate result for this member.
+ * Does not handle: Locating a member, changing member data, or diagnosing budget consumption.
+ * Side effects: Calls `isBudgetFallbackResult`.
  */
 function isBudgetFallbackMember(member: ReturnType<typeof deploymentMember>): boolean {
   return isBudgetFallbackResult(member);
 }
 
 /**
- * Assembles the assertInvalidManifestProvenance test value.
+ * Asserts that malformed-manifest results are uniformly invalid and contain no fixture provenance.
  *
  * Inputs: `result`, `fixture`.
- * Outputs: the completion result produced by `assertInvalidManifestProvenance`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `assert.equal`, `result.repositories.every`, `result.deployments.every`, `JSON.stringify(result).includes`, `JSON.stringify`.
+ * Outputs: `void` after all invalid-status and redaction assertions pass.
+ * Does not handle: Repairing invalid results, validating a happy path, or suppressing assertion errors.
+ * Side effects: Reads/serializes the result and throws through strict assertions on violations.
  */
 function assertInvalidManifestProvenance(
   result: Awaited<ReturnType<typeof scanWorkspace>>,
@@ -466,22 +466,22 @@ function assertInvalidManifestProvenance(
 ): void {
   assert.equal(result.repositories.every(
     /**
-     * Tests the current repository against the requested condition.
-     *
-     * Inputs: `repository`.
-     * Outputs: the `repository.status === "invalid"` result consumed by `result.repositories.every`.
-     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-     * Side effects: none; it derives the current-item result.
+    * Tests the current repository against the requested condition.
+    *
+    * Inputs: `repository`.
+    * Outputs: the `repository.status === "invalid"` result consumed by `result.repositories.every`.
+     * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+     * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
      */
     (repository) => repository.status === "invalid"), true);
   assert.equal(result.deployments.every(
     /**
-     * Tests the current deployment against the requested condition.
-     *
-     * Inputs: `deployment`.
-     * Outputs: the `deployment.status === "invalid"` result consumed by `result.deployments.every`.
-     * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-     * Side effects: none; it derives the current-item result.
+    * Tests the current deployment against the requested condition.
+    *
+    * Inputs: `deployment`.
+    * Outputs: the `deployment.status === "invalid"` result consumed by `result.deployments.every`.
+     * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+     * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
      */
     (deployment) => deployment.status === "invalid"), true);
   assert.equal(JSON.stringify(result).includes(fixture.root), false);
@@ -502,10 +502,10 @@ test("workspace runtime scans an approved sibling repository through a canonical
     /**
      * Verifies “workspace runtime scans an approved sibling repository through a canonical manifest base”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `scanFixture`, `repository`, `assert.equal`, `api?.reconciliation.records.some`, `JSON.stringify(result).includes`, `JSON.stringify`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `scanFixture`, `repository`, `assert.equal`, `api?.reconciliation.records.some`, `JSON.stringify(result).includes`, `JSON.stringify`.
      */
     async (fixture) => {
     const result = await scanFixture(fixture);
@@ -515,12 +515,12 @@ test("workspace runtime scans an approved sibling repository through a canonical
     assert.equal(
       api?.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "demand" && record.key.name === "DATABASE_URL"` result consumed by `api?.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "demand" && record.key.name === "DATABASE_URL"` result consumed by `api?.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) => record.kind === "demand" && record.key.name === "DATABASE_URL",
       ),
@@ -545,10 +545,10 @@ test("duplicate keys aggregate only within an explicit shared deployment",
     /**
      * Verifies “duplicate keys aggregate only within an explicit shared deployment”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `scanFixture`, `deployment`, `assert.deepEqual`, `writeFixtureLayout`, `assert.equal`, `repository`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `scanFixture`, `deployment`, `assert.deepEqual`, `writeFixtureLayout`, `assert.equal`, `repository`.
      */
     async (fixture) => {
     const unrelated = await scanFixture(fixture);
@@ -722,10 +722,10 @@ test("workspace runtime rejects a request after its verified manifest file is re
     /**
      * Verifies “workspace runtime rejects a request after its verified manifest file is replaced”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `readLocalWorkspaceManifest`, `assert.fail`, `rename`, `join`, `writeFile`, `assertInvalidManifestProvenance`, including the fixture filesystem changes.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `readLocalWorkspaceManifest`, `assert.fail`, `rename`, `join`, `writeFile`, `assertInvalidManifestProvenance`, including the fixture filesystem changes.
      */
     async (fixture) => {
     const document = await readLocalWorkspaceManifest(fixture.manifestPath);
@@ -754,10 +754,10 @@ test("workspace runtime rejects a request after its manifest path is replaced by
     /**
      * Verifies “workspace runtime rejects a request after its manifest path is replaced by a symlink”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `readLocalWorkspaceManifest`, `assert.fail`, `join`, `writeFile`, `rm`, `symlink`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `readLocalWorkspaceManifest`, `assert.fail`, `join`, `writeFile`, `rm`, `symlink`.
      */
     async (fixture) => {
     const document = await readLocalWorkspaceManifest(fixture.manifestPath);
@@ -788,10 +788,10 @@ test("workspace runtime rejects a request after its verified canonical base is r
     /**
      * Verifies “workspace runtime rejects a request after its verified canonical base is replaced”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `readLocalWorkspaceManifest`, `assert.fail`, `rename`, `join`, `mkdir`, `writeFile`, including the fixture filesystem changes.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `readLocalWorkspaceManifest`, `assert.fail`, `rename`, `join`, `mkdir`, `writeFile`, including the fixture filesystem changes.
      */
     async (fixture) => {
     const document = await readLocalWorkspaceManifest(fixture.manifestPath);
@@ -821,10 +821,10 @@ test("workspace runtime rejects equal and nested canonical root aliases before s
     /**
      * Verifies “workspace runtime rejects equal and nested canonical root aliases before scanning”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `symlink`, `join`, `writeFile`, `JSON.stringify`, `readLocalWorkspaceManifest`, `assert.fail`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `symlink`, `join`, `writeFile`, `JSON.stringify`, `readLocalWorkspaceManifest`, `assert.fail`.
      */
     async (fixture) => {
     await symlink(fixture.repositoryRoots.api, join(fixture.root, "api-alias"), "dir");
@@ -853,12 +853,12 @@ test("workspace runtime rejects equal and nested canonical root aliases before s
     assert.deepEqual(
       result.repositories.map(
         /**
-         * Projects a report value from the current repository.
-         *
-         * Inputs: `repository`.
-         * Outputs: the `repository.status` result consumed by `result.repositories.map`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Projects a report value from the current repository.
+        *
+        * Inputs: `repository`.
+        * Outputs: the `repository.status` result consumed by `result.repositories.map`.
+         * Does not handle: Iterating the surrounding collection, validating sibling entries, or mutating source inputs.
+         * Side effects: Reads the current callback input and returns its projected in-memory value.
          */
         (repository) => repository.status),
       ["invalid", "invalid", "invalid"],
@@ -866,22 +866,22 @@ test("workspace runtime rejects equal and nested canonical root aliases before s
     assert.equal(
       result.repositories.every(
         /**
-         * Tests the current repository against the requested condition.
-         *
-         * Inputs: `repository`.
-         * Outputs: the `repository.diagnostics.some( (diagnostic) => diagnostic === "WORKSPACE_REPOSITORY_ROOT_CONFLICT", )` result consumed by `result.repositories.every`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current repository against the requested condition.
+        *
+        * Inputs: `repository`.
+        * Outputs: the `repository.diagnostics.some( (diagnostic) => diagnostic === "WORKSPACE_REPOSITORY_ROOT_CONFLICT", )` result consumed by `result.repositories.every`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (repository) =>
         repository.diagnostics.some(
           /**
-           * Tests the current diagnostic against the requested condition.
-           *
-           * Inputs: `diagnostic`.
-           * Outputs: the `diagnostic === "WORKSPACE_REPOSITORY_ROOT_CONFLICT"` result consumed by `repository.diagnostics.some`.
-           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-           * Side effects: none; it derives the current-item result.
+          * Tests the current diagnostic against the requested condition.
+          *
+          * Inputs: `diagnostic`.
+          * Outputs: the `diagnostic === "WORKSPACE_REPOSITORY_ROOT_CONFLICT"` result consumed by `repository.diagnostics.some`.
+           * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+           * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
            */
           (diagnostic) => diagnostic === "WORKSPACE_REPOSITORY_ROOT_CONFLICT",
         ),
@@ -906,10 +906,10 @@ test("canonical root indexing retains ancestor conflicts across prefix-like sibl
     /**
      * Verifies “canonical root indexing retains ancestor conflicts across prefix-like siblings”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `join`, `Promise.all`, `mkdir`, `symlink`, `writeFile`, `JSON.stringify`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `join`, `Promise.all`, `mkdir`, `symlink`, `writeFile`, `JSON.stringify`.
      */
     async (fixture) => {
     const ancestor = join(fixture.root, "root-prefix");
@@ -938,12 +938,12 @@ test("canonical root indexing retains ancestor conflicts across prefix-like sibl
     assert.deepEqual(
       result.repositories.map(
         /**
-         * Projects a report value from the current repository.
-         *
-         * Inputs: `repository`.
-         * Outputs: the `repository.status` result consumed by `result.repositories.map`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Projects a report value from the current repository.
+        *
+        * Inputs: `repository`.
+        * Outputs: the `repository.status` result consumed by `result.repositories.map`.
+         * Does not handle: Iterating the surrounding collection, validating sibling entries, or mutating source inputs.
+         * Side effects: Reads the current callback input and returns its projected in-memory value.
          */
         (repository) => repository.status),
       ["invalid", "complete", "invalid"],
@@ -965,32 +965,32 @@ test("request member attestation indexes 10,000 resolved roots without pairwise 
     /**
      * Verifies “request member attestation indexes 10,000 resolved roots without pairwise conflict scans”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `Array.from`, `Promise.all`, `ids.slice(start, start + 128).map`, `ids.slice`, `writeFile`, `JSON.stringify`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `Array.from`, `Promise.all`, `ids.slice(start, start + 128).map`, `ids.slice`, `writeFile`, `JSON.stringify`.
      */
     async (fixture) => {
     const count = 10_000;
     const ids = Array.from({ length: count },
       /**
-       * Constructs one generated fixture element.
-       *
-       * Inputs: `_`, `index`.
-       * Outputs: the `"scale-" + String(index)` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Constructs one generated fixture element.
+      *
+      * Inputs: `_`, `index`.
+      * Outputs: the `"scale-" + String(index)` result consumed by `Array.from`.
+       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+       * Side effects: Produces only the current in-memory fixture value.
        */
       (_, index) => "scale-" + String(index));
     for (let start = 0; start < ids.length; start += 128) {
       await Promise.all(ids.slice(start, start + 128).map(
         /**
-         * Projects a report value from the current id.
+         * Creates the resolved directory for one high-cardinality repository fixture.
          *
          * Inputs: `id`.
          * Outputs: the `mkdir(join(fixture.root, "scale", id), { recursive: true })` result consumed by `ids.slice(start, start + 128).map`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+         * Does not handle: Writing source files, updating the manifest, or handling a sibling ID.
+         * Side effects: Starts recursive directory creation under the test-owned fixture root.
          */
         (id) =>
         mkdir(join(fixture.root, "scale", id), { recursive: true }),
@@ -1000,12 +1000,12 @@ test("request member attestation indexes 10,000 resolved roots without pairwise 
       schemaVersion: "workspace-manifest/v2",
       repositories: ids.map(
         /**
-         * Projects a report value from the current id.
-         *
-         * Inputs: `id`.
-         * Outputs: the `({ id, root: "../scale/" + id })` result consumed by `ids.map`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Projects a report value from the current id.
+        *
+        * Inputs: `id`.
+        * Outputs: the `({ id, root: "../scale/" + id })` result consumed by `ids.map`.
+         * Does not handle: Iterating the surrounding collection, validating sibling entries, or mutating source inputs.
+         * Side effects: Reads the current callback input and returns its projected in-memory value.
          */
         (id) => ({ id, root: "../scale/" + id })),
       deployments: [],
@@ -1043,22 +1043,22 @@ test("invocation indexes 10,000 deployment declarations without repeated manifes
     /**
      * Verifies “invocation indexes 10,000 deployment declarations without repeated manifest search”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `Array.from`, `writeFile`, `JSON.stringify`, `deploymentIds.map`, `readLocalWorkspaceManifest`, `assert.fail`, including the fixture filesystem changes.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `Array.from`, `writeFile`, `JSON.stringify`, `deploymentIds.map`, `readLocalWorkspaceManifest`, `assert.fail`, including the fixture filesystem changes.
      */
     async (fixture) => {
     const count = 10_000;
     const deploymentIds = Array.from(
       { length: count },
       /**
-       * Constructs one generated fixture element.
-       *
-       * Inputs: `_`, `index`.
-       * Outputs: the `"deployment-index-" + String(index).padStart(4, "0")` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Constructs one generated fixture element.
+      *
+      * Inputs: `_`, `index`.
+      * Outputs: the `"deployment-index-" + String(index).padStart(4, "0")` result consumed by `Array.from`.
+       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+       * Side effects: Produces only the current in-memory fixture value.
        */
       (_, index) => "deployment-index-" + String(index).padStart(4, "0"),
     );
@@ -1067,12 +1067,12 @@ test("invocation indexes 10,000 deployment declarations without repeated manifes
       repositories: [{ id: "api", root: "../api" }],
       deployments: deploymentIds.map(
         /**
-         * Projects a report value from the current id.
-         *
-         * Inputs: `id`.
-         * Outputs: the `({ id, repositories: ["api"] })` result consumed by `deploymentIds.map`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Projects a report value from the current id.
+        *
+        * Inputs: `id`.
+        * Outputs: the `({ id, repositories: ["api"] })` result consumed by `deploymentIds.map`.
+         * Does not handle: Iterating the surrounding collection, validating sibling entries, or mutating source inputs.
+         * Side effects: Reads the current callback input and returns its projected in-memory value.
          */
         (id) => ({ id, repositories: ["api"] })),
     }), "utf8");
@@ -1113,10 +1113,10 @@ test("workspace shared keys require direct demand rather than finite dynamic pos
     /**
      * Verifies “workspace shared keys require direct demand rather than finite dynamic possibilities”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `writeFile`, `join`, `[ "declare const enabled: boolean;", 'const choice = enabled ? "DATABASE_URL" : `, `writeFixtureLayout`, `scanFixture`, `deployment`, including the fixture filesystem changes.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `writeFile`, `join`, `[ "declare const enabled: boolean;", 'const choice = enabled ? "DATABASE_URL" : `, `writeFixtureLayout`, `scanFixture`, `deployment`, including the fixture filesystem changes.
      */
     async (fixture) => {
     await writeFile(
@@ -1154,10 +1154,10 @@ test("one repository's parser uncertainty stays scoped to that repository and de
     /**
      * Verifies “one repository's parser uncertainty stays scoped to that repository and deployment”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `scanFixture`, `assert.equal`, `repository`, `deployment`, `assert.deepEqual`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `scanFixture`, `assert.equal`, `repository`, `deployment`, `assert.deepEqual`.
      */
     async (fixture) => {
     const result = await scanFixture(fixture);
@@ -1195,10 +1195,10 @@ test("a malformed deployment input is scoped to its deployment, not its code rep
     /**
      * Verifies “a malformed deployment input is scoped to its deployment, not its code repository”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `writeFile`, `join`, `scanFixture`, `repository`, `deployment`, `assert.equal`, including the fixture filesystem changes.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `writeFile`, `join`, `scanFixture`, `repository`, `deployment`, `assert.equal`, including the fixture filesystem changes.
      */
     async (fixture) => {
     await writeFile(
@@ -1217,12 +1217,12 @@ test("a malformed deployment input is scoped to its deployment, not its code rep
     assert.equal(
       deploymentMember(apiDeployment, "api")?.diagnostics.some(
         /**
-         * Tests the current diagnostic against the requested condition.
-         *
-         * Inputs: `diagnostic`.
-         * Outputs: the `diagnostic === "APP_LOCAL_INPUT_INVALID_JSON"` result consumed by `deploymentMember(apiDeployment, "api")?.diagnostics.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current diagnostic against the requested condition.
+        *
+        * Inputs: `diagnostic`.
+        * Outputs: the `diagnostic === "APP_LOCAL_INPUT_INVALID_JSON"` result consumed by `deploymentMember(apiDeployment, "api")?.diagnostics.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (diagnostic) => diagnostic === "APP_LOCAL_INPUT_INVALID_JSON",
       ),
@@ -1231,12 +1231,12 @@ test("a malformed deployment input is scoped to its deployment, not its code rep
     assert.equal(
       deploymentMember(apiDeployment, "api")?.reconciliation.scopeCoverage.some(
         /**
-         * Tests the current coverage against the requested condition.
-         *
-         * Inputs: `coverage`.
-         * Outputs: the `coverage.state === "incomplete"` result consumed by `deploymentMember(apiDeployment, "api")?.reconciliation.scopeCoverage.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current coverage against the requested condition.
+        *
+        * Inputs: `coverage`.
+        * Outputs: the `coverage.state === "incomplete"` result consumed by `deploymentMember(apiDeployment, "api")?.reconciliation.scopeCoverage.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (coverage) => coverage.state === "incomplete",
       ),
@@ -1260,10 +1260,10 @@ test("an oversized provisioning document is scoped incomplete and cannot support
     /**
      * Verifies “an oversized provisioning document is scoped incomplete and cannot support absence”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `new Array<unknown>(100_001).fill`, `Array`, `writeFile`, `join`, `JSON.stringify`, `scanFixture`, including the fixture filesystem changes.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `new Array<unknown>(100_001).fill`, `Array`, `writeFile`, `join`, `JSON.stringify`, `scanFixture`, including the fixture filesystem changes.
      */
     async (fixture) => {
     const sentinel = "TEST SENTINEL VALUE";
@@ -1289,12 +1289,12 @@ test("an oversized provisioning document is scoped incomplete and cannot support
     assert.equal(
       member.diagnostics.some(
         /**
-         * Tests the current diagnostic against the requested condition.
-         *
-         * Inputs: `diagnostic`.
-         * Outputs: the `String(diagnostic) === "APP_PROVISIONING_INPUT_ENTRY_LIMIT_EXCEEDED"` result consumed by `member.diagnostics.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current diagnostic against the requested condition.
+        *
+        * Inputs: `diagnostic`.
+        * Outputs: the `String(diagnostic) === "APP_PROVISIONING_INPUT_ENTRY_LIMIT_EXCEEDED"` result consumed by `member.diagnostics.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (diagnostic) => String(diagnostic) === "APP_PROVISIONING_INPUT_ENTRY_LIMIT_EXCEEDED",
       ),
@@ -1303,12 +1303,12 @@ test("an oversized provisioning document is scoped incomplete and cannot support
     assert.equal(
       member.reconciliation.scopeCoverage.some(
         /**
-         * Tests the current coverage against the requested condition.
-         *
-         * Inputs: `coverage`.
-         * Outputs: the `coverage.state === "incomplete"` result consumed by `member.reconciliation.scopeCoverage.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current coverage against the requested condition.
+        *
+        * Inputs: `coverage`.
+        * Outputs: the `coverage.state === "incomplete"` result consumed by `member.reconciliation.scopeCoverage.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (coverage) => coverage.state === "incomplete"),
       true,
@@ -1331,10 +1331,10 @@ test("unscoped inventory without a member-scoped provider binding stays unattrib
     /**
      * Verifies “unscoped inventory without a member-scoped provider binding stays unattributed”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `writeFile`, `join`, `JSON.stringify`, `scanFixture`, `repository`, `deployment`, including the fixture filesystem changes.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `writeFile`, `join`, `JSON.stringify`, `scanFixture`, `repository`, `deployment`, including the fixture filesystem changes.
      */
     async (fixture) => {
     await writeFile(
@@ -1364,12 +1364,12 @@ test("unscoped inventory without a member-scoped provider binding stays unattrib
     assert.equal(
       api?.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "inventory"` result consumed by `api?.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "inventory"` result consumed by `api?.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) => record.kind === "inventory"),
       false,
@@ -1378,12 +1378,12 @@ test("unscoped inventory without a member-scoped provider binding stays unattrib
     assert.equal(
       deploymentMember(apiDeployment, "api")?.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "unused-fixture-resource"` result consumed by `deploymentMember(apiDeployment, "api")?.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "unused-fixture-resource"` result consumed by `deploymentMember(apiDeployment, "api")?.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) =>
           record.kind === "inventory" &&
@@ -1394,12 +1394,12 @@ test("unscoped inventory without a member-scoped provider binding stays unattrib
     assert.equal(
       apiDeployment?.diagnostics.some(
         /**
-         * Tests the current diagnostic against the requested condition.
-         *
-         * Inputs: `diagnostic`.
-         * Outputs: the `diagnostic === "WORKSPACE_DEPLOYMENT_UNATTRIBUTED_INVENTORY"` result consumed by `apiDeployment?.diagnostics.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current diagnostic against the requested condition.
+        *
+        * Inputs: `diagnostic`.
+        * Outputs: the `diagnostic === "WORKSPACE_DEPLOYMENT_UNATTRIBUTED_INVENTORY"` result consumed by `apiDeployment?.diagnostics.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (diagnostic) => diagnostic === "WORKSPACE_DEPLOYMENT_UNATTRIBUTED_INVENTORY",
       ),
@@ -1422,10 +1422,10 @@ test("workspace deployment closed-model verification uses the captured manifest 
     /**
      * Verifies “workspace deployment closed-model verification uses the captured manifest base after chdir”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `join`, `mkdir`, `writeFile`, `JSON.stringify`, `closedModelDocumentForWorkspaceRuntime`, `readLocalWorkspaceManifest`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `join`, `mkdir`, `writeFile`, `JSON.stringify`, `closedModelDocumentForWorkspaceRuntime`, `readLocalWorkspaceManifest`.
      */
     async (fixture) => {
     const manifestPath = join(fixture.root, "workspace.jsonc");
@@ -1478,12 +1478,12 @@ test("workspace deployment closed-model verification uses the captured manifest 
       assert.equal(
         apiDeployment?.diagnostics.some(
           /**
-           * Tests the current diagnostic against the requested condition.
-           *
-           * Inputs: `diagnostic`.
-           * Outputs: the `String(diagnostic) === "APP_CLOSED_MODEL_ROOT_UNVERIFIED"` result consumed by `apiDeployment?.diagnostics.some`.
-           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-           * Side effects: none; it derives the current-item result.
+          * Tests the current diagnostic against the requested condition.
+          *
+          * Inputs: `diagnostic`.
+          * Outputs: the `String(diagnostic) === "APP_CLOSED_MODEL_ROOT_UNVERIFIED"` result consumed by `apiDeployment?.diagnostics.some`.
+           * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+           * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
            */
           (diagnostic) => String(diagnostic) === "APP_CLOSED_MODEL_ROOT_UNVERIFIED",
         ),
@@ -1509,10 +1509,10 @@ test("multi-member closed provisioning remains independently verifiable after ch
     /**
      * Verifies “multi-member closed provisioning remains independently verifiable after chdir”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `writeFixtureLayout`, `join`, `mkdir`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `writeFixtureLayout`, `join`, `mkdir`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`.
      */
     async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
@@ -1599,12 +1599,12 @@ test("multi-member closed provisioning remains independently verifiable after ch
       assert.equal(shared.status, "complete");
       assert.deepEqual(shared.members.map(
         /**
-         * Projects a report value from the current member.
-         *
-         * Inputs: `member`.
-         * Outputs: the `member.repositoryId` result consumed by `shared.members.map`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Projects a report value from the current member.
+        *
+        * Inputs: `member`.
+        * Outputs: the `member.repositoryId` result consumed by `shared.members.map`.
+         * Does not handle: Iterating the surrounding collection, validating sibling entries, or mutating source inputs.
+         * Side effects: Reads the current callback input and returns its projected in-memory value.
          */
         (member) => member.repositoryId), ["api", "worker"]);
       for (const member of shared.members) {
@@ -1612,12 +1612,12 @@ test("multi-member closed provisioning remains independently verifiable after ch
         assert.equal(
           member.diagnostics.some(
             /**
-             * Tests the current diagnostic against the requested condition.
-             *
-             * Inputs: `diagnostic`.
-             * Outputs: the `diagnostic === "APP_CLOSED_MODEL_ROOT_UNVERIFIED"` result consumed by `member.diagnostics.some`.
-             * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-             * Side effects: none; it derives the current-item result.
+            * Tests the current diagnostic against the requested condition.
+            *
+            * Inputs: `diagnostic`.
+            * Outputs: the `diagnostic === "APP_CLOSED_MODEL_ROOT_UNVERIFIED"` result consumed by `member.diagnostics.some`.
+             * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+             * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
              */
             (diagnostic) => diagnostic === "APP_CLOSED_MODEL_ROOT_UNVERIFIED",
           ),
@@ -1639,12 +1639,12 @@ test("multi-member closed provisioning remains independently verifiable after ch
         assert.equal(
           member.diagnostics.some(
             /**
-             * Tests the current diagnostic against the requested condition.
-             *
-             * Inputs: `diagnostic`.
-             * Outputs: the `diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED"` result consumed by `member.diagnostics.some`.
-             * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-             * Side effects: none; it derives the current-item result.
+            * Tests the current diagnostic against the requested condition.
+            *
+            * Inputs: `diagnostic`.
+            * Outputs: the `diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED"` result consumed by `member.diagnostics.some`.
+             * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+             * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
              */
             (diagnostic) => diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED",
           ),
@@ -1653,12 +1653,12 @@ test("multi-member closed provisioning remains independently verifiable after ch
         assert.equal(
           member.reconciliation.records.some(
             /**
-             * Tests the current record against the requested condition.
-             *
-             * Inputs: `record`.
-             * Outputs: the `record.kind === "demand" && record.inventory === "missing-under-declared-model"` result consumed by `member.reconciliation.records.some`.
-             * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-             * Side effects: none; it derives the current-item result.
+            * Tests the current record against the requested condition.
+            *
+            * Inputs: `record`.
+            * Outputs: the `record.kind === "demand" && record.inventory === "missing-under-declared-model"` result consumed by `member.reconciliation.records.some`.
+             * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+             * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
              */
             (record) =>
               record.kind === "demand" &&
@@ -1697,12 +1697,12 @@ test("multi-member closed provisioning remains independently verifiable after ch
         assert.equal(
           member.diagnostics.some(
             /**
-             * Tests the current diagnostic against the requested condition.
-             *
-             * Inputs: `diagnostic`.
-             * Outputs: the `diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED"` result consumed by `member.diagnostics.some`.
-             * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-             * Side effects: none; it derives the current-item result.
+            * Tests the current diagnostic against the requested condition.
+            *
+            * Inputs: `diagnostic`.
+            * Outputs: the `diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED"` result consumed by `member.diagnostics.some`.
+             * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+             * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
              */
             (diagnostic) => diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED",
           ),
@@ -1711,12 +1711,12 @@ test("multi-member closed provisioning remains independently verifiable after ch
         assert.equal(
           member.reconciliation.records.some(
             /**
-             * Tests the current record against the requested condition.
-             *
-             * Inputs: `record`.
-             * Outputs: the `record.kind === "demand" && record.inventory === "missing-under-declared-model"` result consumed by `member.reconciliation.records.some`.
-             * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-             * Side effects: none; it derives the current-item result.
+            * Tests the current record against the requested condition.
+            *
+            * Inputs: `record`.
+            * Outputs: the `record.kind === "demand" && record.inventory === "missing-under-declared-model"` result consumed by `member.reconciliation.records.some`.
+             * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+             * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
              */
             (record) =>
               record.kind === "demand" &&
@@ -1745,10 +1745,10 @@ test("multi-repository deployment keeps exact provisioning in independent reposi
     /**
      * Verifies “multi-repository deployment keeps exact provisioning in independent repository-qualified partitions”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `writeFixtureLayout`, `memberExecutionScope`, `writeFile`, `JSON.stringify`, `writeDeploymentProvisioning`, `bindingManifest`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `writeFixtureLayout`, `memberExecutionScope`, `writeFile`, `JSON.stringify`, `writeDeploymentProvisioning`, `bindingManifest`.
      */
     async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
@@ -1802,12 +1802,12 @@ test("multi-repository deployment keeps exact provisioning in independent reposi
     assert.equal(shared?.status, "complete");
     assert.deepEqual(shared?.members.map(
       /**
-       * Projects a report value from the current member.
-       *
-       * Inputs: `member`.
-       * Outputs: the `member.repositoryId` result consumed by `shared?.members.map`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Projects a report value from the current member.
+      *
+      * Inputs: `member`.
+      * Outputs: the `member.repositoryId` result consumed by `shared?.members.map`.
+       * Does not handle: Iterating the surrounding collection, validating sibling entries, or mutating source inputs.
+       * Side effects: Reads the current callback input and returns its projected in-memory value.
        */
       (member) => member.repositoryId), ["api", "worker"]);
     assert.deepEqual(shared?.sharedKeys, [
@@ -1818,12 +1818,12 @@ test("multi-repository deployment keeps exact provisioning in independent reposi
     assert.equal(
       api?.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "demand" && record.binding === "exact-declared" && record.inventory === "bound"` result consumed by `api?.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "demand" && record.binding === "exact-declared" && record.inventory === "bound"` result consumed by `api?.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) =>
           record.kind === "demand" &&
@@ -1835,12 +1835,12 @@ test("multi-repository deployment keeps exact provisioning in independent reposi
     assert.equal(
       worker?.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "demand" && record.binding === "exact-declared" && record.inventory === "bound"` result consumed by `worker?.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "demand" && record.binding === "exact-declared" && record.inventory === "bound"` result consumed by `worker?.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) =>
           record.kind === "demand" &&
@@ -1852,12 +1852,12 @@ test("multi-repository deployment keeps exact provisioning in independent reposi
     assert.equal(
       api?.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "worker-database"` result consumed by `api?.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "worker-database"` result consumed by `api?.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) =>
           record.kind === "inventory" &&
@@ -1868,12 +1868,12 @@ test("multi-repository deployment keeps exact provisioning in independent reposi
     assert.equal(
       api?.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "outsider-database"` result consumed by `api?.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "outsider-database"` result consumed by `api?.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) =>
           record.kind === "inventory" &&
@@ -1884,12 +1884,12 @@ test("multi-repository deployment keeps exact provisioning in independent reposi
     assert.equal(
       worker?.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "outsider-database"` result consumed by `worker?.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "outsider-database"` result consumed by `worker?.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) =>
           record.kind === "inventory" &&
@@ -1900,12 +1900,12 @@ test("multi-repository deployment keeps exact provisioning in independent reposi
     assert.equal(
       worker?.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "api-database"` result consumed by `worker?.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "api-database"` result consumed by `worker?.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) =>
           record.kind === "inventory" &&
@@ -1920,20 +1920,20 @@ test("an explicitly shared provider resource remains bound in each exact member 
   /**
    * Verifies “an explicitly shared provider resource remains bound in each exact member partition”.
    *
-   * Inputs: no arguments.
-   * Outputs: a promise that settles after its awaited workspace operations and assertions.
-   * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-   * Side effects: runs `withWorkspaceFixture`.
+  * Inputs: no arguments.
+  * Outputs: a promise that settles after its awaited workspace operations and assertions.
+   * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+  * Side effects: runs `withWorkspaceFixture`.
    */
   async () => {
   await withWorkspaceFixture(
     /**
      * Verifies “an explicitly shared provider resource remains bound in each exact member partition”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `memberExecutionScope`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `memberExecutionScope`.
      */
     async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
@@ -1961,12 +1961,12 @@ test("an explicitly shared provider resource remains bound in each exact member 
       assert.equal(
         member.reconciliation.records.some(
           /**
-           * Tests the current record against the requested condition.
-           *
-           * Inputs: `record`.
-           * Outputs: the `record.kind === "demand" && record.binding === "exact-declared" && record.inventory === "bound"` result consumed by `member.reconciliation.records.some`.
-           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-           * Side effects: none; it derives the current-item result.
+          * Tests the current record against the requested condition.
+          *
+          * Inputs: `record`.
+          * Outputs: the `record.kind === "demand" && record.binding === "exact-declared" && record.inventory === "bound"` result consumed by `member.reconciliation.records.some`.
+           * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+           * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
            */
           (record) =>
             record.kind === "demand" &&
@@ -1978,12 +1978,12 @@ test("an explicitly shared provider resource remains bound in each exact member 
       assert.equal(
         member.diagnostics.some(
           /**
-           * Tests the current diagnostic against the requested condition.
-           *
-           * Inputs: `diagnostic`.
-           * Outputs: the `diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED"` result consumed by `member.diagnostics.some`.
-           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-           * Side effects: none; it derives the current-item result.
+          * Tests the current diagnostic against the requested condition.
+          *
+          * Inputs: `diagnostic`.
+          * Outputs: the `diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED"` result consumed by `member.diagnostics.some`.
+           * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+           * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
            */
           (diagnostic) => diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED",
         ),
@@ -1997,20 +1997,20 @@ test("contradictory inventory ownership makes only listed member partitions inco
   /**
    * Verifies “contradictory inventory ownership makes only listed member partitions inconclusive”.
    *
-   * Inputs: no arguments.
-   * Outputs: a promise that settles after its awaited workspace operations and assertions.
-   * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-   * Side effects: runs `withWorkspaceFixture`.
+  * Inputs: no arguments.
+  * Outputs: a promise that settles after its awaited workspace operations and assertions.
+   * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+  * Side effects: runs `withWorkspaceFixture`.
    */
   async () => {
   await withWorkspaceFixture(
     /**
      * Verifies “contradictory inventory ownership makes only listed member partitions inconclusive”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `memberExecutionScope`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `memberExecutionScope`.
      */
     async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
@@ -2041,12 +2041,12 @@ test("contradictory inventory ownership makes only listed member partitions inco
       assert.equal(
         member?.diagnostics.some(
           /**
-           * Tests the current diagnostic against the requested condition.
-           *
-           * Inputs: `diagnostic`.
-           * Outputs: the `diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED"` result consumed by `member?.diagnostics.some`.
-           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-           * Side effects: none; it derives the current-item result.
+          * Tests the current diagnostic against the requested condition.
+          *
+          * Inputs: `diagnostic`.
+          * Outputs: the `diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED"` result consumed by `member?.diagnostics.some`.
+           * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+           * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
            */
           (diagnostic) => diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED",
         ),
@@ -2055,12 +2055,12 @@ test("contradictory inventory ownership makes only listed member partitions inco
       assert.equal(
         member?.reconciliation.records.some(
           /**
-           * Tests the current record against the requested condition.
-           *
-           * Inputs: `record`.
-           * Outputs: the `record.kind === "demand" && record.disposition === "inconclusive"` result consumed by `member?.reconciliation.records.some`.
-           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-           * Side effects: none; it derives the current-item result.
+          * Tests the current record against the requested condition.
+          *
+          * Inputs: `record`.
+          * Outputs: the `record.kind === "demand" && record.disposition === "inconclusive"` result consumed by `member?.reconciliation.records.some`.
+           * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+           * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
            */
           (record) => record.kind === "demand" && record.disposition === "inconclusive",
         ),
@@ -2069,12 +2069,12 @@ test("contradictory inventory ownership makes only listed member partitions inco
       assert.equal(
         member?.reconciliation.records.some(
           /**
-           * Tests the current record against the requested condition.
-           *
-           * Inputs: `record`.
-           * Outputs: the `record.kind === "inventory" && record.inventory === "inventory-listed-no-static-read"` result consumed by `member?.reconciliation.records.some`.
-           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-           * Side effects: none; it derives the current-item result.
+          * Tests the current record against the requested condition.
+          *
+          * Inputs: `record`.
+          * Outputs: the `record.kind === "inventory" && record.inventory === "inventory-listed-no-static-read"` result consumed by `member?.reconciliation.records.some`.
+           * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+           * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
            */
           (record) => record.kind === "inventory" && record.inventory === "inventory-listed-no-static-read",
         ),
@@ -2088,20 +2088,20 @@ test("a dynamic binding candidate cannot make unscoped inventory shared across m
   /**
    * Verifies “a dynamic binding candidate cannot make unscoped inventory shared across members”.
    *
-   * Inputs: no arguments.
-   * Outputs: a promise that settles after its awaited workspace operations and assertions.
-   * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-   * Side effects: runs `withWorkspaceFixture`.
+  * Inputs: no arguments.
+  * Outputs: a promise that settles after its awaited workspace operations and assertions.
+   * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+  * Side effects: runs `withWorkspaceFixture`.
    */
   async () => {
   await withWorkspaceFixture(
     /**
      * Verifies “a dynamic binding candidate cannot make unscoped inventory shared across members”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `unscopedInventoryItem`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `unscopedInventoryItem`.
      */
     async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
@@ -2122,12 +2122,12 @@ test("a dynamic binding candidate cannot make unscoped inventory shared across m
     assert.equal(
       api.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "demand" && record.binding === "dynamic"` result consumed by `api.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "demand" && record.binding === "dynamic"` result consumed by `api.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) => record.kind === "demand" && record.binding === "dynamic",
       ),
@@ -2136,12 +2136,12 @@ test("a dynamic binding candidate cannot make unscoped inventory shared across m
     assert.equal(
       api.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "shared-database"` result consumed by `api.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "shared-database"` result consumed by `api.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) =>
           record.kind === "inventory" &&
@@ -2152,12 +2152,12 @@ test("a dynamic binding candidate cannot make unscoped inventory shared across m
     assert.equal(
       worker.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "demand" && record.binding === "exact-declared" && record.inventory === "bound"` result consumed by `worker.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "demand" && record.binding === "exact-declared" && record.inventory === "bound"` result consumed by `worker.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) =>
           record.kind === "demand" &&
@@ -2173,20 +2173,20 @@ test("a dynamic binding competitor prevents an exact candidate from proving a bo
   /**
    * Verifies “a dynamic binding competitor prevents an exact candidate from proving a bound member relation”.
    *
-   * Inputs: no arguments.
-   * Outputs: a promise that settles after its awaited workspace operations and assertions.
-   * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-   * Side effects: runs `withWorkspaceFixture`.
+  * Inputs: no arguments.
+  * Outputs: a promise that settles after its awaited workspace operations and assertions.
+   * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+  * Side effects: runs `withWorkspaceFixture`.
    */
   async () => {
   await withWorkspaceFixture(
     /**
      * Verifies “a dynamic binding competitor prevents an exact candidate from proving a bound member relation”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `unscopedInventoryItem`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `unscopedInventoryItem`.
      */
     async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
@@ -2228,12 +2228,12 @@ test("a dynamic binding competitor prevents an exact candidate from proving a bo
     assert.equal(
       api.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "demand" && record.binding === "dynamic" && record.disposition === "inconclusive"` result consumed by `api.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "demand" && record.binding === "dynamic" && record.disposition === "inconclusive"` result consumed by `api.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) =>
           record.kind === "demand" &&
@@ -2245,12 +2245,12 @@ test("a dynamic binding competitor prevents an exact candidate from proving a bo
     assert.equal(
       api.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "demand" && record.inventory === "bound"` result consumed by `api.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "demand" && record.inventory === "bound"` result consumed by `api.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) => record.kind === "demand" && record.inventory === "bound",
       ),
@@ -2259,12 +2259,12 @@ test("a dynamic binding competitor prevents an exact candidate from proving a bo
     assert.equal(
       api.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "api-exact-database"` result consumed by `api.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "api-exact-database"` result consumed by `api.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) =>
           record.kind === "inventory" &&
@@ -2279,20 +2279,20 @@ test("an unknown binding scope makes only its potentially affected member inconc
   /**
    * Verifies “an unknown binding scope makes only its potentially affected member inconclusive”.
    *
-   * Inputs: no arguments.
-   * Outputs: a promise that settles after its awaited workspace operations and assertions.
-   * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-   * Side effects: runs `withWorkspaceFixture`.
+  * Inputs: no arguments.
+  * Outputs: a promise that settles after its awaited workspace operations and assertions.
+   * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+  * Side effects: runs `withWorkspaceFixture`.
    */
   async () => {
   await withWorkspaceFixture(
     /**
      * Verifies “an unknown binding scope makes only its potentially affected member inconclusive”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `inventoryItem`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `inventoryItem`.
      */
     async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
@@ -2341,12 +2341,12 @@ test("an unknown binding scope makes only its potentially affected member inconc
     assert.equal(
       api.diagnostics.some(
         /**
-         * Tests the current diagnostic against the requested condition.
-         *
-         * Inputs: `diagnostic`.
-         * Outputs: the `diagnostic === "WORKSPACE_MEMBER_BINDING_OWNERSHIP_UNRESOLVED"` result consumed by `api.diagnostics.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current diagnostic against the requested condition.
+        *
+        * Inputs: `diagnostic`.
+        * Outputs: the `diagnostic === "WORKSPACE_MEMBER_BINDING_OWNERSHIP_UNRESOLVED"` result consumed by `api.diagnostics.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (diagnostic) => diagnostic === "WORKSPACE_MEMBER_BINDING_OWNERSHIP_UNRESOLVED",
       ),
@@ -2355,12 +2355,12 @@ test("an unknown binding scope makes only its potentially affected member inconc
     assert.equal(
       api.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "demand" && record.disposition === "inconclusive"` result consumed by `api.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "demand" && record.disposition === "inconclusive"` result consumed by `api.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) => record.kind === "demand" && record.disposition === "inconclusive",
       ),
@@ -2373,12 +2373,12 @@ test("an unknown binding scope makes only its potentially affected member inconc
     assert.equal(
       worker.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "demand" && record.inventory === "bound"` result consumed by `worker.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "demand" && record.inventory === "bound"` result consumed by `worker.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) => record.kind === "demand" && record.inventory === "bound",
       ),
@@ -2391,20 +2391,20 @@ test("a partial binding selector cannot turn unscoped inventory into an exact me
   /**
    * Verifies “a partial binding selector cannot turn unscoped inventory into an exact member binding”.
    *
-   * Inputs: no arguments.
-   * Outputs: a promise that settles after its awaited workspace operations and assertions.
-   * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-   * Side effects: runs `withWorkspaceFixture`.
+  * Inputs: no arguments.
+  * Outputs: a promise that settles after its awaited workspace operations and assertions.
+   * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+  * Side effects: runs `withWorkspaceFixture`.
    */
   async () => {
   await withWorkspaceFixture(
     /**
      * Verifies “a partial binding selector cannot turn unscoped inventory into an exact member binding”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `unscopedInventoryItem`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `unscopedInventoryItem`.
      */
     async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
@@ -2435,12 +2435,12 @@ test("a partial binding selector cannot turn unscoped inventory into an exact me
     assert.equal(
       shared.diagnostics.some(
         /**
-         * Tests the current diagnostic against the requested condition.
-         *
-         * Inputs: `diagnostic`.
-         * Outputs: the `diagnostic === "WORKSPACE_DEPLOYMENT_UNATTRIBUTED_INVENTORY"` result consumed by `shared.diagnostics.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current diagnostic against the requested condition.
+        *
+        * Inputs: `diagnostic`.
+        * Outputs: the `diagnostic === "WORKSPACE_DEPLOYMENT_UNATTRIBUTED_INVENTORY"` result consumed by `shared.diagnostics.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (diagnostic) => diagnostic === "WORKSPACE_DEPLOYMENT_UNATTRIBUTED_INVENTORY",
       ),
@@ -2449,12 +2449,12 @@ test("a partial binding selector cannot turn unscoped inventory into an exact me
     assert.equal(
       api.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "demand" && record.inventory === "bound"` result consumed by `api.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "demand" && record.inventory === "bound"` result consumed by `api.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) => record.kind === "demand" && record.inventory === "bound",
       ),
@@ -2463,12 +2463,12 @@ test("a partial binding selector cannot turn unscoped inventory into an exact me
     assert.equal(
       api.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "demand" && record.binding === "unresolved"` result consumed by `api.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "demand" && record.binding === "unresolved"` result consumed by `api.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) => record.kind === "demand" && record.binding === "unresolved",
       ),
@@ -2478,12 +2478,12 @@ test("a partial binding selector cannot turn unscoped inventory into an exact me
     assert.equal(
       worker.diagnostics.some(
         /**
-         * Tests the current diagnostic against the requested condition.
-         *
-         * Inputs: `diagnostic`.
-         * Outputs: the `diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED"` result consumed by `worker.diagnostics.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current diagnostic against the requested condition.
+        *
+        * Inputs: `diagnostic`.
+        * Outputs: the `diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED"` result consumed by `worker.diagnostics.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (diagnostic) => diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED",
       ),
@@ -2496,20 +2496,20 @@ test("a shadowed binding cannot claim an otherwise unscoped inventory item",
   /**
    * Verifies “a shadowed binding cannot claim an otherwise unscoped inventory item”.
    *
-   * Inputs: no arguments.
-   * Outputs: a promise that settles after its awaited workspace operations and assertions.
-   * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-   * Side effects: runs `withWorkspaceFixture`.
+  * Inputs: no arguments.
+  * Outputs: a promise that settles after its awaited workspace operations and assertions.
+   * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+  * Side effects: runs `withWorkspaceFixture`.
    */
   async () => {
   await withWorkspaceFixture(
     /**
      * Verifies “a shadowed binding cannot claim an otherwise unscoped inventory item”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `unscopedInventoryItem`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `unscopedInventoryItem`.
      */
     async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
@@ -2552,12 +2552,12 @@ test("a shadowed binding cannot claim an otherwise unscoped inventory item",
     assert.equal(
       shared.diagnostics.some(
         /**
-         * Tests the current diagnostic against the requested condition.
-         *
-         * Inputs: `diagnostic`.
-         * Outputs: the `diagnostic === "WORKSPACE_DEPLOYMENT_UNATTRIBUTED_INVENTORY"` result consumed by `shared.diagnostics.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current diagnostic against the requested condition.
+        *
+        * Inputs: `diagnostic`.
+        * Outputs: the `diagnostic === "WORKSPACE_DEPLOYMENT_UNATTRIBUTED_INVENTORY"` result consumed by `shared.diagnostics.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (diagnostic) => diagnostic === "WORKSPACE_DEPLOYMENT_UNATTRIBUTED_INVENTORY",
       ),
@@ -2566,12 +2566,12 @@ test("a shadowed binding cannot claim an otherwise unscoped inventory item",
     assert.equal(
       api.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "demand" && record.inventory === "bound"` result consumed by `api.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "demand" && record.inventory === "bound"` result consumed by `api.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) =>
           record.kind === "demand" && record.inventory === "bound",
@@ -2581,12 +2581,12 @@ test("a shadowed binding cannot claim an otherwise unscoped inventory item",
     assert.equal(
       api.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "api-shadowed-database"` result consumed by `api.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "api-shadowed-database"` result consumed by `api.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) =>
           record.kind === "inventory" &&
@@ -2601,20 +2601,20 @@ test("mismatched inventory authority cannot become a cross-member bound relation
   /**
    * Verifies “mismatched inventory authority cannot become a cross-member bound relation”.
    *
-   * Inputs: no arguments.
-   * Outputs: a promise that settles after its awaited workspace operations and assertions.
-   * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-   * Side effects: runs `withWorkspaceFixture`.
+  * Inputs: no arguments.
+  * Outputs: a promise that settles after its awaited workspace operations and assertions.
+   * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+  * Side effects: runs `withWorkspaceFixture`.
    */
   async () => {
   await withWorkspaceFixture(
     /**
      * Verifies “mismatched inventory authority cannot become a cross-member bound relation”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `inventoryItem`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `inventoryItem`.
      */
     async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
@@ -2638,12 +2638,12 @@ test("mismatched inventory authority cannot become a cross-member bound relation
     assert.equal(
       api?.diagnostics.some(
         /**
-         * Tests the current diagnostic against the requested condition.
-         *
-         * Inputs: `diagnostic`.
-         * Outputs: the `diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED"` result consumed by `api?.diagnostics.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current diagnostic against the requested condition.
+        *
+        * Inputs: `diagnostic`.
+        * Outputs: the `diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED"` result consumed by `api?.diagnostics.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (diagnostic) => diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED",
       ),
@@ -2652,12 +2652,12 @@ test("mismatched inventory authority cannot become a cross-member bound relation
     assert.equal(
       api?.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "demand" && record.inventory === "bound"` result consumed by `api?.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "demand" && record.inventory === "bound"` result consumed by `api?.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) =>
           record.kind === "demand" &&
@@ -2668,12 +2668,12 @@ test("mismatched inventory authority cannot become a cross-member bound relation
     assert.equal(
       api?.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "demand" && record.disposition === "inconclusive"` result consumed by `api?.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "demand" && record.disposition === "inconclusive"` result consumed by `api?.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) => record.kind === "demand" && record.disposition === "inconclusive",
       ),
@@ -2697,10 +2697,10 @@ test("a broken deployment member does not erase an independently reconciled sibl
     /**
      * Verifies “a broken deployment member does not erase an independently reconciled sibling”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `inventoryItem`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `inventoryItem`.
      */
     async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
@@ -2731,12 +2731,12 @@ test("a broken deployment member does not erase an independently reconciled sibl
     assert.equal(
       api?.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "demand" && record.inventory === "bound"` result consumed by `api?.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "demand" && record.inventory === "bound"` result consumed by `api?.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) => record.kind === "demand" && record.inventory === "bound",
       ),
@@ -2759,10 +2759,10 @@ test("an unresolved deployment root does not erase a valid sibling partition",
     /**
      * Verifies “an unresolved deployment root does not erase a valid sibling partition”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `join`, `mkdir`, `Promise.all`, `writeFile`, `JSON.stringify`, `bindingManifest`, including the fixture filesystem changes.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `join`, `mkdir`, `Promise.all`, `writeFile`, `JSON.stringify`, `bindingManifest`, including the fixture filesystem changes.
      */
     async (fixture) => {
     const inputRoot = join(fixture.infraRoot, "root-isolation");
@@ -2820,12 +2820,12 @@ test("an unresolved deployment root does not erase a valid sibling partition",
     assert.equal(
       missing.diagnostics.some(
         /**
-         * Tests the current diagnostic against the requested condition.
-         *
-         * Inputs: `diagnostic`.
-         * Outputs: the `diagnostic === "WORKSPACE_REPOSITORY_ROOT_UNAVAILABLE"` result consumed by `missing.diagnostics.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current diagnostic against the requested condition.
+        *
+        * Inputs: `diagnostic`.
+        * Outputs: the `diagnostic === "WORKSPACE_REPOSITORY_ROOT_UNAVAILABLE"` result consumed by `missing.diagnostics.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (diagnostic) => diagnostic === "WORKSPACE_REPOSITORY_ROOT_UNAVAILABLE",
       ),
@@ -2848,10 +2848,10 @@ test("one repository can participate in separate deployments without provisionin
     /**
      * Verifies “one repository can participate in separate deployments without provisioning or source-snapshot merge”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `Promise.all`, `mkdir`, `join`, `writeFile`, `JSON.stringify`, `deploymentWithMemberScope`, including the fixture filesystem changes.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `Promise.all`, `mkdir`, `join`, `writeFile`, `JSON.stringify`, `deploymentWithMemberScope`, including the fixture filesystem changes.
      */
     async (fixture) => {
     await Promise.all([
@@ -2891,12 +2891,12 @@ test("one repository can participate in separate deployments without provisionin
     assert.equal(
       first?.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "first-database"` result consumed by `first?.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "first-database"` result consumed by `first?.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) => record.kind === "inventory" && record.providerResourceId.canonicalId === "first-database",
       ),
@@ -2905,12 +2905,12 @@ test("one repository can participate in separate deployments without provisionin
     assert.equal(
       first?.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "second-database"` result consumed by `first?.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "second-database"` result consumed by `first?.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) => record.kind === "inventory" && record.providerResourceId.canonicalId === "second-database",
       ),
@@ -2919,12 +2919,12 @@ test("one repository can participate in separate deployments without provisionin
     assert.equal(
       second?.reconciliation.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "second-database"` result consumed by `second?.reconciliation.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "second-database"` result consumed by `second?.reconciliation.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) => record.kind === "inventory" && record.providerResourceId.canonicalId === "second-database",
       ),
@@ -2952,10 +2952,10 @@ test("workspace runtime exposes the exact narrow N5 port shape",
     /**
      * Verifies “workspace runtime exposes the exact narrow N5 port shape”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `readLocalWorkspaceManifest`, `assert.fail`, `port.scan`, `assert.equal`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `readLocalWorkspaceManifest`, `assert.fail`, `port.scan`, `assert.equal`.
      */
     async (fixture) => {
     const document = await readLocalWorkspaceManifest(fixture.manifestPath);
@@ -2982,42 +2982,42 @@ test("runtime deployment preparation bounds broad binding and inventory fanout",
     /**
      * Verifies “runtime deployment preparation bounds broad binding and inventory fanout”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `Array.from`, `Promise.all`, `repositoryIds.map`, `["binding-fanout", "inventory-fanout"].map`, `writeFile`, `JSON.stringify`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `Array.from`, `Promise.all`, `repositoryIds.map`, `["binding-fanout", "inventory-fanout"].map`, `writeFile`, `JSON.stringify`.
      */
     async (fixture) => {
     const memberCount = 100;
     const candidateCount = 1_001;
     const repositoryIds = Array.from({ length: memberCount },
       /**
-       * Constructs one generated fixture element.
-       *
-       * Inputs: `_`, `index`.
-       * Outputs: the `"fanout-" + String(index)` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Constructs one generated fixture element.
+      *
+      * Inputs: `_`, `index`.
+      * Outputs: the `"fanout-" + String(index)` result consumed by `Array.from`.
+       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+       * Side effects: Produces only the current in-memory fixture value.
        */
       (_, index) => "fanout-" + String(index));
     await Promise.all(repositoryIds.map(
       /**
-       * Projects a report value from the current id.
+       * Creates one repository root used by the broad-fanout provisioning fixture.
        *
        * Inputs: `id`.
        * Outputs: the `mkdir(join(fixture.root, id), { recursive: true })` result consumed by `repositoryIds.map`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+       * Does not handle: Writing the repository source, defining scopes, or creating another root.
+       * Side effects: Starts recursive directory creation below the test fixture root.
        */
       (id) => mkdir(join(fixture.root, id), { recursive: true })));
     const memberScopes = repositoryIds.map(
       /**
-       * Projects a report value from the current index.
-       *
-       * Inputs: `repositoryId`, `index`.
-       * Outputs: the `({ repositoryId, scope: { id: "fanout-runtime", componentId: "fanout-runtime", phase: "runtime", stage: { kind: "exact", values: ["fanout-stage-" + String(index)] }, channel: "environment", ` result consumed by `repositoryIds.map`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Projects a report value from the current index.
+      *
+      * Inputs: `repositoryId`, `index`.
+      * Outputs: the `({ repositoryId, scope: { id: "fanout-runtime", componentId: "fanout-runtime", phase: "runtime", stage: { kind: "exact", values: ["fanout-stage-" + String(index)] }, channel: "environment", ` result consumed by `repositoryIds.map`.
+       * Does not handle: Iterating the surrounding collection, validating sibling entries, or mutating source inputs.
+       * Side effects: Reads the current callback input and returns its projected in-memory value.
        */
       (repositoryId, index) => ({
       repositoryId,
@@ -3038,12 +3038,12 @@ test("runtime deployment preparation bounds broad binding and inventory fanout",
     };
     const deployments = ["binding-fanout", "inventory-fanout"].map(
       /**
-       * Projects a report value from the current id.
-       *
-       * Inputs: `id`.
-       * Outputs: the `({ id, repositories: repositoryIds, inputs: { bindings: "../infra/" + id + "/bindings.json", inventory: "../infra/" + id + "/inventory.json", memberScopes, }, })` result consumed by `["binding-fanout", "inventory-fanout"].map`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Projects a report value from the current id.
+      *
+      * Inputs: `id`.
+      * Outputs: the `({ id, repositories: repositoryIds, inputs: { bindings: "../infra/" + id + "/bindings.json", inventory: "../infra/" + id + "/inventory.json", memberScopes, }, })` result consumed by `["binding-fanout", "inventory-fanout"].map`.
+       * Does not handle: Iterating the surrounding collection, validating sibling entries, or mutating source inputs.
+       * Side effects: Reads the current callback input and returns its projected in-memory value.
        */
       (id) => ({
       id,
@@ -3060,12 +3060,12 @@ test("runtime deployment preparation bounds broad binding and inventory fanout",
         schemaVersion: "workspace-manifest/v2",
         repositories: repositoryIds.map(
           /**
-           * Projects a report value from the current id.
-           *
-           * Inputs: `id`.
-           * Outputs: the `({ id, root: "../" + id })` result consumed by `repositoryIds.map`.
-           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-           * Side effects: none; it derives the current-item result.
+          * Projects a report value from the current id.
+          *
+          * Inputs: `id`.
+          * Outputs: the `({ id, root: "../" + id })` result consumed by `repositoryIds.map`.
+           * Does not handle: Iterating the surrounding collection, validating sibling entries, or mutating source inputs.
+           * Side effects: Reads the current callback input and returns its projected in-memory value.
            */
           (id) => ({ id, root: "../" + id })),
         deployments,
@@ -3074,12 +3074,12 @@ test("runtime deployment preparation bounds broad binding and inventory fanout",
     );
     await Promise.all(deployments.map(
       /**
-       * Projects a report value from the current deployment.
+       * Writes the binding or inventory fanout documents for one declared deployment.
        *
        * Inputs: `deployment`.
        * Outputs: the `{ const directory = join(fixture.infraRoot, deployment.id); await mkdir(directory, { recursive: true }); const bindingCandidates = deployment.id === "binding-fanout" ? Array.from({ length: c` result consumed by `deployments.map`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+       * Does not handle: Updating the workspace manifest, scanning the deployment, or writing another deployment's documents.
+       * Side effects: Creates the deployment input directory and writes its bounded JSON fixture files.
        */
       async (deployment) => {
       const directory = join(fixture.infraRoot, deployment.id);
@@ -3087,12 +3087,12 @@ test("runtime deployment preparation bounds broad binding and inventory fanout",
       const bindingCandidates = deployment.id === "binding-fanout"
         ? Array.from({ length: candidateCount },
           /**
-           * Constructs one generated fixture element.
-           *
-           * Inputs: `_`, `index`.
-           * Outputs: the `bindingCandidate( "fanout", "binding-resource-" + String(index), "fixture-authority", broadScope, "exact", { kind: "all" }, String(index), )` result consumed by `Array.from`.
-           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-           * Side effects: none; it derives the current-item result.
+          * Constructs one generated fixture element.
+          *
+          * Inputs: `_`, `index`.
+          * Outputs: the `bindingCandidate( "fanout", "binding-resource-" + String(index), "fixture-authority", broadScope, "exact", { kind: "all" }, String(index), )` result consumed by `Array.from`.
+           * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+           * Side effects: Produces only the current in-memory fixture value.
            */
           (_, index) => bindingCandidate(
             "fanout",
@@ -3107,12 +3107,12 @@ test("runtime deployment preparation bounds broad binding and inventory fanout",
       const inventoryItems = deployment.id === "inventory-fanout"
         ? Array.from({ length: candidateCount },
           /**
-           * Constructs one generated fixture element.
-           *
-           * Inputs: `_`, `index`.
-           * Outputs: the `inventoryItem( "fanout", "inventory-resource-" + String(index), "fixture-authority", broadScope, )` result consumed by `Array.from`.
-           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-           * Side effects: none; it derives the current-item result.
+          * Constructs one generated fixture element.
+          *
+          * Inputs: `_`, `index`.
+          * Outputs: the `inventoryItem( "fanout", "inventory-resource-" + String(index), "fixture-authority", broadScope, )` result consumed by `Array.from`.
+           * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+           * Side effects: Produces only the current in-memory fixture value.
            */
           (_, index) => inventoryItem(
             "fanout",
@@ -3135,12 +3135,12 @@ test("runtime deployment preparation bounds broad binding and inventory fanout",
     assert.equal(
       deployment(result, "binding-fanout").diagnostics.some(
         /**
-         * Tests the current diagnostic against the requested condition.
-         *
-         * Inputs: `diagnostic`.
-         * Outputs: the `String(diagnostic) === "WORKSPACE_DEPLOYMENT_BINDING_FANOUT_EXCEEDED"` result consumed by `deployment(result, "binding-fanout").diagnostics.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current diagnostic against the requested condition.
+        *
+        * Inputs: `diagnostic`.
+        * Outputs: the `String(diagnostic) === "WORKSPACE_DEPLOYMENT_BINDING_FANOUT_EXCEEDED"` result consumed by `deployment(result, "binding-fanout").diagnostics.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (diagnostic) => String(diagnostic) === "WORKSPACE_DEPLOYMENT_BINDING_FANOUT_EXCEEDED",
       ),
@@ -3149,12 +3149,12 @@ test("runtime deployment preparation bounds broad binding and inventory fanout",
     assert.equal(
       deployment(result, "inventory-fanout").diagnostics.some(
         /**
-         * Tests the current diagnostic against the requested condition.
-         *
-         * Inputs: `diagnostic`.
-         * Outputs: the `String(diagnostic) === "WORKSPACE_DEPLOYMENT_INVENTORY_FANOUT_EXCEEDED" || String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED"` result consumed by `deployment(result, "inventory-fanout").diagnostics.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current diagnostic against the requested condition.
+        *
+        * Inputs: `diagnostic`.
+        * Outputs: the `String(diagnostic) === "WORKSPACE_DEPLOYMENT_INVENTORY_FANOUT_EXCEEDED" || String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED"` result consumed by `deployment(result, "inventory-fanout").diagnostics.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (diagnostic) =>
           String(diagnostic) === "WORKSPACE_DEPLOYMENT_INVENTORY_FANOUT_EXCEEDED" ||
@@ -3179,10 +3179,10 @@ test("runtime projection budget bounds source-rich member output deterministical
     /**
      * Verifies “runtime projection budget bounds source-rich member output deterministically”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `Array.from`, `Array.from( { length: readsPerMember }, /** * Supplies `_`, `index` to the `from`, `Promise.all`, `repositoryIds.map`, `writeFile`, `JSON.stringify`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `Array.from`, `Array.from( { length: readsPerMember }, /** * Supplies `_`, `index` to the `from`, `Promise.all`, `repositoryIds.map`, `writeFile`, `JSON.stringify`.
      */
     async (fixture) => {
     const memberCount = 100;
@@ -3190,35 +3190,35 @@ test("runtime projection budget bounds source-rich member output deterministical
     const repositoryIds = Array.from(
       { length: memberCount },
       /**
-       * Constructs one generated fixture element.
-       *
-       * Inputs: `_`, `index`.
-       * Outputs: the `"projection-" + String(index)` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Constructs one generated fixture element.
+      *
+      * Inputs: `_`, `index`.
+      * Outputs: the `"projection-" + String(index)` result consumed by `Array.from`.
+       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+       * Side effects: Produces only the current in-memory fixture value.
        */
       (_, index) => "projection-" + String(index),
     );
     const source = Array.from(
       { length: readsPerMember },
       /**
-       * Constructs one generated fixture element.
-       *
-       * Inputs: `_`, `index`.
-       * Outputs: the `"export const value" + String(index) + " = process.env.PROJECTION_KEY_" + String(index) + ";"` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Constructs one generated fixture element.
+      *
+      * Inputs: `_`, `index`.
+      * Outputs: the `"export const value" + String(index) + " = process.env.PROJECTION_KEY_" + String(index) + ";"` result consumed by `Array.from`.
+       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+       * Side effects: Produces only the current in-memory fixture value.
        */
       (_, index) => "export const value" + String(index) + " = process.env.PROJECTION_KEY_" + String(index) + ";",
     ).join("\n") + "\n";
     await Promise.all(repositoryIds.map(
       /**
-       * Projects a report value from the current id.
+       * Creates one source tree containing the repeated environment reads for projection-budget testing.
        *
        * Inputs: `id`.
        * Outputs: the `{ const root = join(fixture.root, id, "src"); await mkdir(root, { recursive: true }); await writeFile(join(root, "index.ts"), source, "utf8"); }` result consumed by `repositoryIds.map`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+       * Does not handle: Declaring manifest entries, scanning the repository, or creating sibling source trees.
+       * Side effects: Recursively creates the source directory and writes its generated TypeScript file.
        */
       async (id) => {
       const root = join(fixture.root, id, "src");
@@ -3227,12 +3227,12 @@ test("runtime projection budget bounds source-rich member output deterministical
     }));
     const memberScopes = repositoryIds.map(
       /**
-       * Projects a report value from the current repositoryId.
-       *
-       * Inputs: `repositoryId`.
-       * Outputs: the `({ repositoryId, scope: { id: "scope-" + repositoryId, componentId: "component-" + repositoryId, phase: "runtime" as const, stage: { kind: "all" as const }, channel: "environment" as const, ` result consumed by `repositoryIds.map`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Projects a report value from the current repositoryId.
+      *
+      * Inputs: `repositoryId`.
+      * Outputs: the `({ repositoryId, scope: { id: "scope-" + repositoryId, componentId: "component-" + repositoryId, phase: "runtime" as const, stage: { kind: "all" as const }, channel: "environment" as const, ` result consumed by `repositoryIds.map`.
+       * Does not handle: Iterating the surrounding collection, validating sibling entries, or mutating source inputs.
+       * Side effects: Reads the current callback input and returns its projected in-memory value.
        */
       (repositoryId) => ({
       repositoryId,
@@ -3248,12 +3248,12 @@ test("runtime projection budget bounds source-rich member output deterministical
       schemaVersion: "workspace-manifest/v2",
       repositories: repositoryIds.map(
         /**
-         * Projects a report value from the current id.
-         *
-         * Inputs: `id`.
-         * Outputs: the `({ id, root: "../" + id })` result consumed by `repositoryIds.map`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Projects a report value from the current id.
+        *
+        * Inputs: `id`.
+        * Outputs: the `({ id, root: "../" + id })` result consumed by `repositoryIds.map`.
+         * Does not handle: Iterating the surrounding collection, validating sibling entries, or mutating source inputs.
+         * Side effects: Reads the current callback input and returns its projected in-memory value.
          */
         (id) => ({ id, root: "../" + id })),
       deployments: [{
@@ -3283,12 +3283,12 @@ test("runtime projection budget bounds source-rich member output deterministical
       .filter(isBudgetFallbackMember)
       .map(
         /**
-         * Projects a report value from the current member.
-         *
-         * Inputs: `member`.
-         * Outputs: the `member.repositoryId` result consumed by `first.members .filter(isBudgetFallbackMember) .map`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Projects a report value from the current member.
+        *
+        * Inputs: `member`.
+        * Outputs: the `member.repositoryId` result consumed by `first.members .filter(isBudgetFallbackMember) .map`.
+         * Does not handle: Iterating the surrounding collection, validating sibling entries, or mutating source inputs.
+         * Side effects: Reads the current callback input and returns its projected in-memory value.
          */
         (member) => member.repositoryId);
 
@@ -3297,12 +3297,12 @@ test("runtime projection budget bounds source-rich member output deterministical
     assert.ok(emittedWorkspaceGraphFacts(firstWorkspace) <= 100_000);
     for (const member of first.members.filter(
       /**
-       * Tests the current entry against the requested condition.
-       *
-       * Inputs: `entry`.
-       * Outputs: the `exhausted.includes(entry.repositoryId)` result consumed by `first.members.filter`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Tests the current entry against the requested condition.
+      *
+      * Inputs: `entry`.
+      * Outputs: the `exhausted.includes(entry.repositoryId)` result consumed by `first.members.filter`.
+       * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+       * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
        */
       (entry) => exhausted.includes(entry.repositoryId))) {
       assert.equal(member.status, "incomplete");
@@ -3311,12 +3311,12 @@ test("runtime projection budget bounds source-rich member output deterministical
       assert.equal(
         member.reconciliation.scopeCoverage.some(
           /**
-           * Tests the current coverage against the requested condition.
-           *
-           * Inputs: `coverage`.
-           * Outputs: the `coverage.state === "incomplete"` result consumed by `member.reconciliation.scopeCoverage.some`.
-           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-           * Side effects: none; it derives the current-item result.
+          * Tests the current coverage against the requested condition.
+          *
+          * Inputs: `coverage`.
+          * Outputs: the `coverage.state === "incomplete"` result consumed by `member.reconciliation.scopeCoverage.some`.
+           * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+           * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
            */
           (coverage) => coverage.state === "incomplete"),
         true,
@@ -3324,12 +3324,12 @@ test("runtime projection budget bounds source-rich member output deterministical
       assert.equal(
         member.reconciliation.records.some(
           /**
-           * Tests the current record against the requested condition.
-           *
-           * Inputs: `record`.
-           * Outputs: the `record.coverage === "complete"` result consumed by `member.reconciliation.records.some`.
-           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-           * Side effects: none; it derives the current-item result.
+          * Tests the current record against the requested condition.
+          *
+          * Inputs: `record`.
+          * Outputs: the `record.coverage === "complete"` result consumed by `member.reconciliation.records.some`.
+           * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+           * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
            */
           (record) => record.coverage === "complete"),
         false,
@@ -3341,12 +3341,12 @@ test("runtime projection budget bounds source-rich member output deterministical
       .filter(isBudgetFallbackMember)
       .map(
         /**
-         * Projects a report value from the current member.
-         *
-         * Inputs: `member`.
-         * Outputs: the `member.repositoryId` result consumed by `second.members .filter(isBudgetFallbackMember) .map`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Projects a report value from the current member.
+        *
+        * Inputs: `member`.
+        * Outputs: the `member.repositoryId` result consumed by `second.members .filter(isBudgetFallbackMember) .map`.
+         * Does not handle: Iterating the surrounding collection, validating sibling entries, or mutating source inputs.
+         * Side effects: Reads the current callback input and returns its projected in-memory value.
          */
         (member) => member.repositoryId);
     assert.deepEqual(exhaustedAgain, exhausted);
@@ -3367,10 +3367,10 @@ test("repository-only admission shares the invocation graph ledger",
     /**
      * Verifies “repository-only admission shares the invocation graph ledger”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `Array.from`, `Array.from( { length: readsPerRepository }, /** * Supplies `_`, `index` to the ``, `Promise.all`, `repositoryIds.map`, `writeFile`, `JSON.stringify`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `Array.from`, `Array.from( { length: readsPerRepository }, /** * Supplies `_`, `index` to the ``, `Promise.all`, `repositoryIds.map`, `writeFile`, `JSON.stringify`.
      */
     async (fixture) => {
     const repositoryCount = 40;
@@ -3378,24 +3378,24 @@ test("repository-only admission shares the invocation graph ledger",
     const repositoryIds = Array.from(
       { length: repositoryCount },
       /**
-       * Constructs one generated fixture element.
-       *
-       * Inputs: `_`, `index`.
-       * Outputs: the `"repository-budget-" + String(index)` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Constructs one generated fixture element.
+      *
+      * Inputs: `_`, `index`.
+      * Outputs: the `"repository-budget-" + String(index)` result consumed by `Array.from`.
+       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+       * Side effects: Produces only the current in-memory fixture value.
        */
       (_, index) => "repository-budget-" + String(index),
     );
     const source = Array.from(
       { length: readsPerRepository },
       /**
-       * Constructs one generated fixture element.
-       *
-       * Inputs: `_`, `index`.
-       * Outputs: the `"export const value" + String(index) + " = process.env.REPOSITORY_BUDGET_KEY_" + String(index) + ";"` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Constructs one generated fixture element.
+      *
+      * Inputs: `_`, `index`.
+      * Outputs: the `"export const value" + String(index) + " = process.env.REPOSITORY_BUDGET_KEY_" + String(index) + ";"` result consumed by `Array.from`.
+       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+       * Side effects: Produces only the current in-memory fixture value.
        */
       (_, index) =>
         "export const value" + String(index) +
@@ -3403,12 +3403,12 @@ test("repository-only admission shares the invocation graph ledger",
     ).join("\n") + "\n";
     await Promise.all(repositoryIds.map(
       /**
-       * Projects a report value from the current id.
+       * Creates one source tree containing the repeated environment reads for repository-budget testing.
        *
        * Inputs: `id`.
        * Outputs: the `{ const root = join(fixture.root, id, "src"); await mkdir(root, { recursive: true }); await writeFile(join(root, "index.ts"), source, "utf8"); }` result consumed by `repositoryIds.map`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+       * Does not handle: Writing the manifest, scanning the repository, or creating sibling source trees.
+       * Side effects: Recursively creates the source directory and writes its generated TypeScript file.
        */
       async (id) => {
       const root = join(fixture.root, id, "src");
@@ -3419,12 +3419,12 @@ test("repository-only admission shares the invocation graph ledger",
       schemaVersion: "workspace-manifest/v1",
       repositories: repositoryIds.map(
         /**
-         * Projects a report value from the current id.
-         *
-         * Inputs: `id`.
-         * Outputs: the `({ id, root: "../" + id })` result consumed by `repositoryIds.map`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Projects a report value from the current id.
+        *
+        * Inputs: `id`.
+        * Outputs: the `({ id, root: "../" + id })` result consumed by `repositoryIds.map`.
+         * Does not handle: Iterating the surrounding collection, validating sibling entries, or mutating source inputs.
+         * Side effects: Reads the current callback input and returns its projected in-memory value.
          */
         (id) => ({ id, root: "../" + id })),
       deployments: [],
@@ -3437,12 +3437,12 @@ test("repository-only admission shares the invocation graph ledger",
       .filter(isBudgetFallbackResult)
       .map(
         /**
-         * Projects a report value from the current repository.
-         *
-         * Inputs: `repository`.
-         * Outputs: the `repository.id` result consumed by `first.repositories .filter(isBudgetFallbackResult) .map`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Projects a report value from the current repository.
+        *
+        * Inputs: `repository`.
+        * Outputs: the `repository.id` result consumed by `first.repositories .filter(isBudgetFallbackResult) .map`.
+         * Does not handle: Iterating the surrounding collection, validating sibling entries, or mutating source inputs.
+         * Side effects: Reads the current callback input and returns its projected in-memory value.
          */
         (repository) => repository.id);
     assert.ok(fallback.length > 0);
@@ -3453,12 +3453,12 @@ test("repository-only admission shares the invocation graph ledger",
     assert.deepEqual(
       second.repositories.filter(isBudgetFallbackResult).map(
         /**
-         * Projects a report value from the current repository.
-         *
-         * Inputs: `repository`.
-         * Outputs: the `repository.id` result consumed by `second.repositories.filter(isBudgetFallbackResult).map`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Projects a report value from the current repository.
+        *
+        * Inputs: `repository`.
+        * Outputs: the `repository.id` result consumed by `second.repositories.filter(isBudgetFallbackResult).map`.
+         * Does not handle: Iterating the surrounding collection, validating sibling entries, or mutating source inputs.
+         * Side effects: Reads the current callback input and returns its projected in-memory value.
          */
         (repository) => repository.id),
       fallback,
@@ -3480,22 +3480,22 @@ test("nested coverage evidence is admitted before Core record materialization",
     /**
      * Verifies “nested coverage evidence is admitted before Core record materialization”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `Array.from( { length: demandCount }, /** * Supplies `_`, `index` to the `from` o`, `Array.from`, `writeFile`, `join`, `mkdir`, `Promise.all`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `Array.from( { length: demandCount }, /** * Supplies `_`, `index` to the `from` o`, `Array.from`, `writeFile`, `join`, `mkdir`, `Promise.all`.
      */
     async (fixture) => {
     const demandCount = 1_000;
     const source = Array.from(
       { length: demandCount },
       /**
-       * Constructs one generated fixture element.
-       *
-       * Inputs: `_`, `index`.
-       * Outputs: the `"export const value" + String(index) + " = process.env.NESTED_EVIDENCE_KEY_" + String(index) + ";"` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Constructs one generated fixture element.
+      *
+      * Inputs: `_`, `index`.
+      * Outputs: the `"export const value" + String(index) + " = process.env.NESTED_EVIDENCE_KEY_" + String(index) + ";"` result consumed by `Array.from`.
+       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+       * Side effects: Produces only the current in-memory fixture value.
        */
       (_, index) =>
         "export const value" + String(index) +
@@ -3507,12 +3507,12 @@ test("nested coverage evidence is admitted before Core record materialization",
     const invalidCandidates = Array.from(
       { length: 1_000 },
       /**
-       * Constructs one generated fixture element.
-       *
-       * Inputs: no arguments.
-       * Outputs: the `({ invalid: "not-a-binding-candidate" })` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Constructs one generated fixture element.
+      *
+      * Inputs: no arguments.
+      * Outputs: the `({ invalid: "not-a-binding-candidate" })` result consumed by `Array.from`.
+       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+       * Side effects: Produces only the current in-memory fixture value.
        */
       () => ({ invalid: "not-a-binding-candidate" }),
     );
@@ -3569,22 +3569,22 @@ test("workspace projection budget does not reset for the same source in later de
     /**
      * Verifies “workspace projection budget does not reset for the same source in later deployments”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `Array.from( { length: 1_001 }, /** * Supplies `_`, `index` to the `from` operati`, `Array.from`, `writeFile`, `join`, `mkdir`, `Promise.all`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `Array.from( { length: 1_001 }, /** * Supplies `_`, `index` to the `from` operati`, `Array.from`, `writeFile`, `join`, `mkdir`, `Promise.all`.
      */
     async (fixture) => {
     const deploymentCount = 51;
     const reads = Array.from(
       { length: 1_001 },
       /**
-       * Constructs one generated fixture element.
-       *
-       * Inputs: `_`, `index`.
-       * Outputs: the `"export const repeat" + String(index) + " = process.env.REPEAT_KEY_" + String(index) + ";"` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Constructs one generated fixture element.
+      *
+      * Inputs: `_`, `index`.
+      * Outputs: the `"export const repeat" + String(index) + " = process.env.REPEAT_KEY_" + String(index) + ";"` result consumed by `Array.from`.
+       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+       * Side effects: Produces only the current in-memory fixture value.
        */
       (_, index) => "export const repeat" + String(index) + " = process.env.REPEAT_KEY_" + String(index) + ";",
     ).join("\n") + "\n";
@@ -3597,12 +3597,12 @@ test("workspace projection budget does not reset for the same source in later de
     ]);
     const deployments = Array.from({ length: deploymentCount },
       /**
-       * Constructs one generated fixture element.
-       *
-       * Inputs: `_`, `index`.
-       * Outputs: the `({ id: "workspace-budget-" + String(index), repositories: ["api"], inputs: { bindings: "../infra/workspace-budget-repeat/bindings.json", inventory: "../infra/workspace-budget-repeat/inventor` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Constructs one generated fixture element.
+      *
+      * Inputs: `_`, `index`.
+      * Outputs: the `({ id: "workspace-budget-" + String(index), repositories: ["api"], inputs: { bindings: "../infra/workspace-budget-repeat/bindings.json", inventory: "../infra/workspace-budget-repeat/inventor` result consumed by `Array.from`.
+       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+       * Side effects: Produces only the current in-memory fixture value.
        */
       (_, index) => ({
       id: "workspace-budget-" + String(index),
@@ -3636,22 +3636,22 @@ test("workspace projection budget does not reset for the same source in later de
     const exhausted = first.deployments
       .filter(
         /**
-         * Tests the current entry against the requested condition.
-         *
-         * Inputs: `entry`.
-         * Outputs: the `isBudgetFallbackMember(deploymentMember(entry, "api"))` result consumed by `first.deployments .filter`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current entry against the requested condition.
+        *
+        * Inputs: `entry`.
+        * Outputs: the `isBudgetFallbackMember(deploymentMember(entry, "api"))` result consumed by `first.deployments .filter`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (entry) => isBudgetFallbackMember(deploymentMember(entry, "api")))
       .map(
         /**
-         * Verifies “workspace projection budget does not reset for the same source in later deployments”.
+         * Collects the IDs of deployments whose API member received the compact budget fallback.
          *
-         * Inputs: `entry`.
-         * Outputs: a promise that settles after its awaited workspace operations and assertions.
-         * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-         * Side effects: runs no helper.
+         * Inputs: One filtered deployment entry.
+         * Outputs: That deployment's ID for comparison with the repeated scan.
+         * Does not handle: Rechecking fallback state, sorting IDs, or mutating the deployment.
+         * Side effects: Reads the deployment ID without mutation or I/O.
          */
         (entry) => entry.id);
     assert.ok(exhausted.length > 0);
@@ -3665,12 +3665,12 @@ test("workspace projection budget does not reset for the same source in later de
       assert.equal(
         member.reconciliation.records.some(
           /**
-           * Tests the current record against the requested condition.
-           *
-           * Inputs: `record`.
-           * Outputs: the `record.coverage === "complete"` result consumed by `member.reconciliation.records.some`.
-           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-           * Side effects: none; it derives the current-item result.
+          * Tests the current record against the requested condition.
+          *
+          * Inputs: `record`.
+          * Outputs: the `record.coverage === "complete"` result consumed by `member.reconciliation.records.some`.
+           * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+           * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
            */
           (record) => record.coverage === "complete"),
         false,
@@ -3681,22 +3681,22 @@ test("workspace projection budget does not reset for the same source in later de
     const exhaustedAgain = second.deployments
       .filter(
         /**
-         * Tests the current entry against the requested condition.
-         *
-         * Inputs: `entry`.
-         * Outputs: the `isBudgetFallbackMember(deploymentMember(entry, "api"))` result consumed by `second.deployments .filter`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current entry against the requested condition.
+        *
+        * Inputs: `entry`.
+        * Outputs: the `isBudgetFallbackMember(deploymentMember(entry, "api"))` result consumed by `second.deployments .filter`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (entry) => isBudgetFallbackMember(deploymentMember(entry, "api")))
       .map(
         /**
-         * Verifies “workspace projection budget does not reset for the same source in later deployments”.
+         * Collects the repeated-scan deployment IDs that again have the API budget fallback.
          *
-         * Inputs: `entry`.
-         * Outputs: a promise that settles after its awaited workspace operations and assertions.
-         * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-         * Side effects: runs no helper.
+         * Inputs: One filtered deployment entry from the second scan.
+         * Outputs: That deployment's ID for equality with the first scan's fallback IDs.
+         * Does not handle: Rechecking fallback state, sorting IDs, or mutating the deployment.
+         * Side effects: Reads the deployment ID without mutation or I/O.
          */
         (entry) => entry.id);
     assert.deepEqual(exhaustedAgain, exhausted);
@@ -3717,33 +3717,33 @@ test("scan-only deployments share one invocation budget and reset on the next sc
     /**
      * Verifies “scan-only deployments share one invocation budget and reset on the next scan”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `Array.from( { length: 1_001 }, /** * Supplies `_`, `index` to the `from` operati`, `Array.from`, `writeFile`, `join`, `JSON.stringify`, `readLocalWorkspaceManifest`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `Array.from( { length: 1_001 }, /** * Supplies `_`, `index` to the `from` operati`, `Array.from`, `writeFile`, `join`, `JSON.stringify`, `readLocalWorkspaceManifest`.
      */
     async (fixture) => {
     const reads = Array.from(
       { length: 1_001 },
       /**
-       * Constructs one generated fixture element.
-       *
-       * Inputs: `_`, `index`.
-       * Outputs: the `"export const scanOnly" + String(index) + " = process.env.SCAN_ONLY_KEY_" + String(index) + ";"` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Constructs one generated fixture element.
+      *
+      * Inputs: `_`, `index`.
+      * Outputs: the `"export const scanOnly" + String(index) + " = process.env.SCAN_ONLY_KEY_" + String(index) + ";"` result consumed by `Array.from`.
+       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+       * Side effects: Produces only the current in-memory fixture value.
        */
       (_, index) => "export const scanOnly" + String(index) + " = process.env.SCAN_ONLY_KEY_" + String(index) + ";",
     ).join("\n") + "\n";
     await writeFile(join(fixture.repositoryRoots.api, "src", "index.ts"), reads, "utf8");
     const deployments = Array.from({ length: 101 },
       /**
-       * Constructs one generated fixture element.
-       *
-       * Inputs: `_`, `index`.
-       * Outputs: the `({ id: "scan-only-budget-" + String(index), repositories: ["api"], })` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Constructs one generated fixture element.
+      *
+      * Inputs: `_`, `index`.
+      * Outputs: the `({ id: "scan-only-budget-" + String(index), repositories: ["api"], })` result consumed by `Array.from`.
+       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+       * Side effects: Produces only the current in-memory fixture value.
        */
       (_, index) => ({
       id: "scan-only-budget-" + String(index),
@@ -3761,22 +3761,22 @@ test("scan-only deployments share one invocation budget and reset on the next sc
     const exhausted = first.deployments
       .filter(
         /**
-         * Tests the current entry against the requested condition.
-         *
-         * Inputs: `entry`.
-         * Outputs: the `isBudgetFallbackMember(deploymentMember(entry, "api"))` result consumed by `first.deployments .filter`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current entry against the requested condition.
+        *
+        * Inputs: `entry`.
+        * Outputs: the `isBudgetFallbackMember(deploymentMember(entry, "api"))` result consumed by `first.deployments .filter`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (entry) => isBudgetFallbackMember(deploymentMember(entry, "api")))
       .map(
         /**
-         * Verifies “scan-only deployments share one invocation budget and reset on the next scan”.
+         * Collects scan-only deployment IDs whose API member has the first-scan budget fallback.
          *
-         * Inputs: `entry`.
-         * Outputs: a promise that settles after its awaited workspace operations and assertions.
-         * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-         * Side effects: runs no helper.
+         * Inputs: One filtered scan-only deployment entry.
+         * Outputs: That deployment's ID for the budget-reset assertions.
+         * Does not handle: Rechecking fallback state, ordering IDs, or mutating deployment data.
+         * Side effects: Reads the deployment ID without mutation or I/O.
          */
         (entry) => entry.id);
     assert.ok(emittedDeploymentGraphFacts(first) <= 100_000);
@@ -3792,22 +3792,22 @@ test("scan-only deployments share one invocation budget and reset on the next sc
     const exhaustedAgain = second.deployments
       .filter(
         /**
-         * Tests the current entry against the requested condition.
-         *
-         * Inputs: `entry`.
-         * Outputs: the `isBudgetFallbackMember(deploymentMember(entry, "api"))` result consumed by `second.deployments .filter`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current entry against the requested condition.
+        *
+        * Inputs: `entry`.
+        * Outputs: the `isBudgetFallbackMember(deploymentMember(entry, "api"))` result consumed by `second.deployments .filter`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (entry) => isBudgetFallbackMember(deploymentMember(entry, "api")))
       .map(
         /**
-         * Verifies “scan-only deployments share one invocation budget and reset on the next scan”.
+         * Collects second-scan scan-only deployment IDs whose API member has the budget fallback.
          *
-         * Inputs: `entry`.
-         * Outputs: a promise that settles after its awaited workspace operations and assertions.
-         * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-         * Side effects: runs no helper.
+         * Inputs: One filtered scan-only deployment entry from the second scan.
+         * Outputs: That deployment's ID for equality with the first scan's fallback IDs.
+         * Does not handle: Rechecking fallback state, ordering IDs, or mutating deployment data.
+         * Side effects: Reads the deployment ID without mutation or I/O.
          */
         (entry) => entry.id);
     assert.deepEqual(exhaustedAgain, exhausted);
@@ -3828,21 +3828,21 @@ test("shared-key output is withheld when source graph budget is exhausted",
     /**
      * Verifies “shared-key output is withheld when source graph budget is exhausted”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: Generates 900 source reads, writes the oversized fixture source, and invokes the workspace scan.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: Generates 900 source reads, writes the oversized fixture source, and invokes the workspace scan.
      */
     async (fixture) => {
     const reads = Array.from(
       { length: 900 },
       /**
-       * Constructs one generated fixture element.
-       *
-       * Inputs: `_`, `index`.
-       * Outputs: the `"export const shared" + String(index) + " = process.env.SHARED_BUDGET_KEY_" + String(index) + ";"` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Constructs one generated fixture element.
+      *
+      * Inputs: `_`, `index`.
+      * Outputs: the `"export const shared" + String(index) + " = process.env.SHARED_BUDGET_KEY_" + String(index) + ";"` result consumed by `Array.from`.
+       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+       * Side effects: Produces only the current in-memory fixture value.
        */
       (_, index) => "export const shared" + String(index) + " = process.env.SHARED_BUDGET_KEY_" + String(index) + ";",
     ).join("\n") + "\n";
@@ -3852,12 +3852,12 @@ test("shared-key output is withheld when source graph budget is exhausted",
     ]);
     const deployments = Array.from({ length: 20 },
       /**
-       * Constructs one generated fixture element.
-       *
-       * Inputs: `_`, `index`.
-       * Outputs: the `({ id: "shared-key-budget-" + String(index), repositories: ["api", "worker"], })` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Constructs one generated fixture element.
+      *
+      * Inputs: `_`, `index`.
+      * Outputs: the `({ id: "shared-key-budget-" + String(index), repositories: ["api", "worker"], })` result consumed by `Array.from`.
+       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+       * Side effects: Produces only the current in-memory fixture value.
        */
       (_, index) => ({
       id: "shared-key-budget-" + String(index),
@@ -3877,21 +3877,21 @@ test("shared-key output is withheld when source graph budget is exhausted",
     const result = await scanWorkspace(document.request);
     const budgetExhausted = result.deployments.filter(
       /**
-       * Tests the current entry against the requested condition.
-       *
-       * Inputs: `entry`.
-       * Outputs: the `entry.diagnostics.some( (diagnostic) => String(diagnostic) === "WORKSPACE_DEPLOYMENT_SHARED_KEY_BUDGET_EXCEEDED" || String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED", ` result consumed by `result.deployments.filter`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Tests the current entry against the requested condition.
+      *
+      * Inputs: `entry`.
+      * Outputs: the `entry.diagnostics.some( (diagnostic) => String(diagnostic) === "WORKSPACE_DEPLOYMENT_SHARED_KEY_BUDGET_EXCEEDED" || String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED", ` result consumed by `result.deployments.filter`.
+       * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+       * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
        */
       (entry) => entry.diagnostics.some(
       /**
-       * Tests the current diagnostic against the requested condition.
-       *
-       * Inputs: `diagnostic`.
-       * Outputs: the `String(diagnostic) === "WORKSPACE_DEPLOYMENT_SHARED_KEY_BUDGET_EXCEEDED" || String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED"` result consumed by `entry.diagnostics.some`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Tests the current diagnostic against the requested condition.
+      *
+      * Inputs: `diagnostic`.
+      * Outputs: the `String(diagnostic) === "WORKSPACE_DEPLOYMENT_SHARED_KEY_BUDGET_EXCEEDED" || String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED"` result consumed by `entry.diagnostics.some`.
+       * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+       * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
        */
       (diagnostic) =>
         String(diagnostic) === "WORKSPACE_DEPLOYMENT_SHARED_KEY_BUDGET_EXCEEDED" ||
@@ -3930,10 +3930,10 @@ test("provisioning records share the invocation graph budget before Core materia
     /**
      * Verifies “provisioning records share the invocation graph budget before Core materializes them”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `writeFile`, `join`, `mkdir`, `Array.from`, `Promise.all`, `JSON.stringify`, including the fixture filesystem changes.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `writeFile`, `join`, `mkdir`, `Array.from`, `Promise.all`, `JSON.stringify`, including the fixture filesystem changes.
      */
     async (fixture) => {
     await writeFile(
@@ -3952,12 +3952,12 @@ test("provisioning records share the invocation graph budget before Core materia
     };
     const candidates = Array.from({ length: 1_001 },
       /**
-       * Constructs one generated fixture element.
-       *
-       * Inputs: `_`, `index`.
-       * Outputs: the `({ id: "provisioning-binding-" + String(index), adapterId: "fixture", scope, destination: { namespace: "env", name: "PROVISIONING_KEY_" + String(index) }, sourceKind: "secret-manager", provi` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Constructs one generated fixture element.
+      *
+      * Inputs: `_`, `index`.
+      * Outputs: the `({ id: "provisioning-binding-" + String(index), adapterId: "fixture", scope, destination: { namespace: "env", name: "PROVISIONING_KEY_" + String(index) }, sourceKind: "secret-manager", provi` result consumed by `Array.from`.
+       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+       * Side effects: Produces only the current in-memory fixture value.
        */
       (_, index) => ({
       id: "provisioning-binding-" + String(index),
@@ -3981,12 +3981,12 @@ test("provisioning records share the invocation graph budget before Core materia
     }));
     const items = Array.from({ length: 1_001 },
       /**
-       * Constructs one generated fixture element.
-       *
-       * Inputs: `_`, `index`.
-       * Outputs: the `({ providerResourceId: { authorityId: "fixture-authority", canonicalId: "provisioning-resource-" + String(index), }, declaredScopes: [scope], })` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Constructs one generated fixture element.
+      *
+      * Inputs: `_`, `index`.
+      * Outputs: the `({ providerResourceId: { authorityId: "fixture-authority", canonicalId: "provisioning-resource-" + String(index), }, declaredScopes: [scope], })` result consumed by `Array.from`.
+       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+       * Side effects: Produces only the current in-memory fixture value.
        */
       (_, index) => ({
       providerResourceId: {
@@ -4001,12 +4001,12 @@ test("provisioning records share the invocation graph budget before Core materia
     ]);
     const deployments = Array.from({ length: 101 },
       /**
-       * Constructs one generated fixture element.
-       *
-       * Inputs: `_`, `index`.
-       * Outputs: the `({ id: "provisioning-graph-" + String(index).padStart(3, "0"), repositories: ["api"], inputs: { bindings: "../infra/provisioning-graph-budget/bindings.json", inventory: "../infra/provisionin` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Constructs one generated fixture element.
+      *
+      * Inputs: `_`, `index`.
+      * Outputs: the `({ id: "provisioning-graph-" + String(index).padStart(3, "0"), repositories: ["api"], inputs: { bindings: "../infra/provisioning-graph-budget/bindings.json", inventory: "../infra/provisionin` result consumed by `Array.from`.
+       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+       * Side effects: Produces only the current in-memory fixture value.
        */
       (_, index) => ({
       id: "provisioning-graph-" + String(index).padStart(3, "0"),
@@ -4029,24 +4029,24 @@ test("provisioning records share the invocation graph budget before Core materia
     assert.ok(emittedWorkspaceGraphFacts(result) <= 100_000);
     assert.ok(result.deployments.some(
       /**
-       * Tests the current entry against the requested condition.
-       *
-       * Inputs: `entry`.
-       * Outputs: the `deploymentMember(entry, "api").reconciliation.records.length >= 1_001` result consumed by `result.deployments.some`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Tests the current entry against the requested condition.
+      *
+      * Inputs: `entry`.
+      * Outputs: the `deploymentMember(entry, "api").reconciliation.records.length >= 1_001` result consumed by `result.deployments.some`.
+       * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+       * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
        */
       (entry) =>
       deploymentMember(entry, "api").reconciliation.records.length >= 1_001,
     ));
     const exhausted = result.deployments.filter(
       /**
-       * Tests the current entry against the requested condition.
-       *
-       * Inputs: `entry`.
-       * Outputs: the `isBudgetFallbackMember(deploymentMember(entry, "api"))` result consumed by `result.deployments.filter`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Tests the current entry against the requested condition.
+      *
+      * Inputs: `entry`.
+      * Outputs: the `isBudgetFallbackMember(deploymentMember(entry, "api"))` result consumed by `result.deployments.filter`.
+       * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+       * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
        */
       (entry) =>
       isBudgetFallbackMember(deploymentMember(entry, "api")),
@@ -4074,10 +4074,10 @@ test("finite condition partition floods fall back before Core selection material
     /**
      * Verifies “finite condition partition floods fall back before Core selection materializes”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `writeFile`, `join`, `Array.from`, `assert.ok`, `Buffer.byteLength`, `JSON.stringify`, including the fixture filesystem changes.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `writeFile`, `join`, `Array.from`, `assert.ok`, `Buffer.byteLength`, `JSON.stringify`, including the fixture filesystem changes.
      */
     async (fixture) => {
     await writeFile(
@@ -4097,12 +4097,12 @@ test("finite condition partition floods fall back before Core selection material
     // after resolution. This deliberately stays under the 5 MiB input gate.
     const candidates = Array.from({ length: 10_000 },
       /**
-       * Constructs one generated fixture element.
-       *
-       * Inputs: `_`, `index`.
-       * Outputs: the `({ id: "c" + String(index), adapterId: "a", scope, destination: { namespace: "env", name: "F" }, sourceKind: "external", appliesWhen: { executionUnitIds: [scope.id], phases: ["runtime"], sta` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Constructs one generated fixture element.
+      *
+      * Inputs: `_`, `index`.
+      * Outputs: the `({ id: "c" + String(index), adapterId: "a", scope, destination: { namespace: "env", name: "F" }, sourceKind: "external", appliesWhen: { executionUnitIds: [scope.id], phases: ["runtime"], sta` result consumed by `Array.from`.
+       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+       * Side effects: Produces only the current in-memory fixture value.
        */
       (_, index) => ({
       id: "c" + String(index),
@@ -4162,12 +4162,12 @@ test("finite condition partition floods fall back before Core selection material
     assert.equal(
       entry.diagnostics.some(
         /**
-         * Tests the current diagnostic against the requested condition.
-         *
-         * Inputs: `diagnostic`.
-         * Outputs: the `String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED"` result consumed by `entry.diagnostics.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current diagnostic against the requested condition.
+        *
+        * Inputs: `diagnostic`.
+        * Outputs: the `String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED"` result consumed by `entry.diagnostics.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (diagnostic) => String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED",
       ),
@@ -4197,10 +4197,10 @@ test("inventory projection bounds 10k by 10k resource matches without pairwise w
     /**
      * Verifies “inventory projection bounds 10k by 10k resource matches without pairwise work”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `writeFile`, `join`, `Array.from`, `assert.ok`, `Buffer.byteLength`, `JSON.stringify`, including the fixture filesystem changes.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `writeFile`, `join`, `Array.from`, `assert.ok`, `Buffer.byteLength`, `JSON.stringify`, including the fixture filesystem changes.
      */
     async (fixture) => {
     await writeFile(
@@ -4222,12 +4222,12 @@ test("inventory projection bounds 10k by 10k resource matches without pairwise w
     // exceed the invocation cap, so Core must never receive these candidates.
     const candidates = Array.from({ length: 10_000 },
       /**
-       * Constructs one generated fixture element.
-       *
-       * Inputs: `_`, `index`.
-       * Outputs: the `({ id: "c" + String(index), adapterId: "a", scope, destination: { namespace: "env", name: "K" + String(index) }, sourceKind: "external", providerResourceId: { authorityId: "a", canonicalId: ` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Constructs one generated fixture element.
+      *
+      * Inputs: `_`, `index`.
+      * Outputs: the `({ id: "c" + String(index), adapterId: "a", scope, destination: { namespace: "env", name: "K" + String(index) }, sourceKind: "external", providerResourceId: { authorityId: "a", canonicalId: ` result consumed by `Array.from`.
+       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+       * Side effects: Produces only the current in-memory fixture value.
        */
       (_, index) => ({
       id: "c" + String(index),
@@ -4260,12 +4260,12 @@ test("inventory projection bounds 10k by 10k resource matches without pairwise w
       asOf: "2026-07-12T00:00:00Z",
       items: Array.from({ length: 10_000 },
         /**
-         * Constructs one generated fixture element.
-         *
-         * Inputs: `_`, `index`.
-         * Outputs: the `({ providerResourceId: { authorityId: "a", canonicalId: "r" + String(index) }, })` result consumed by `Array.from`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Constructs one generated fixture element.
+        *
+        * Inputs: `_`, `index`.
+        * Outputs: the `({ providerResourceId: { authorityId: "a", canonicalId: "r" + String(index) }, })` result consumed by `Array.from`.
+         * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+         * Side effects: Produces only the current in-memory fixture value.
          */
         (_, index) => ({
         providerResourceId: { authorityId: "a", canonicalId: "r" + String(index) },
@@ -4299,12 +4299,12 @@ test("inventory projection bounds 10k by 10k resource matches without pairwise w
     assert.equal(
       entry.diagnostics.some(
         /**
-         * Tests the current diagnostic against the requested condition.
-         *
-         * Inputs: `diagnostic`.
-         * Outputs: the `String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED"` result consumed by `entry.diagnostics.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current diagnostic against the requested condition.
+        *
+        * Inputs: `diagnostic`.
+        * Outputs: the `String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED"` result consumed by `entry.diagnostics.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (diagnostic) => String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED",
       ),
@@ -4331,42 +4331,42 @@ test("maximum legal deployment membership reserves compact fallback and aggregat
     /**
      * Verifies “maximum legal deployment membership reserves compact fallback and aggregate status capacity”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `Array.from`, `Promise.all`, `repositoryIds.map`, `writeFile`, `JSON.stringify`, `readLocalWorkspaceManifest`, including the fixture filesystem changes.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `Array.from`, `Promise.all`, `repositoryIds.map`, `writeFile`, `JSON.stringify`, `readLocalWorkspaceManifest`, including the fixture filesystem changes.
      */
     async (fixture) => {
     const repositoryIds = Array.from({ length: 5 },
       /**
-       * Constructs one generated fixture element.
-       *
-       * Inputs: `_`, `index`.
-       * Outputs: the `"r" + String(index)` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Constructs one generated fixture element.
+      *
+      * Inputs: `_`, `index`.
+      * Outputs: the `"r" + String(index)` result consumed by `Array.from`.
+       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+       * Side effects: Produces only the current in-memory fixture value.
        */
       (_, index) => "r" + String(index));
     await Promise.all(repositoryIds.map(
       /**
-       * Projects a report value from the current id.
+       * Creates the `src` directory for one maximum-membership repository fixture.
        *
        * Inputs: `id`.
        * Outputs: the `mkdir(join(fixture.root, id, "src"), { recursive: true })` result consumed by `repositoryIds.map`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+       * Does not handle: Writing source content, producing deployment declarations, or creating another repository root.
+       * Side effects: Starts recursive creation of the test-owned source directory.
        */
       (id) =>
       mkdir(join(fixture.root, id, "src"), { recursive: true }),
     ));
     const deployments = Array.from({ length: 10_000 },
       /**
-       * Constructs one generated fixture element.
-       *
-       * Inputs: `_`, `index`.
-       * Outputs: the `({ id: "d" + String(index), repositories: repositoryIds, })` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Constructs one generated fixture element.
+      *
+      * Inputs: `_`, `index`.
+      * Outputs: the `({ id: "d" + String(index), repositories: repositoryIds, })` result consumed by `Array.from`.
+       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+       * Side effects: Produces only the current in-memory fixture value.
        */
       (_, index) => ({
       id: "d" + String(index),
@@ -4376,12 +4376,12 @@ test("maximum legal deployment membership reserves compact fallback and aggregat
       schemaVersion: "workspace-manifest/v1",
       repositories: repositoryIds.map(
         /**
-         * Projects a report value from the current id.
-         *
-         * Inputs: `id`.
-         * Outputs: the `({ id, root: "../" + id })` result consumed by `repositoryIds.map`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Projects a report value from the current id.
+        *
+        * Inputs: `id`.
+        * Outputs: the `({ id, root: "../" + id })` result consumed by `repositoryIds.map`.
+         * Does not handle: Iterating the surrounding collection, validating sibling entries, or mutating source inputs.
+         * Side effects: Reads the current callback input and returns its projected in-memory value.
          */
         (id) => ({ id, root: "../" + id })),
       deployments,
@@ -4394,35 +4394,35 @@ test("maximum legal deployment membership reserves compact fallback and aggregat
     assert.equal(
       result.deployments.reduce(
         /**
-         * Accumulates facts for the current entry.
-         *
-         * Inputs: `count`, `entry`.
-         * Outputs: the next accumulator value `count + entry.members.length`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Accumulates facts for the current entry.
+        *
+        * Inputs: `count`, `entry`.
+        * Outputs: the next accumulator value `count + entry.members.length`.
+         * Does not handle: Controlling collection traversal, iteration order, or mutation of the source facts.
+         * Side effects: Computes an in-memory total from callback inputs without mutating records or performing I/O.
          */
         (count, entry) => count + entry.members.length, 0),
       50_000,
     );
     assert.equal(result.deployments.every(
       /**
-       * Tests the current entry against the requested condition.
-       *
-       * Inputs: `entry`.
-       * Outputs: the `entry.diagnostics.length <= 1` result consumed by `result.deployments.every`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Tests the current entry against the requested condition.
+      *
+      * Inputs: `entry`.
+      * Outputs: the `entry.diagnostics.length <= 1` result consumed by `result.deployments.every`.
+       * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+       * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
        */
       (entry) => entry.diagnostics.length <= 1), true);
     assert.ok(emittedWorkspaceGraphFacts(result) <= 100_000);
     assert.ok(result.deployments.some(
       /**
-       * Tests the current entry against the requested condition.
-       *
-       * Inputs: `entry`.
-       * Outputs: the `entry.members.some(isBudgetFallbackMember)` result consumed by `result.deployments.some`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Tests the current entry against the requested condition.
+      *
+      * Inputs: `entry`.
+      * Outputs: the `entry.members.some(isBudgetFallbackMember)` result consumed by `result.deployments.some`.
+       * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+       * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
        */
       (entry) =>
       entry.members.some(isBudgetFallbackMember),
@@ -4445,10 +4445,10 @@ test("invocation document cache reuses verified reads and caps unique input byte
     /**
      * Verifies “invocation document cache reuses verified reads and caps unique input bytes before parse”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `join`, `mkdir`, `Buffer.alloc`, `Promise.all`, `writeFile`, `JSON.stringify`, including the fixture filesystem changes.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `join`, `mkdir`, `Buffer.alloc`, `Promise.all`, `writeFile`, `JSON.stringify`, including the fixture filesystem changes.
      */
     async (fixture) => {
     const inputRoot = join(fixture.infraRoot, "input-budget");
@@ -4460,12 +4460,12 @@ test("invocation document cache reuses verified reads and caps unique input byte
       writeFile(join(inputRoot, "inventory.json"), JSON.stringify(inventorySnapshot([])), "utf8"),
       ...Array.from({ length: 23 },
         /**
-         * Constructs one generated fixture element.
+         * Writes one distinct oversized invalid provisioning document for the cache-byte-budget test.
          *
          * Inputs: `_`, `index`.
          * Outputs: the `writeFile(join(inputRoot, "unique-" + String(index) + ".json"), invalidBytes)` result consumed by `Array.from`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+         * Does not handle: Writing the repeated or inventory inputs, parsing JSON, or observing cache results.
+         * Side effects: Starts an asynchronous write of `invalidBytes` to this unique test-owned file.
          */
         (_, index) =>
         writeFile(join(inputRoot, "unique-" + String(index) + ".json"), invalidBytes),
@@ -4473,12 +4473,12 @@ test("invocation document cache reuses verified reads and caps unique input byte
     ]);
     const scope =
       /**
-       * Verifies “invocation document cache reuses verified reads and caps unique input bytes before parse”.
+       * Constructs a runtime execution scope for one cache-budget deployment input.
        *
-       * Inputs: `id`.
-       * Outputs: a promise that settles after its awaited workspace operations and assertions.
-       * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-       * Side effects: runs no helper.
+       * Inputs: The suffix used to distinguish this scope's IDs.
+       * Outputs: A member-scope declaration for the fixture's `api` repository.
+       * Does not handle: Validating the execution scope, reading provisioning input, or constructing deployments.
+       * Side effects: Allocates one in-memory scope declaration object.
        */
       (id: string) => ({
       repositoryId: "api",
@@ -4494,10 +4494,10 @@ test("invocation document cache reuses verified reads and caps unique input byte
       /**
        * Verifies “invocation document cache reuses verified reads and caps unique input bytes before parse”.
        *
-       * Inputs: `id`, `binding`.
-       * Outputs: a promise that settles after its awaited workspace operations and assertions.
-       * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-       * Side effects: runs `scope`.
+      * Inputs: `id`, `binding`.
+      * Outputs: a promise that settles after its awaited workspace operations and assertions.
+       * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+      * Side effects: runs `scope`.
        */
       (id: string, binding: string) => ({
       id,
@@ -4513,12 +4513,12 @@ test("invocation document cache reuses verified reads and caps unique input byte
       deploymentFor("cache-01", "repeat.json"),
       ...Array.from({ length: 23 },
         /**
-         * Constructs one generated fixture element.
-         *
-         * Inputs: `_`, `index`.
-         * Outputs: the `deploymentFor("input-" + String(index).padStart(2, "0"), "unique-" + String(index) + ".json")` result consumed by `Array.from`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Constructs one generated fixture element.
+        *
+        * Inputs: `_`, `index`.
+        * Outputs: the `deploymentFor("input-" + String(index).padStart(2, "0"), "unique-" + String(index) + ".json")` result consumed by `Array.from`.
+         * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+         * Side effects: Produces only the current in-memory fixture value.
          */
         (_, index) =>
         deploymentFor("input-" + String(index).padStart(2, "0"), "unique-" + String(index) + ".json"),
@@ -4538,12 +4538,12 @@ test("invocation document cache reuses verified reads and caps unique input byte
     assert.equal(
       deploymentMember(cachedSecond, "api").diagnostics.some(
         /**
-         * Tests the current diagnostic against the requested condition.
-         *
-         * Inputs: `diagnostic`.
-         * Outputs: the `String(diagnostic) === "APP_LOCAL_INPUT_BUDGET_EXCEEDED"` result consumed by `deploymentMember(cachedSecond, "api").diagnostics.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current diagnostic against the requested condition.
+        *
+        * Inputs: `diagnostic`.
+        * Outputs: the `String(diagnostic) === "APP_LOCAL_INPUT_BUDGET_EXCEEDED"` result consumed by `deploymentMember(cachedSecond, "api").diagnostics.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (diagnostic) => String(diagnostic) === "APP_LOCAL_INPUT_BUDGET_EXCEEDED",
       ),
@@ -4552,12 +4552,12 @@ test("invocation document cache reuses verified reads and caps unique input byte
     assert.equal(
       deploymentMember(overflow, "api").diagnostics.some(
         /**
-         * Tests the current diagnostic against the requested condition.
-         *
-         * Inputs: `diagnostic`.
-         * Outputs: the `String(diagnostic) === "APP_LOCAL_INPUT_BUDGET_EXCEEDED"` result consumed by `deploymentMember(overflow, "api").diagnostics.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current diagnostic against the requested condition.
+        *
+        * Inputs: `diagnostic`.
+        * Outputs: the `String(diagnostic) === "APP_LOCAL_INPUT_BUDGET_EXCEEDED"` result consumed by `deploymentMember(overflow, "api").diagnostics.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (diagnostic) => String(diagnostic) === "APP_LOCAL_INPUT_BUDGET_EXCEEDED",
       ),
@@ -4581,10 +4581,10 @@ test("an evicted descriptor payload cannot silently mix a later input snapshot",
     /**
      * Verifies “an evicted descriptor payload cannot silently mix a later input snapshot”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `join`, `mkdir`, `JSON.stringify`, `bindingManifest`, `inventorySnapshot`, `Promise.all`, including the fixture filesystem changes.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `join`, `mkdir`, `JSON.stringify`, `bindingManifest`, `inventorySnapshot`, `Promise.all`, including the fixture filesystem changes.
      */
     async (fixture) => {
     const inputRoot = join(fixture.infraRoot, "descriptor-snapshot");
@@ -4611,12 +4611,12 @@ test("an evicted descriptor payload cannot silently mix a later input snapshot",
     const fillerCount = Math.ceil(MAX_WORKSPACE_INVOCATION_DOCUMENT_CACHE_ENTRIES / 2);
     const fillers = Array.from({ length: fillerCount },
       /**
-       * Constructs one generated fixture element.
-       *
-       * Inputs: `_`, `index`.
-       * Outputs: the `({ id: "descriptor-filler-" + String(index).padStart(4, "0"), repositories: ["api"], inputs: { bindings: "../infra/descriptor-snapshot/filler-" + String(index) + "-bindings.json", inventory:` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Constructs one generated fixture element.
+      *
+      * Inputs: `_`, `index`.
+      * Outputs: the `({ id: "descriptor-filler-" + String(index).padStart(4, "0"), repositories: ["api"], inputs: { bindings: "../infra/descriptor-snapshot/filler-" + String(index) + "-bindings.json", inventory:` result consumed by `Array.from`.
+       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+       * Side effects: Produces only the current in-memory fixture value.
        */
       (_, index) => ({
       id: "descriptor-filler-" + String(index).padStart(4, "0"),
@@ -4631,12 +4631,12 @@ test("an evicted descriptor payload cannot silently mix a later input snapshot",
       await Promise.all(Array.from(
         { length: Math.min(64, fillerCount - offset) },
         /**
-         * Constructs one generated fixture element.
+         * Writes one pair of descriptor-filler provisioning documents for the current batch offset.
          *
          * Inputs: `_`, `localIndex`.
          * Outputs: the `{ const index = offset + localIndex; await Promise.all([ writeFile(join(inputRoot, "filler-" + String(index) + "-bindings.json"), bindingsText, "utf8"), writeFile(join(inputRoot, "filler-" +` result consumed by `Array.from`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+         * Does not handle: Updating the workspace manifest, scanning input files, or writing another batch index.
+         * Side effects: Starts two asynchronous JSON writes for this filler's bindings and inventory files.
          */
         async (_, localIndex) => {
           const index = offset + localIndex;
@@ -4737,12 +4737,12 @@ test("an evicted descriptor payload cannot silently mix a later input snapshot",
       assert.equal(
         analysis.diagnostics.some(
           /**
-           * Tests the current diagnostic against the requested condition.
-           *
-           * Inputs: `diagnostic`.
-           * Outputs: the `String(diagnostic) === "APP_LOCAL_INPUT_SNAPSHOT_CHANGED"` result consumed by `analysis.diagnostics.some`.
-           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-           * Side effects: none; it derives the current-item result.
+          * Tests the current diagnostic against the requested condition.
+          *
+          * Inputs: `diagnostic`.
+          * Outputs: the `String(diagnostic) === "APP_LOCAL_INPUT_SNAPSHOT_CHANGED"` result consumed by `analysis.diagnostics.some`.
+           * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+           * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
            */
           (diagnostic) => String(diagnostic) === "APP_LOCAL_INPUT_SNAPSHOT_CHANGED",
         ),
@@ -4750,12 +4750,12 @@ test("an evicted descriptor payload cannot silently mix a later input snapshot",
       );
       assert.equal(analysis.result.records.some(
         /**
-         * Tests the current record against the requested condition.
-         *
-         * Inputs: `record`.
-         * Outputs: the `record.coverage === "complete"` result consumed by `analysis.result.records.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current record against the requested condition.
+        *
+        * Inputs: `record`.
+        * Outputs: the `record.coverage === "complete"` result consumed by `analysis.result.records.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (record) => record.coverage === "complete"), false);
       assert.equal(JSON.stringify(analysis).includes(fixture.root), false);
@@ -4778,30 +4778,30 @@ test("coverage-gap fanout is budgeted without retaining a partial member gap gra
     /**
      * Verifies “coverage-gap fanout is budgeted without retaining a partial member gap graph”.
      *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: register a separate test, invoke an installed binary, or expose a production listener.
-     * Side effects: runs `Array.from`, `Promise.all`, `repositoryIds.map`, `join`, `mkdir`, `writeFile`.
+    * Inputs: `fixture`.
+    * Outputs: a promise that settles after its awaited workspace operations and assertions.
+     * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
+    * Side effects: runs `Array.from`, `Promise.all`, `repositoryIds.map`, `join`, `mkdir`, `writeFile`.
      */
     async (fixture) => {
     const repositoryIds = Array.from({ length: 100 },
       /**
-       * Constructs one generated fixture element.
-       *
-       * Inputs: `_`, `index`.
-       * Outputs: the `"gap-" + String(index)` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Constructs one generated fixture element.
+      *
+      * Inputs: `_`, `index`.
+      * Outputs: the `"gap-" + String(index)` result consumed by `Array.from`.
+       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+       * Side effects: Produces only the current in-memory fixture value.
        */
       (_, index) => "gap-" + String(index));
     await Promise.all(repositoryIds.map(
       /**
-       * Projects a report value from the current id.
+       * Creates one repository source tree that contains the coverage-gap environment read.
        *
        * Inputs: `id`.
        * Outputs: the `{ const sourceRoot = join(fixture.root, id, "src"); await mkdir(sourceRoot, { recursive: true }); await writeFile(join(sourceRoot, "index.ts"), "export const value = process.env.GAP_FANOUT_K` result consumed by `repositoryIds.map`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+       * Does not handle: Declaring the deployment, writing provisioning data, or creating other repository source trees.
+       * Side effects: Recursively creates the source directory and writes its TypeScript fixture file.
        */
       async (id) => {
       const sourceRoot = join(fixture.root, id, "src");
@@ -4812,12 +4812,12 @@ test("coverage-gap fanout is budgeted without retaining a partial member gap gra
     await mkdir(inputRoot, { recursive: true });
     const malformedCandidates = Array.from({ length: 1_001 },
       /**
-       * Constructs one generated fixture element.
-       *
-       * Inputs: no arguments.
-       * Outputs: the `({ invalid: "x".repeat(5_000), })` result consumed by `Array.from`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Constructs one generated fixture element.
+      *
+      * Inputs: no arguments.
+      * Outputs: the `({ invalid: "x".repeat(5_000), })` result consumed by `Array.from`.
+       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
+       * Side effects: Produces only the current in-memory fixture value.
        */
       () => ({
       invalid: "x".repeat(5_000),
@@ -4832,12 +4832,12 @@ test("coverage-gap fanout is budgeted without retaining a partial member gap gra
     ]);
     const memberScopes = repositoryIds.map(
       /**
-       * Projects a report value from the current repositoryId.
-       *
-       * Inputs: `repositoryId`.
-       * Outputs: the `({ repositoryId, scope: { id: "coverage-" + repositoryId, componentId: "coverage-" + repositoryId, phase: "runtime", stage: { kind: "all" }, channel: "environment", }, })` result consumed by `repositoryIds.map`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Projects a report value from the current repositoryId.
+      *
+      * Inputs: `repositoryId`.
+      * Outputs: the `({ repositoryId, scope: { id: "coverage-" + repositoryId, componentId: "coverage-" + repositoryId, phase: "runtime", stage: { kind: "all" }, channel: "environment", }, })` result consumed by `repositoryIds.map`.
+       * Does not handle: Iterating the surrounding collection, validating sibling entries, or mutating source inputs.
+       * Side effects: Reads the current callback input and returns its projected in-memory value.
        */
       (repositoryId) => ({
       repositoryId,
@@ -4853,12 +4853,12 @@ test("coverage-gap fanout is budgeted without retaining a partial member gap gra
       schemaVersion: "workspace-manifest/v2",
       repositories: repositoryIds.map(
         /**
-         * Projects a report value from the current id.
-         *
-         * Inputs: `id`.
-         * Outputs: the `({ id, root: "../" + id })` result consumed by `repositoryIds.map`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Projects a report value from the current id.
+        *
+        * Inputs: `id`.
+        * Outputs: the `({ id, root: "../" + id })` result consumed by `repositoryIds.map`.
+         * Does not handle: Iterating the surrounding collection, validating sibling entries, or mutating source inputs.
+         * Side effects: Reads the current callback input and returns its projected in-memory value.
          */
         (id) => ({ id, root: "../" + id })),
       deployments: [{
@@ -4878,12 +4878,12 @@ test("coverage-gap fanout is budgeted without retaining a partial member gap gra
     assert.equal(
       fanout.diagnostics.some(
         /**
-         * Tests the current diagnostic against the requested condition.
-         *
-         * Inputs: `diagnostic`.
-         * Outputs: the `String(diagnostic) === "WORKSPACE_DEPLOYMENT_COVERAGE_GAP_FANOUT_EXCEEDED"` result consumed by `fanout.diagnostics.some`.
-         * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-         * Side effects: none; it derives the current-item result.
+        * Tests the current diagnostic against the requested condition.
+        *
+        * Inputs: `diagnostic`.
+        * Outputs: the `String(diagnostic) === "WORKSPACE_DEPLOYMENT_COVERAGE_GAP_FANOUT_EXCEEDED"` result consumed by `fanout.diagnostics.some`.
+         * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+         * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
         (diagnostic) => String(diagnostic) === "WORKSPACE_DEPLOYMENT_COVERAGE_GAP_FANOUT_EXCEEDED",
       ),
@@ -4894,12 +4894,12 @@ test("coverage-gap fanout is budgeted without retaining a partial member gap gra
       assert.equal(
         member.diagnostics.some(
           /**
-           * Tests the current diagnostic against the requested condition.
-           *
-           * Inputs: `diagnostic`.
-           * Outputs: the `String(diagnostic) === "WORKSPACE_MEMBER_COVERAGE_GAP_FANOUT_EXCEEDED"` result consumed by `member.diagnostics.some`.
-           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-           * Side effects: none; it derives the current-item result.
+          * Tests the current diagnostic against the requested condition.
+          *
+          * Inputs: `diagnostic`.
+          * Outputs: the `String(diagnostic) === "WORKSPACE_MEMBER_COVERAGE_GAP_FANOUT_EXCEEDED"` result consumed by `member.diagnostics.some`.
+           * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+           * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
            */
           (diagnostic) => String(diagnostic) === "WORKSPACE_MEMBER_COVERAGE_GAP_FANOUT_EXCEEDED",
         ),
@@ -4908,12 +4908,12 @@ test("coverage-gap fanout is budgeted without retaining a partial member gap gra
       assert.equal(
         member.reconciliation.records.some(
           /**
-           * Tests the current record against the requested condition.
-           *
-           * Inputs: `record`.
-           * Outputs: the `record.coverage === "complete"` result consumed by `member.reconciliation.records.some`.
-           * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-           * Side effects: none; it derives the current-item result.
+          * Tests the current record against the requested condition.
+          *
+          * Inputs: `record`.
+          * Outputs: the `record.coverage === "complete"` result consumed by `member.reconciliation.records.some`.
+           * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
+           * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
            */
           (record) => record.coverage === "complete"),
         false,
@@ -5334,12 +5334,12 @@ test("runtime deployment attestations bind sources and reject hostile capabiliti
 });
 
 /**
- * Assembles the closedModelDocumentForWorkspaceRuntime test value.
+ * Builds a closed provisioning-model document for the single-repository runtime fixture.
  *
  * Inputs: no arguments.
- * Outputs: the fixture value returned by `closedModelDocumentForWorkspaceRuntime`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: none; it allocates only in-memory test data.
+ * Outputs: A closed production runtime scope that names expected adapter inputs and inventory authority.
+ * Does not handle: Parsing, file I/O, or evaluation of permitted exclusions.
+ * Side effects: Allocates a nested in-memory closed-model document.
  */
 function closedModelDocumentForWorkspaceRuntime(): object {
   return {
@@ -5375,12 +5375,12 @@ function closedModelDocumentForWorkspaceRuntime(): object {
 }
 
 /**
- * Assembles the closedModelDocumentForSharedWorkspaceRuntime test value.
+ * Builds a closed provisioning-model document with separate production scopes for API and worker.
  *
  * Inputs: no arguments.
- * Outputs: the fixture value returned by `closedModelDocumentForSharedWorkspaceRuntime`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `["api", "worker"].map`.
+ * Outputs: A closed-model document whose two scopes share the fixture provisioning inputs.
+ * Does not handle: Parsing, filesystem reads, or source-demand analysis.
+ * Side effects: Maps repository IDs to in-memory scope declarations.
  */
 function closedModelDocumentForSharedWorkspaceRuntime(): object {
   return {
@@ -5389,12 +5389,12 @@ function closedModelDocumentForSharedWorkspaceRuntime(): object {
     maxFiniteKeyDomain: 8,
     scopes: ["api", "worker"].map(
       /**
-       * Projects a report value from the current repositoryId.
-       *
-       * Inputs: `repositoryId`.
-       * Outputs: the `({ scope: productionMemberExecutionScope(repositoryId), declaredStages: ["production"], closed: true, approvedFirstPartyRoots: [repositoryId], bindingRoots: ["infra/shared-production/binding` result consumed by `["api", "worker"].map`.
-       * Does not handle: visit sibling items, modify the outer assertion, or perform I/O.
-       * Side effects: none; it derives the current-item result.
+      * Projects a report value from the current repositoryId.
+      *
+      * Inputs: `repositoryId`.
+      * Outputs: the `({ scope: productionMemberExecutionScope(repositoryId), declaredStages: ["production"], closed: true, approvedFirstPartyRoots: [repositoryId], bindingRoots: ["infra/shared-production/binding` result consumed by `["api", "worker"].map`.
+       * Does not handle: Iterating the surrounding collection, validating sibling entries, or mutating source inputs.
+       * Side effects: Reads the current callback input and returns its projected in-memory value.
        */
       (repositoryId) => ({
       scope: productionMemberExecutionScope(repositoryId),
@@ -5419,12 +5419,12 @@ function closedModelDocumentForSharedWorkspaceRuntime(): object {
 }
 
 /**
- * Assembles the writeDeploymentProvisioning test value.
+ * Writes bindings and inventory JSON fixtures for one deployment beneath the fixture infrastructure root.
  *
  * Inputs: `fixture`, `deploymentId`, `bindings`, `inventory`.
- * Outputs: the completion result produced by `writeDeploymentProvisioning`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: changes test-owned filesystem state through `Promise.all`, `writeFile`, `join`, `JSON.stringify`.
+ * Outputs: A promise fulfilled after both provisioning documents are persisted.
+ * Does not handle: Creating parent directories, validating adapter schemas, or scanning the deployment.
+ * Side effects: Serializes and writes two test-owned JSON files concurrently.
  */
 async function writeDeploymentProvisioning(
   fixture: WorkspaceFixture,
@@ -5447,12 +5447,12 @@ async function writeDeploymentProvisioning(
 }
 
 /**
- * Assembles the bindingManifest test value.
+ * Wraps fixture binding candidates in the adapter input shape expected by the provisioning adapter.
  *
  * Inputs: `candidates`.
- * Outputs: the fixture value returned by `bindingManifest`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: none; it allocates only in-memory test data.
+ * Outputs: A v1 binding-manifest object retaining the supplied candidates.
+ * Does not handle: Candidate validation, file serialization, or provider resolution.
+ * Side effects: Allocates an in-memory manifest wrapper.
  */
 function bindingManifest(candidates: readonly object[]): object {
   return {
@@ -5464,12 +5464,12 @@ function bindingManifest(candidates: readonly object[]): object {
 }
 
 /**
- * Assembles the inventorySnapshot test value.
+ * Wraps fixture inventory items in the snapshot shape consumed by the inventory adapter.
  *
  * Inputs: `items`.
- * Outputs: the fixture value returned by `inventorySnapshot`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: none; it allocates only in-memory test data.
+ * Outputs: A v1 inventory snapshot retaining the supplied items under the fixture authority.
+ * Does not handle: Inventory validation, timestamp generation, or file serialization.
+ * Side effects: Allocates an in-memory snapshot wrapper.
  */
 function inventorySnapshot(items: readonly object[]): object {
   return {
@@ -5494,12 +5494,12 @@ interface FixtureExecutionScope {
 }
 
 /**
- * Assembles the bindingCandidate test value.
+ * Builds one fixture binding candidate with provider identity, applicability, scope, and precedence.
  *
  * Inputs: `repositoryId`, `resourceId`, `authorityId`, `scope`, `resolution`, `appliesWhenStage`, `idSuffix`, `precedenceRank`.
- * Outputs: the fixture value returned by `bindingCandidate`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: none; it allocates only in-memory test data.
+ * Outputs: A binding candidate whose destination is `env:DATABASE_URL` and whose defaults model fixture provenance.
+ * Does not handle: Resolving provider resources, validating scope overlap, or writing adapter input.
+ * Side effects: Allocates an in-memory candidate and nested applicability metadata.
  */
 function bindingCandidate(
   repositoryId: string,
@@ -5534,12 +5534,12 @@ function bindingCandidate(
 }
 
 /**
- * Assembles the inventoryItem test value.
+ * Builds one scoped fixture inventory item with a canonical provider resource identity.
  *
  * Inputs: `repositoryId`, `resourceId`, `authorityId`, `scope`.
- * Outputs: the fixture value returned by `inventoryItem`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: none; it allocates only in-memory test data.
+ * Outputs: An inventory item with one declared execution scope.
+ * Does not handle: Inventory snapshot wrapping, scope validation, or provider access.
+ * Side effects: Allocates an in-memory provider-resource and scope wrapper.
  */
 function inventoryItem(
   repositoryId: string,
@@ -5557,12 +5557,12 @@ function inventoryItem(
 }
 
 /**
- * Assembles the unscopedInventoryItem test value.
+ * Builds one fixture inventory item that intentionally omits declared scopes.
  *
  * Inputs: `resourceId`, `authorityId`.
- * Outputs: the fixture value returned by `unscopedInventoryItem`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: none; it allocates only in-memory test data.
+ * Outputs: An inventory item containing only its canonical provider resource identity.
+ * Does not handle: Attaching scopes, validating inventory, or calling a provider.
+ * Side effects: Allocates an in-memory inventory item.
  */
 function unscopedInventoryItem(
   resourceId: string,
@@ -5577,12 +5577,12 @@ function unscopedInventoryItem(
 }
 
 /**
- * Assembles the memberExecutionScope test value.
+ * Builds a runtime/environment execution scope for one fixture repository member.
  *
  * Inputs: `repositoryId`, `executionScopeId`, `stage`.
- * Outputs: the fixture value returned by `memberExecutionScope`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: none; it allocates only in-memory test data.
+ * Outputs: The requested scope ID/component/stage tuple, defaulting to all stages.
+ * Does not handle: Scope validation, stage copying, or source scanning.
+ * Side effects: Allocates one in-memory scope object.
  */
 function memberExecutionScope(
   repositoryId: string,
@@ -5599,12 +5599,12 @@ function memberExecutionScope(
 }
 
 /**
- * Assembles the productionMemberExecutionScope test value.
+ * Builds an exact-production specialization of the fixture member execution scope.
  *
  * Inputs: `repositoryId`.
- * Outputs: the fixture value returned by `productionMemberExecutionScope`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `memberExecutionScope`.
+ * Outputs: A runtime/environment scope restricted to the `production` stage.
+ * Does not handle: Stage validation, provider access, or closed-model construction.
+ * Side effects: Calls `memberExecutionScope` and allocates its return object.
  */
 function productionMemberExecutionScope(repositoryId: string): FixtureExecutionScope {
   return memberExecutionScope(repositoryId, repositoryId, {
@@ -5614,12 +5614,12 @@ function productionMemberExecutionScope(repositoryId: string): FixtureExecutionS
 }
 
 /**
- * Assembles the deploymentWithMemberScope test value.
+ * Builds a deployment fixture whose API member has an explicit runtime execution scope.
  *
  * Inputs: `deploymentId`.
- * Outputs: the fixture value returned by `deploymentWithMemberScope`.
- * Does not handle: validate unrelated production input or suppress assertion failures.
- * Side effects: invokes `memberExecutionScope`.
+ * Outputs: A v2 deployment declaration with fixture-relative bindings and inventory paths.
+ * Does not handle: Writing provisioning files, validating the manifest, or scanning the member.
+ * Side effects: Calls `memberExecutionScope` and allocates nested declaration objects.
  */
 function deploymentWithMemberScope(deploymentId: string): object {
   return {
