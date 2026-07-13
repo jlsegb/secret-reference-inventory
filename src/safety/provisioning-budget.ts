@@ -98,12 +98,12 @@ export function reserveProvisioningArray(
 }
 
 /**
- * Performs a structural preflight with bounded arrays and individual own-object field lists in one provisioning value.
+ * Performs a structural preflight with bounded arrays and recursively reachable enumerable own string-keyed object values in one provisioning value.
  *
  * Inputs: An unknown provisioning value rooted at an array, object, or primitive.
  * Outputs: True when traversal finishes, every encountered array fits the shared raw-array quota, and every encountered object has at most the own-field cap; false for a rejected array, overlarge individual object, or thrown property access.
- * Does not handle: A whole-graph object-field quota, cycle detection, or bounded inherited-key traversal. Object field counts reset per object, and a cyclic object graph may not terminate; `for...in` enumerates inherited enumerable keys without charging them to the own-field cap, which is an unbounded resource exposure requiring separate hardening. It also does not validate schema/normalized output or create a stable getter-backed snapshot.
- * Side effects: Allocates a work stack, enumerates enumerable properties (including inherited ones), and reads array/own-object values, which can invoke getters; it mutates only its private budget.
+ * Does not handle: Non-enumerable, symbol-keyed, or inherited object fields: only enumerable own string keys are traversed. A later consumer can read such a skipped field, so a non-enumerable `items` array can bypass this preflight's array cap. It also has no whole-graph object-field quota or cycle detection; object field counts reset per object and a cyclic object graph may not terminate. This function does not validate schema/normalized output or create a stable getter-backed snapshot.
+ * Side effects: Allocates a work stack, enumerates own enumerable string keys, and reads array/object values, which can invoke getters; it mutates only its private budget.
  */
 export function provisioningInputFitsBudget(input: unknown): boolean {
   const budget = createProvisioningBudget();

@@ -34,12 +34,12 @@ const location = {
 } as const;
 
 test("SafeFactFactory accepts conventional keys and makes secret-shaped source keys opaque", /**
- * Verifies that a conventional environment key remains visible while a credential-shaped fixture never survives fact serialization.
+ * Verifies that a conventional environment key remains visible while a credential-shaped fixture is replaced in the direct `environmentKey` return value.
  *
  * Inputs: No parameters; uses the module's non-production, credential-shaped sentinel fixture.
- * Outputs: No value; assertions establish accepted-key and opaque/redaction behavior.
- * Does not handle: Provider retrieval, filesystem scanning, or identifying every possible credential format.
- * Side effects: Constructs a factory, invokes key conversion, serializes one result, and performs assertions.
+ * Outputs: No value; assertions establish accepted-key and opaque-return behavior.
+ * Does not handle: Fact materialization, normalized-fact serialization, provider retrieval, filesystem scanning, or identifying every possible credential format.
+ * Side effects: Constructs a factory, invokes key conversion, serializes the direct `environmentKey` return value rather than a fact, and performs assertions.
  */
 () => {
   const factory = new SafeFactFactory();
@@ -274,12 +274,12 @@ test("closed models retain coverage metadata but never promote unproven dynamic 
   assert.equal(factory.materializeClosedModel(missingInputId).ok, false);
 });
 
-test("public provisioning materializers reject an oversized sparse inventory before getters run", /**
- * Verifies that an oversized sparse inventory is rejected before its hostile indexed getter is observed.
+test("public provisioning materializers reject an oversized sparse inventory from an enumerable items field before getters run", /**
+ * Verifies that an oversized sparse inventory in the enumerable `items` input field is rejected before its hostile indexed getter is observed.
  *
  * Inputs: No parameters; allocates an oversized sparse array with a deliberately throwing terminal getter.
- * Outputs: No value; assertions establish early rejection and absence of the sentinel from serialized failure data.
- * Does not handle: Getter behavior for in-budget arrays or global memory exhaustion.
+ * Outputs: No value; assertions establish early rejection before the hostile getter can execute. The serialized-result assertion observes only that non-executed getter's sentinel is absent; it does not demonstrate redaction behavior.
+ * Does not handle: Getter behavior for in-budget arrays, non-enumerable `items` fields that preflight does not traverse, sentinel/redaction behavior after getter execution, or global memory exhaustion.
  * Side effects: Allocates the sparse array, defines an accessor, materializes an inventory fixture, serializes output, and performs assertions.
  */
 () => {

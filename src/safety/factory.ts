@@ -106,8 +106,16 @@ export interface SafePathInput {
 }
 
 /**
- * The sole conversion boundary for untrusted text that may reach facts,
- * diagnostics, caches, or reporters. Raw input never appears in an error.
+ * Converts most untrusted values into safe fact records. Factory-generated
+ * materialization failures use fixed sanitized diagnostic codes and retain no
+ * raw input, except that untrusted closed-model permitted-exclusion rationale
+ * labels are not value-sanitized: an uppercase caller value accepted by
+ * `diagnosticCode` persists verbatim in normalized facts and JSON and can
+ * leak there. The no-value-leak guarantee therefore does not cover those
+ * rationale labels until a separately authorized code change sanitizes them.
+ * This class also does not catch
+ * exceptions from caller-supplied accessors, iterables, or matchers; those can
+ * retain raw text, so callers must contain and sanitize them before exposure.
  */
 export class SafeFactFactory implements FullCoreFactBuilder {
   readonly policyRevision = SAFE_FACT_POLICY_REVISION;
@@ -120,8 +128,8 @@ export class SafeFactFactory implements FullCoreFactBuilder {
    *
    * Inputs: Optional trusted environment-key iterable and optional finite-domain ceiling.
    * Outputs: A factory whose private allowlist and finite-key ceiling are ready for materializers.
-   * Does not handle: Bounding or snapshotting an arbitrary iterable, fetching secrets, or checking filesystem paths.
-   * Side effects: Iterates supplied keys (and can propagate iterator/getter errors), allocates a Set, and throws `SafetyConfigurationError` for an invalid observed key or limit.
+   * Does not handle: Bounding or snapshotting an arbitrary iterable, fetching secrets, checking filesystem paths, or containing/sanitizing an exception from an options accessor or supplied iterator.
+   * Side effects: Reads and iterates supplied options (whose accessors/iterator can throw raw text), allocates a Set, and throws `SafetyConfigurationError` for an invalid observed key or limit.
    */
    public constructor(options: SafeFactFactoryOptions = {}) {
     const trusted = new Set<string>();
@@ -199,8 +207,8 @@ export class SafeFactFactory implements FullCoreFactBuilder {
    *
    * Inputs: An unknown candidate and the adapter's `RegExp` matcher.
    * Outputs: A safe identifier only for a matching string of at most 512 characters; otherwise the opaque sentinel.
-   * Does not handle: Proving the matcher itself is safe, checking provider existence, or keeping rejected text.
-   * Side effects: Mutates `matcher.lastIndex` to zero before and after `.test`, and invokes its matching behavior.
+   * Does not handle: Proving the matcher itself is safe, checking provider existence, keeping rejected text, or containing/sanitizing matcher property/test exceptions.
+   * Side effects: Sets `matcher.lastIndex` to zero before evaluation and again after normal evaluation completion (after `.test` returns normally when a string is tested); a throwing matcher has no guaranteed post-throw reset. Invokes matching behavior that can throw caller-supplied raw text.
    */
   public structuredIdentifier(value: unknown, matcher: RegExp): Identifier {
     // Adapters must not get stateful results from a global/sticky expression.
@@ -220,12 +228,12 @@ export class SafeFactFactory implements FullCoreFactBuilder {
   }
 
   /**
-   * Converts an already canonical, in-root path pair into a display-safe relative path.
+   * Converts an expected object containing an already canonical, in-root path pair into a display-safe relative path.
    *
    * Inputs: An approved root and canonical candidate path as strings.
    * Outputs: A slash-normalized safe relative path, or `OPAQUE_PATH` for root, escaping, malformed, or token-shaped segments.
-   * Does not handle: Canonicalizing paths, resolving symlinks, or proving the root was approved.
-   * Side effects: Calls Node path helpers and tests every segment; it does not read the filesystem.
+   * Does not handle: Canonicalizing paths, resolving symlinks, proving the root was approved, or null/non-object runtime inputs. For an object with malformed fields it returns `OPAQUE_PATH`; null, a non-object, or a throwing supplied field accessor can propagate a native/raw exception that callers must contain and sanitize.
+   * Side effects: Reads supplied fields, calls Node path helpers, and tests every segment; it does not read the filesystem.
    */
   public safePath(input: SafePathInput): SafePath {
     if (
@@ -281,11 +289,11 @@ export class SafeFactFactory implements FullCoreFactBuilder {
   }
 
   /**
-   * Accepts only a UTC timestamp spelling that parses and round-trips through the JavaScript date representation.
+   * Parses a UTC timestamp spelling accepted by the local grammar and returns JavaScript's canonical ISO UTC serialization.
    *
    * Inputs: One unknown timestamp value.
    * Outputs: A canonical `SafeTimestamp`, or undefined when the grammar or parse is invalid.
-   * Does not handle: Timezone conversion policy beyond ISO UTC or timestamp provenance.
+   * Does not handle: Timezone conversion policy beyond ISO UTC, timestamp provenance, or strict lexical/canonical round-trip validation. Calendar-normalizing inputs accepted by `Date.parse` (for example, a non-leap-year February 29) can be returned as a different canonical date.
    * Side effects: Calls `Date.parse` and allocates a `Date` for accepted strings.
    */
   public timestamp(value: unknown): SafeTimestamp | undefined {
@@ -343,9 +351,9 @@ export class SafeFactFactory implements FullCoreFactBuilder {
    * Validates one raw binding candidate and converts it into a safe, value-free Core binding fact.
    *
    * Inputs: An unknown adapter binding record, including scope, destination, precedence, and optional provider resource.
-   * Outputs: `{ ok: true, value }` for a fully safe binding or `{ ok: false, diagnostic }` with a fixed code.
-   * Does not handle: Reading a secret value, resolving precedence, proving a binding delivers to a live process, or guaranteeing whole-graph input bounds: its preflight has no cycle detection, global object-field quota, or bound on inherited enumerable-key traversal.
-   * Side effects: Performs a budget preflight then materializes fields in a second pass; enumerable fields/getters can be read twice and may yield different values or throw.
+   * Outputs: On normal return, `{ ok: true, value }` for a fully safe binding or `{ ok: false, diagnostic }` with a fixed sanitized code and no raw input.
+   * Does not handle: Reading a secret value, resolving precedence, proving a binding delivers to a live process, or guaranteeing complete input bounds. Its preflight visits only enumerable own string-keyed object fields, so non-enumerable/symbol/inherited fields can bypass its cap and later be read. It also has no cycle detection or whole-graph object-field quota, and it does not contain/sanitize accessor exceptions.
+   * Side effects: Performs a budget preflight then materializes fields in a second pass; fields/getters can be read twice, can yield different values, and can throw raw text to the caller.
    */
   public materializeBindingCandidate(
     input: unknown,
@@ -420,9 +428,9 @@ export class SafeFactFactory implements FullCoreFactBuilder {
    * Validates an inventory snapshot and retains only provider resource identities and optional declared scopes.
    *
    * Inputs: An unknown snapshot record with an authority, timestamp, and item array.
-   * Outputs: A safe snapshot or a fixed failure diagnostic; no secret payload is represented.
-   * Does not handle: Fetching providers, validating authority ownership externally, deduplicating inventory items, or guaranteeing whole-graph input bounds: its preflight has no cycle detection, global object-field quota, or bound on inherited enumerable-key traversal.
-   * Side effects: Performs a budget preflight then reads the record/items again; accessors can run in both passes and exceptions propagate outside the preflight only where later reads are unguarded.
+   * Outputs: On normal return, a safe snapshot or a fixed sanitized failure diagnostic; neither returned form represents a secret payload.
+   * Does not handle: Fetching providers, validating authority ownership externally, deduplicating inventory items, or guaranteeing complete input bounds. Its preflight visits only enumerable own string-keyed object fields; a non-enumerable `items` array can bypass the array cap and this method can then accept more than `MAX_PROVISIONING_RAW_ENTRIES` items. It also has no cycle detection or whole-graph object-field quota, and it does not contain/sanitize accessor exceptions.
+   * Side effects: Performs a budget preflight then reads the record/items again; accessors can run in both passes and can throw raw text to the caller.
    */
   public materializeInventorySnapshot(
     input: unknown,
@@ -479,9 +487,9 @@ export class SafeFactFactory implements FullCoreFactBuilder {
    * Converts an adapter coverage gap into safe evidence, treating model-domain gaps as binding uncertainty.
    *
    * Inputs: An unknown coverage record with an affected selector, input ID, adapter/path ID, domain, and optional reason.
-   * Outputs: A safe `CoverageGap` or a fixed invalid-input diagnostic.
-   * Does not handle: Recovering skipped content, assigning a precise source range, treating a model declaration as evidence of delivery, or guaranteeing whole-graph input bounds: its preflight has no cycle detection, global object-field quota, or bound on inherited enumerable-key traversal.
-   * Side effects: Preflights then re-reads input properties; safe materializer calls allocate the output and can observe accessor changes between passes.
+   * Outputs: On normal return, a safe `CoverageGap` or a fixed sanitized invalid-input diagnostic.
+   * Does not handle: Recovering skipped content, assigning a precise source range, treating a model declaration as evidence of delivery, or guaranteeing complete input bounds. Its preflight visits only enumerable own string-keyed object fields, so non-enumerable/symbol/inherited fields can bypass its cap and later be read. It also has no cycle detection or whole-graph object-field quota, and it does not contain/sanitize accessor exceptions.
+   * Side effects: Preflights then re-reads input properties; safe materializer calls allocate output, can observe accessor changes between passes, and can propagate raw accessor exceptions.
    */
   public materializeCoverageGap(input: unknown): FactMaterialization<CoverageGap> {
     if (!provisioningInputFitsBudget(input)) {
@@ -530,9 +538,9 @@ export class SafeFactFactory implements FullCoreFactBuilder {
    * Converts a declared closed provisioning model into safe scope contracts without trusting dynamic-domain claims as finite coverage.
    *
    * Inputs: An unknown model containing schema/input IDs, finite cap, scopes, and optional dynamic-domain declarations.
-   * Outputs: Safe scopes and coverage contracts, or one fixed materialization failure; dynamic domains are intentionally absent from the value.
-   * Does not handle: Establishing closure at runtime, validating external adapter coverage, promoting declared dynamic keys into strong absence evidence, or guaranteeing whole-graph input bounds: its preflight has no cycle detection, global object-field quota, or bound on inherited enumerable-key traversal.
-   * Side effects: Preflights then iterates nested arrays/records again, allocating contracts and observing getters more than once.
+   * Outputs: On normal return, safe scopes and coverage contracts or one fixed sanitized materialization failure; dynamic domains are intentionally absent from the value.
+   * Does not handle: Establishing closure at runtime, validating external adapter coverage, promoting declared dynamic keys into strong absence evidence, or guaranteeing complete input bounds. Its preflight visits only enumerable own string-keyed object fields, so non-enumerable/symbol/inherited fields can bypass its cap and later be read. It also has no cycle detection or whole-graph object-field quota, and it does not contain/sanitize accessor exceptions.
+   * Side effects: Preflights then iterates nested arrays/records again, allocating contracts, observing getters more than once, and potentially propagating raw accessor exceptions.
    */
   public materializeClosedModel(
     input: unknown,
@@ -644,9 +652,9 @@ export class SafeFactFactory implements FullCoreFactBuilder {
    * Reports the one fixed uncertainty warning when a model declares any dynamic domain.
    *
    * Inputs: The raw model-shaped value inspected for a nonempty `dynamicDomains` array.
-   * Outputs: A frozen one-element array containing a mutable plain `UNPROVEN_DYNAMIC_DOMAIN` diagnostic record, or a frozen empty array.
-   * Does not handle: Materializing the model, exposing individual domains, deciding whether a scope is closed, or deep-freezing the returned diagnostic record.
-   * Side effects: Reads object/array properties and allocates/freezes a fresh result array.
+   * Outputs: On normal return, a frozen one-element array containing a mutable plain `UNPROVEN_DYNAMIC_DOMAIN` diagnostic record, or a frozen empty array.
+   * Does not handle: Materializing the model, exposing individual domains, deciding whether a scope is closed, deep-freezing the returned diagnostic record, or containing/sanitizing supplied property-accessor exceptions.
+   * Side effects: Reads object/array properties and allocates/freezes a fresh result array; a throwing accessor can propagate raw text to the caller.
    */
   public closedModelDiagnostics(input: unknown): readonly CoreDiagnostic[] {
     const record = asRecord(input);
@@ -662,9 +670,9 @@ export class SafeFactFactory implements FullCoreFactBuilder {
    * Converts one source-read claim into a safe reference whose untrusted name and evidence must pass nested materializers.
    *
    * Inputs: An unknown reference record containing ID, logical key, operation/resolution metadata, location, and evidence chain.
-   * Outputs: A safe `SecretReference` or an `INVALID_SECRET_REFERENCE` failure without raw text.
-   * Does not handle: Parsing source, proving execution, or accepting missing/invalid evidence.
-   * Side effects: Reads nested record properties and allocates a reference/evidence graph; accessor errors can propagate.
+   * Outputs: On normal return, a safe `SecretReference` or an `INVALID_SECRET_REFERENCE` failure without raw text.
+   * Does not handle: Parsing source, proving execution, accepting missing/invalid evidence, or containing/sanitizing supplied property-accessor exceptions.
+   * Side effects: Reads nested record properties and allocates a reference/evidence graph; accessor errors can propagate raw text to the caller.
    */
   public materializeSecretReference(
     input: unknown,
@@ -713,9 +721,9 @@ export class SafeFactFactory implements FullCoreFactBuilder {
    * Converts the relationship from a safe source reference to an execution scope into a Core demand edge.
    *
    * Inputs: An unknown edge record with IDs, scope, allowed origin, and evidence chain.
-   * Outputs: A safe direct/consumer-derived demand edge or one fixed invalid-edge diagnostic.
-   * Does not handle: Verifying that the reference exists elsewhere in the graph or deciding reachability.
-   * Side effects: Reads nested properties and allocates a value-free edge; accessor errors are not caught.
+   * Outputs: On normal return, a safe direct/consumer-derived demand edge or one fixed sanitized invalid-edge diagnostic.
+   * Does not handle: Verifying that the reference exists elsewhere in the graph, deciding reachability, or containing/sanitizing supplied property-accessor exceptions.
+   * Side effects: Reads nested properties and allocates a value-free edge; accessor errors can propagate raw text to the caller.
    */
   public materializeDemandEdge(input: unknown): FactMaterialization<DemandEdge> {
     const record = asRecord(input);
@@ -754,9 +762,9 @@ export class SafeFactFactory implements FullCoreFactBuilder {
    * Converts one dynamic environment lookup into conservative finite, pattern, or unbounded evidence.
    *
    * Inputs: An unknown edge record with scope, domain, origin, optional pattern constraint, likely keys, and evidence.
-   * Outputs: A safe dynamic edge only when its likely keys agree with its domain, otherwise a fixed failure diagnostic.
-   * Does not handle: Inferring omitted likely keys, resolving dynamic input at runtime, or making an unbounded domain finite.
-   * Side effects: Reads nested input properties and allocates the edge/domain; accessor errors are not caught.
+   * Outputs: On normal return, a safe dynamic edge only when its likely keys agree with its domain, otherwise a fixed sanitized failure diagnostic.
+   * Does not handle: Inferring omitted likely keys, resolving dynamic input at runtime, making an unbounded domain finite, or containing/sanitizing supplied property-accessor exceptions.
+   * Side effects: Reads nested input properties and allocates the edge/domain; accessor errors can propagate raw text to the caller.
    */
   public materializeDynamicLookupEdge(
     input: unknown,
@@ -1522,9 +1530,9 @@ export class SafeFactFactory implements FullCoreFactBuilder {
    * Converts declared coverage exclusions into selector/rationale pairs without judging whether an exclusion is appropriate.
    *
    * Inputs: An unknown array of selector and rationale records.
-   * Outputs: A new exclusion list or undefined when an entry cannot be materialized.
-   * Does not handle: Deduplicating selectors, evaluating the exclusion, or suppressing downstream findings.
-   * Side effects: Iterates records and allocates converted exclusions; raw rationale text becomes a safe fixed code.
+   * Outputs: A new exclusion list or undefined when an entry cannot be materialized. `rationaleCode` is the caller value verbatim when it satisfies the uppercase diagnostic-code grammar, otherwise the fixed `UNSAFE_DIAGNOSTIC` fallback.
+   * Does not handle: Deduplicating selectors, evaluating the exclusion, suppressing downstream findings, or treating a grammar-valid rationale as redacted/safe. An untrusted credential-shaped value composed of uppercase letters, digits, and underscores can satisfy that grammar, persist verbatim in normalized facts and JSON, and leak there; the no-value-leak guarantee does not cover this field until separately authorized code sanitization.
+   * Side effects: Iterates records, calls `diagnosticCode` for each untrusted rationale label, and allocates converted exclusions. A grammar-valid untrusted rationale label is retained verbatim.
    */
    private materializePermittedExclusions(
     input: unknown,
@@ -1652,9 +1660,9 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 /**
  * Creates the uniform value-free error branch returned when a fact cannot cross the safety boundary.
  *
- * Inputs: The active factory and a fixed/raw diagnostic label.
- * Outputs: `{ ok: false, diagnostic }` with the factory-sanitized code and no partial value.
- * Does not handle: Logging, retaining rejected input, or recovering malformed facts.
+ * Inputs: The active factory and a trusted, fixed internal diagnostic label supplied by private callers.
+ * Outputs: `{ ok: false, diagnostic }` with no partial value; the fixed label passes through the factory's diagnostic-code conversion.
+ * Does not handle: Accepting, validating, or sanitizing arbitrary caller-controlled labels; it relies on its private fixed-label call sites, and does not log or recover malformed facts.
  * Side effects: Calls `factory.diagnosticCode` and allocates the nested result objects.
  */
 function materializationFailure<T>(
@@ -2107,7 +2115,7 @@ function normalizeCoordinate(value: number): number {
  * Computes base-two Shannon entropy over the character-frequency distribution of a string.
  *
  * Inputs: One string, expected to be the separator-stripped candidate from the token classifier.
- * Outputs: Its entropy in bits per character (zero for a nonempty single-character distribution; `NaN` is possible for an empty string but callers avoid it).
+ * Outputs: Its entropy in bits per character (zero for an empty input or a single-character distribution).
  * Does not handle: Cryptographic randomness testing, token validation, or Unicode grapheme normalization.
  * Side effects: Allocates and mutates a local frequency map while traversing characters.
  */

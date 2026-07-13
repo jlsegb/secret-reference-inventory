@@ -36,8 +36,11 @@ export interface RawSourceLocation {
 }
 
 /**
- * Raw AST output is intentionally confined to the immediate extractor
- * materialization boundary. It must never enter caches, reporters, or Core.
+ * Raw AST output is the internal contract between a syntax backend and an
+ * extractor. Direct callers of `TypeScriptSyntaxBackend.extract` and injected
+ * collaborators can observe it; neither this type nor the extractor
+ * independently sanitizes it. Consumers must keep it out of caches, reporters,
+ * and Core facts unless they apply their own safe materialization.
  */
 export type RawSourceObservation =
   | {
@@ -66,8 +69,10 @@ export interface SyntaxBackendResult {
 
 /**
  * A future OXC implementation must emit this same compact raw-observation
- * contract. The public adapter materializes either backend through the one
- * safety/Core port.
+ * contract. `TypeScriptSourceExtractor` passes either backend's observations
+ * to its injected Core builder, which is a trusted materialization boundary;
+ * the extractor returns a backend ID verbatim and does not sanitize a custom
+ * backend or builder's output.
  */
 export interface SourceSyntaxBackend {
   readonly id: string;
@@ -220,8 +225,10 @@ export class TypeScriptSyntaxBackend implements SourceSyntaxBackend {
 }
 
 /**
- * Syntax-only scanner used by the TypeScript backend. Its raw observations are
- * immediately handed to the extractor's safety materialization boundary.
+ * Syntax-only scanner used by the TypeScript backend. When used through
+ * `TypeScriptSourceExtractor`, its raw observations are passed to that
+ * extractor's injected builder; direct backend callers can receive them
+ * without any materialization or redaction.
  */
 class SourceScanner {
   readonly #observations: RawSourceObservation[] = [];
@@ -735,12 +742,12 @@ class SourceScanner {
   }
 
   /**
-   * Recognizes environment get and supported enumeration or forwarding call forms and emits direct or opaque domain evidence when matched.
+   * Recognizes environment get and supported enumeration or forwarding call forms and emits direct, opaque, or user-controlled domain evidence when matched.
    *
    * Inputs: A call-expression AST node and active lexical scope.
-   * Outputs: True when this method consumed the call as an environment operation; false for ordinary traversal.
-   * Does not handle: Arbitrary accessor methods, API type checking, or the runtime result of a call.
-   * Side effects: Emits uncertainty/direct observations and visits relevant argument AST nodes on a recognized form.
+   * Outputs: True when this method consumed the call as an environment operation; false for ordinary traversal. A supported `.get(key)` delegates key classification to `describeKey`, so it can emit an exact direct read, a finite/pattern dynamic domain, opaque uncertainty, or a user-controlled dynamic domain; supported enumeration/forwarding calls emit opaque uncertainty.
+   * Does not handle: Arbitrary accessor methods, API type checking, the runtime result of a call, or validating/redacting raw `KeyDomain` text. Raw key/pattern text remains in backend observations until the injected fact builder materializes it.
+   * Side effects: Emits raw direct/dynamic observations and visits relevant argument AST nodes on a recognized form.
    */
    private visitEnvironmentCall(node: ts.CallExpression, scope: LexicalScope): boolean {
     if (!ts.isPropertyAccessExpression(node.expression)) {
@@ -819,8 +826,8 @@ class SourceScanner {
    *
    * Inputs: A property-access AST node and active scope.
    * Outputs: A one-key lexical literal domain, or undefined when the receiver is not an environment object.
-   * Does not handle: Computed properties, optional runtime availability, or evaluation of the read.
-   * Side effects: Reads AST/scope and allocates a domain only for recognized receivers.
+   * Does not handle: Computed properties, optional runtime availability, evaluation of the read, or validating/redacting the raw key. The returned `KeyDomain` remains raw until the injected fact builder handles it.
+   * Side effects: Reads AST/scope and allocates a raw domain only for recognized receivers.
    */
    private environmentPropertyDomain(
     node: ts.PropertyAccessExpression,
@@ -835,9 +842,9 @@ class SourceScanner {
    * Produces a key domain for `env[expression]`, using opaque uncertainty for a missing index.
    *
    * Inputs: An element-access AST node and active scope.
-   * Outputs: The described index domain, opaque unbounded domain for no index, or undefined for another receiver.
-   * Does not handle: Evaluating the index or resolving aliases not represented by the lexical scope.
-   * Side effects: Reads AST/scope and may allocate an uncertainty/domain object.
+   * Outputs: The described index domain, opaque unbounded domain for no index, or undefined for another receiver. The description can be a direct finite key, finite/pattern dynamic domain, opaque uncertainty, or user-controlled uncertainty.
+   * Does not handle: Evaluating the index, resolving aliases not represented by the lexical scope, or validating/redacting raw key/pattern text. The `KeyDomain` remains raw until the injected fact builder materializes it.
+   * Side effects: Reads AST/scope and may allocate a raw uncertainty/domain object.
    */
    private environmentElementDomain(
     node: ts.ElementAccessExpression,
@@ -880,8 +887,8 @@ class SourceScanner {
    * Derives the most precise safe key domain available from literals, aliases, branches, concatenation, maps, or user-controlled expressions.
    *
    * Inputs: A key-expression AST node, active scope, and recursive depth.
-   * Outputs: A finite/pattern domain when statically supported, otherwise conservative unbounded uncertainty.
-   * Does not handle: Type evaluation, execution, unbounded recursion beyond depth 32, or arbitrary constant propagation.
+   * Outputs: A finite/pattern domain containing the backend's raw supported key text when statically supported, otherwise conservative unbounded uncertainty. The downstream fact builder, not this method, validates/redacts that raw domain before reportable facts are created.
+   * Does not handle: Type evaluation, execution, unbounded recursion beyond depth 32, arbitrary constant propagation, or redacting/validating its raw supported-domain text.
    * Side effects: Recurses through AST/scope, allocates domains, and may construct temporary map/domain collections.
    */
    private describeKey(node: ts.Expression, scope: LexicalScope, depth = 0): KeyDomain {
@@ -1122,8 +1129,8 @@ class SourceScanner {
    * Produces a lookup map for object literals (or their const aliases) only when every property name is static, unique, and finite.
    *
    * Inputs: A candidate expression, active scope, and recursion depth.
-   * Outputs: A map of property names to finite domains, or undefined for aliases/nonliterals/invalid properties/depth exhaustion.
-   * Does not handle: Spread/method/accessor properties, runtime mutation, or map values outside finite domains.
+   * Outputs: A map of property names to finite domains for an object literal or a resolved `map` alias, or undefined for unresolved/non-map aliases, nonliterals, invalid properties, or depth exhaustion.
+   * Does not handle: Aliases other than an already-resolved `map` binding, spread/method/accessor properties, runtime mutation, or map values outside finite domains.
    * Side effects: Reads AST/scope and allocates/mutates a local `Map` while building it.
    */
    private describeMap(

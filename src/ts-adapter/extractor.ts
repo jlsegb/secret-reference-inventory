@@ -27,9 +27,12 @@ export const DEFAULT_MAX_FINITE_KEY_DOMAIN = 100;
 let directUseSourceSequence = 0;
 
 /**
- * Converts compact raw syntax observations into safe normalized Core facts.
- * This class never inspects environment values, invokes user code, resolves
- * imports, or allows raw parser/source text to escape the call.
+ * Converts compact raw syntax observations into Core facts through an injected
+ * builder. The default collaborators are intended to keep raw parser/source
+ * text out of facts, but this class returns an injected backend's ID verbatim
+ * and does not sanitize injected backend/builder output or thrown errors.
+ * Callers that inject either collaborator must trust it or sanitize the
+ * resulting output independently.
  */
 export class TypeScriptSourceExtractor implements SourceExtractor {
   readonly #backend: SourceSyntaxBackend;
@@ -38,10 +41,10 @@ export class TypeScriptSourceExtractor implements SourceExtractor {
   /**
    * Connects a raw syntax backend to the Core safety materializer and chooses its finite-domain cap.
    *
-   * Inputs: A `CoreSourceFactBuilder` plus optional backend and positive finite-domain limit.
+   * Inputs: A required injected `CoreSourceFactBuilder` plus optional backend and positive finite-domain limit.
    * Outputs: An extractor using the injected backend or TypeScript backend and a normalized cap.
-   * Does not handle: Validating injected collaborator behavior, resolving imports, reading files, or inspecting environment values.
-   * Side effects: Allocates a default backend only when none is supplied; collaborator construction/errors can propagate.
+   * Does not handle: Constructing a default builder, validating injected collaborator behavior, resolving imports, reading files, or inspecting environment values.
+   * Side effects: Allocates a default TypeScript backend only when no backend is supplied; it always retains/calls the caller-injected builder, and collaborator construction/errors can propagate.
    */
    public constructor(
     readonly builder: CoreSourceFactBuilder,
@@ -55,8 +58,8 @@ export class TypeScriptSourceExtractor implements SourceExtractor {
    * Extracts one supplied source string, materializes its observations, and isolates failed fact conversions as fixed diagnostics.
    *
    * Inputs: Source text, language, safe file/scope metadata, and optional source ID/exposure.
-   * Outputs: A shallow-frozen result whose outer arrays contain the backend ID, safe references/edges, and fixed extraction diagnostics.
-   * Does not handle: Import resolution, execution, source-file I/O, source-text redaction beyond downstream materialization, backend exceptions, or deep immutability: contained references, edges, diagnostics, and their nested values remain mutable.
+   * Outputs: A shallow-frozen result whose outer arrays contain the backend's verbatim ID, builder-returned references/edges, and extraction diagnostics. The arrays are frozen, but their contained records and nested values remain mutable.
+   * Does not handle: Import resolution, execution, source-file I/O, backend exceptions, deep immutability, or sanitizing values/errors from injected backend or builder collaborators. An injected collaborator can violate expected safe-output/privacy properties unless the caller separately sanitizes its output.
    * Side effects: Calls the injected backend, allocates result arrays, may increment the direct-use source counter, and invokes injected builder materializers.
    */
    public extract(input: SourceExtractionInput): SourceExtractionResult {
@@ -100,9 +103,9 @@ export class TypeScriptSourceExtractor implements SourceExtractor {
    * Turns one backend observation into a reference plus either a direct demand edge or conservative dynamic edge.
    *
    * Inputs: One raw observation, its source context, and mutable result/diagnostic arrays owned by `extract`.
-   * Outputs: No direct value; accepted facts are appended to the appropriate arrays.
-   * Does not handle: Retaining raw source/key text after a failed materialization, resolving aliases beyond backend output, or recovering collaborator throws.
-   * Side effects: Calls builder materializers through `materialize` and pushes safe records/diagnostics into the supplied arrays.
+   * Outputs: No direct value; facts returned by the builder are appended to the appropriate arrays.
+   * Does not handle: Sanitizing or suppressing an injected builder's rejected diagnostic: `materialize` passes that diagnostic through, so an injected builder that violates its contract can retain raw source/key text. It also does not resolve aliases beyond backend output or recover collaborator throws.
+   * Side effects: Calls builder materializers through `materialize` and pushes collaborator-returned records/diagnostics into the supplied arrays.
    */
    private materializeObservation(
     observation: RawSourceObservation,
@@ -202,9 +205,9 @@ export class TypeScriptSourceExtractor implements SourceExtractor {
    * Materializes one dynamic observation and retries a rejected finite/pattern domain as opaque unbounded uncertainty.
    *
    * Inputs: Safe/generated IDs, raw location/domain/origin evidence, source scope, and mutable dynamic/diagnostic arrays.
-   * Outputs: No direct value; it appends the original safe dynamic edge, or an opaque fallback after a rejected finite/pattern edge.
-   * Does not handle: Retrying rejected unbounded input, exposing rejected key text, or making a pattern adapter-proven.
-   * Side effects: Maps finite candidate names, invokes the injected builder one or two times, and appends safe results/diagnostics.
+   * Outputs: No direct value; it appends the builder-returned dynamic edge, or requests an opaque fallback after a rejected finite/pattern edge.
+   * Does not handle: Retrying rejected unbounded input, making a pattern adapter-proven, or sanitizing values/errors from the injected builder. The raw finite candidate text is passed only to that builder boundary by this method.
+   * Side effects: Maps finite candidate names, invokes the injected builder one or two times, and appends returned results/diagnostics.
    */
    private materializeDynamic(
     referenceId: string,
@@ -271,9 +274,9 @@ export class TypeScriptSourceExtractor implements SourceExtractor {
    * Routes a builder materialization result to its fact collection or to one fixed source-materialization failure diagnostic.
    *
    * Inputs: One builder `FactMaterialization` and mutable target/diagnostic arrays.
-   * Outputs: The accepted value, or undefined after recording its already-sanitized diagnostic.
-   * Does not handle: Catching a builder exception, retrying a failure, or passing any raw input to diagnostics.
-   * Side effects: Pushes exactly one value or one `SOURCE_FACT_MATERIALIZATION_FAILED` diagnostic.
+   * Outputs: The accepted builder value, or undefined after recording a fixed wrapper code and the identical builder-returned diagnostic object.
+   * Does not handle: Catching a builder exception, retrying a failure, re-sanitizing a returned value/diagnostic, or passing any raw input to a separate diagnostic constructor. A rejected diagnostic from an injected builder can therefore retain raw text; the builder contract is trusted.
+   * Side effects: Pushes exactly one builder value or one `SOURCE_FACT_MATERIALIZATION_FAILED` wrapper containing the builder diagnostic.
    */
    private materialize<T>(
     result: FactMaterialization<T>,
@@ -295,10 +298,10 @@ export class TypeScriptSourceExtractor implements SourceExtractor {
 /**
  * Provides the one-shot TypeScript extractor API by constructing an extractor and immediately scanning one input.
  *
- * Inputs: Source extraction input, a Core builder, and optional backend/limit options.
- * Outputs: The shallow-frozen extraction result produced after safe materialization; its outer arrays are frozen while contained facts, diagnostics, and nested values remain mutable.
- * Does not handle: Reusing extractor state across calls, import resolution, filesystem reads, collaborator exceptions, or deep immutability of returned records.
- * Side effects: Allocates an extractor/default backend as needed and invokes extraction/materializers.
+ * Inputs: Source extraction input, a required caller-injected Core builder, and optional backend/limit options.
+ * Outputs: The shallow-frozen extraction result, including the injected backend's verbatim ID and builder-returned records; its outer arrays are frozen while contained facts, diagnostics, and nested values remain mutable.
+ * Does not handle: Constructing a default builder, reusing extractor state across calls, import resolution, filesystem reads, collaborator exceptions, deep immutability, or sanitizing injected backend/builder output. Callers that inject collaborators must trust or separately sanitize them.
+ * Side effects: Allocates an extractor and a default TypeScript backend only when none is supplied, then invokes the required injected builder's materializers.
  */
 export function extractTypeScriptSource(
   input: SourceExtractionInput,
@@ -325,11 +328,11 @@ function rawLocation(file: SourceExtractionInput["file"], location: RawSourceLoc
 }
 
 /**
- * Preserves the builder's already-sanitized diagnostic while satisfying the extraction diagnostic helper boundary.
+ * Preserves the builder-returned diagnostic while satisfying the extraction diagnostic helper boundary.
  *
  * Inputs: A Core diagnostic returned by a fact materializer.
- * Outputs: The identical diagnostic object reference.
- * Does not handle: Re-sanitizing, cloning, or enriching the diagnostic.
+ * Outputs: The identical diagnostic object reference, including any data an injected builder improperly placed in it.
+ * Does not handle: Re-sanitizing, cloning, or enriching the diagnostic; the caller trusts the builder's diagnostic contract and a contract-violating builder can retain raw text.
  * Side effects: None; it returns its input unchanged.
  */
 function materializationDiagnostic(diagnostic: CoreDiagnostic): CoreDiagnostic {

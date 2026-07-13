@@ -139,7 +139,7 @@ test("extracts aliases, destructuring, constant-folded keys, and finite branches
 test("keeps a fixed-segment template as a user-controlled pattern", /**
  * Verifies that a request-derived template preserves its fixed prefix as user-controlled pattern evidence rather than inventing exact keys.
  *
- * Inputs: No parameters; uses an exported-handler source snippet with request query interpolation and an explicit safe source ID.
+ * Inputs: No parameters; uses a non-exported handler source snippet with request-query interpolation and an explicit safe source ID. The request-property naming convention, rather than exported-parameter classification, makes this expression user-controlled.
  * Outputs: No value; assertions establish one dynamic user-controlled prefix pattern with no likely keys or direct demand.
  * Does not handle: HTTP request parsing, runtime region values, or non-prefix template shapes.
  * Side effects: Parses/extracts source, builds facts, and performs assertions.
