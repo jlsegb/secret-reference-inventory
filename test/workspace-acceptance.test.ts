@@ -135,11 +135,11 @@ function assertNoFixtureLeak(text: string, fixture: WorkspaceFixture): void {
 
 test("workspace CLI keeps duplicate keys separate until deployment sharing is explicit",
   /**
- * Verifies the callback behavior for “workspace CLI keeps duplicate keys separate until deployment sharing is explicit”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `runWorkspaceCli`, `equal`, `assertNoFixtureLeak`, `parseWorkspaceReport`, `findRepository`, `findDeployment`, `deepEqual`, `includes`, `writeFixtureLayout`.
- * Outputs: A promise that resolves only after 16 equal, 6 deepEqual, 1 match assertion groups establish “workspace CLI keeps duplicate keys separate until deployment sharing is explicit”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Runs the fixture through unrelated, shared, and terminal workspace CLI scans using its inner fixture callback.
+ * Inputs: No callback arguments; creates the default multi-repository fixture through `withWorkspaceFixture`.
+ * Outputs: Resolves after the callback proves require-complete returns status 2 for broken/dynamic data, the shared rewrite yields only `DATABASE_URL`, and terminal output remains leak-free.
+ * Does not handle: Fixture creation internals, external CLI processes, or recovery from CLI/parser/assertion failures.
+ * Side effects: `withWorkspaceFixture` creates and finally removes the temporary tree; callback file writes and failures propagate.
  */
   async () => {
   await withWorkspaceFixture(
@@ -231,11 +231,11 @@ test("workspace CLI keeps duplicate keys separate until deployment sharing is ex
 
 test("workspace UI serves only derived fixture data over loopback",
   /**
- * Verifies the callback behavior for “workspace UI serves only derived fixture data over loopback”.
- * Inputs: Receives `t` from its caller. It invokes `withWorkspaceFixture`, `after`, `all`, `map`, `close`, `runWorkspaceCli`, `startLocalReportViewer`, `push`, `equal`, `assertNoFixtureLeak`.
- * Outputs: A promise that resolves only after 8 equal, 1 notEqual, 3 match, 1 doesNotMatch assertion groups establish “workspace UI serves only derived fixture data over loopback”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `push`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Starts the fixture-backed UI with an injected loopback viewer and delegates response checks to its fixture callback.
+ * Inputs: The Node test context for registering viewer shutdown; invokes `withWorkspaceFixture` and keeps started viewers in a local array.
+ * Outputs: Resolves after the callback confirms a 127.0.0.1 URL, restrictive response headers, derived repository HTML, no remote URL, and no fixture-private data.
+ * Does not handle: Fixture deletion, browser navigation beyond one request, or swallowing CLI/viewer/assertion failures.
+ * Side effects: Registers `Promise.all(viewer.close())` with `t.after`, starts viewer servers, mutates `launched`, and lets fixture cleanup remove the root.
  */
   async (t) => {
   await withWorkspaceFixture(

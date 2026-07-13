@@ -42,11 +42,11 @@ const emptyReconciliation: ReconciliationResult = { records: [], scopeCoverage: 
 
 test("workspace scan writes a deterministic versioned report and returns incomplete status on request",
   /**
- * Verifies the callback behavior for “workspace scan writes a deterministic versioned report and returns incomplete status on request”.
- * Inputs: Receives `t` from its caller. It invokes `writeManifest`, `after`, `rmParent`, `runCli`, `createLocalCliHandlers`, `scanPort`, `push`, `equal`, `join`, `parse`.
- * Outputs: A promise that resolves only after 5 equal, 1 deepEqual assertion groups establish “workspace scan writes a deterministic versioned report and returns incomplete status on request”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
- * Side effects: Mutates only test-controlled state through `push`. Failures are not caught.
+ * Runs `workspace scan --format json --require-complete` against an injected incomplete scan port and parses stdout.
+ * Inputs: The Node test context; creates a temporary manifest, local stdout/stderr arrays, and CLI handlers whose workspace scan is explicitly incomplete.
+ * Outputs: Resolves after status is 2, stderr is empty, stdout has workspace report v2 with `summary.incomplete`, one API row, and no manifest path.
+ * Does not handle: Real provider access, report-file output, or recovery from manifest/CLI/JSON/assertion failure.
+ * Side effects: Writes a manifest, appends emitted text, and registers `rmParent(manifestPath)` with `t.after`; cleanup and failures propagate.
  */
   async (t) => {
   const manifestPath = await writeManifest();
@@ -122,11 +122,11 @@ test("workspace scan writes a deterministic versioned report and returns incompl
 
 test("workspace scan uses the default N3 local port when no test port is injected",
   /**
- * Verifies the callback behavior for “workspace scan uses the default N3 local port when no test port is injected”.
- * Inputs: Receives `t` from its caller. It invokes `writeManifest`, `after`, `rmParent`, `runCli`, `createLocalCliHandlers`, `push`, `equal`, `join`, `parse`.
- * Outputs: A promise that resolves only after 5 equal assertion establish “workspace scan uses the default N3 local port when no test port is injected”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
- * Side effects: Mutates only test-controlled state through `push`. Failures are not caught.
+ * Invokes the normal local CLI handler without injecting a workspace scan port and inspects its JSON report.
+ * Inputs: The Node test context; writes one temporary manifest and captures stdout/stderr fragments in local arrays.
+ * Outputs: Resolves after scan status is 0, stderr is empty, and the default N3 scan reports complete API output using report schema v1.
+ * Does not handle: External service discovery, non-JSON formats, or retrying failed local scan operations.
+ * Side effects: Writes/removes the manifest directory through `t.after` and appends emitted text; CLI or assertion failure propagates.
  */
   async (t) => {
   const manifestPath = await writeManifest();
@@ -189,11 +189,11 @@ test("workspace scan uses the default N3 local port when no test port is injecte
 
 test("workspace UI launches a loopback-only viewer from derived report data",
   /**
- * Verifies the callback behavior for “workspace UI launches a loopback-only viewer from derived report data”.
- * Inputs: Receives `t` from its caller. It invokes `writeManifest`, `after`, `rmParent`, `runCli`, `createLocalCliHandlers`, `scanPort`, `startLocalReportViewer`, `push`, `all`, `map`.
- * Outputs: A promise that resolves only after 4 equal, 2 match assertion groups establish “workspace UI launches a loopback-only viewer from derived report data”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
- * Side effects: Mutates only test-controlled state through `push`. Failures are not caught.
+ * Runs `ui` with a complete injected scan and a real local viewer factory, then fetches the emitted URL.
+ * Inputs: The Node test context; creates a manifest, captures stdout, and keeps every started `LocalReportViewer` in `launched`.
+ * Outputs: Resolves after CLI status is 0, the URL host is `127.0.0.1`, the page is 200 with repository/API labels, and it excludes the manifest path.
+ * Does not handle: Browser interaction beyond one HTTP GET, non-loopback listeners, or suppression of startup/request/assertion errors.
+ * Side effects: Writes the manifest, pushes viewer handles/output, and registers both manifest removal and `viewer.close()` cleanup with `t.after`.
  */
   async (t) => {
   const manifestPath = await writeManifest();
@@ -282,11 +282,11 @@ test("workspace UI launches a loopback-only viewer from derived report data",
 
 test("workspace invalid input and required-complete UI return nonzero without launching",
   /**
- * Verifies the callback behavior for “workspace invalid input and required-complete UI return nonzero without launching”.
- * Inputs: Receives `t` from its caller. It invokes `mkdtemp`, `join`, `tmpdir`, `after`, `rm`, `runCli`, `createLocalCliHandlers`, `scanPort`, `push`, `equal`.
- * Outputs: A promise that resolves only after 5 equal assertion establish “workspace invalid input and required-complete UI return nonzero without launching”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
- * Side effects: Mutates only test-controlled state through `rm`, `push`. Failures are not caught.
+ * Exercises missing-manifest handling and `ui --require-complete` handling with a launch hook that must remain unused.
+ * Inputs: The Node test context; creates an empty temp root/missing path, then a valid manifest with an injected incomplete scan and `launched` flag.
+ * Outputs: Resolves after the missing scan returns 65 with fixed nonleaking stderr, and incomplete UI returns 2 while `launched` remains false.
+ * Does not handle: Actual viewer startup, recovery from filesystem failures, or rendering a partial UI.
+ * Side effects: Creates two temp roots, captures stderr, registers both cleanup operations with `t.after`, and mutates the launch flag only if an incorrect path runs.
  */
   async (t) => {
   const root = await mkdtemp(join(tmpdir(), "secret-usage-workspace-cli-invalid-"));
@@ -385,11 +385,11 @@ test("workspace invalid input and required-complete UI return nonzero without la
 
 test("workspace UI rejects synthetic-row viewer overflow before starting a listener",
   /**
- * Verifies the callback behavior for “workspace UI rejects synthetic-row viewer overflow before starting a listener”.
- * Inputs: Receives `t` from its caller. It invokes `writeManifest`, `after`, `rmParent`, `runCli`, `createLocalCliHandlers`, `overflowingScanPort`, `push`, `equal`, `join`.
- * Outputs: A promise that resolves only after 3 equal assertion establish “workspace UI rejects synthetic-row viewer overflow before starting a listener”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
- * Side effects: Mutates only test-controlled state through `push`. Failures are not caught.
+ * Sends an oversized synthetic scan result through `ui` with a viewer hook that deliberately fails if materialization reaches it.
+ * Inputs: The Node test context; creates a manifest, an overflowing scan port, stderr capture, and a `launched` sentinel flag.
+ * Outputs: Resolves after UI returns 70 with `APP_WORKSPACE_VIEWER_LIMIT_EXCEEDED` and the viewer flag is still false.
+ * Does not handle: Starting a listener, truncating the synthetic report, or converting the overflow into a successful UI.
+ * Side effects: Writes/removes the manifest directory, appends stderr, and would mutate `launched` only on the invalid launch path; failures propagate.
  */
   async (t) => {
   const manifestPath = await writeManifest();
@@ -452,11 +452,11 @@ test("workspace UI rejects synthetic-row viewer overflow before starting a liste
 
 test("workspace UI closes a started viewer when writing its URL fails",
   /**
- * Verifies the callback behavior for “workspace UI closes a started viewer when writing its URL fails”.
- * Inputs: Receives `t` from its caller. It invokes `writeManifest`, `after`, `rmParent`, `runCli`, `createLocalCliHandlers`, `scanPort`, `push`, `equal`, `join`.
- * Outputs: A promise that resolves only after 3 equal assertion establish “workspace UI closes a started viewer when writing its URL fails”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
- * Side effects: Mutates only test-controlled state through `push`. Failures are not caught.
+ * Starts a synthetic complete UI viewer whose `close` counter is observable, then makes synchronous stdout output throw.
+ * Inputs: The Node test context; creates a manifest, injected complete scan/viewer handle, stderr collector, and `closeCalls` counter.
+ * Outputs: Resolves after UI returns 70 with `APP_WORKSPACE_VIEWER_FAILED` and the started viewer's `close` has run exactly once.
+ * Does not handle: Binding a real server, retrying URL output, or suppressing the stdout failure internally.
+ * Side effects: Writes/removes the manifest directory, appends stderr, and increments `closeCalls` through the CLI cleanup path.
  */
   async (t) => {
   const manifestPath = await writeManifest();
@@ -535,11 +535,11 @@ test("workspace UI closes a started viewer when writing its URL fails",
 
 test("workspace UI collapses adversarial report getters to a fixed error before viewer launch",
   /**
- * Verifies the callback behavior for “workspace UI collapses adversarial report getters to a fixed error before viewer launch”.
- * Inputs: Receives `t` from its caller. It invokes `writeManifest`, `after`, `rmParent`, `create`, `defineProperty`, `runCli`, `createLocalCliHandlers`, `push`, `equal`, `join`.
- * Outputs: A promise that resolves only after 5 equal assertion establish “workspace UI collapses adversarial report getters to a fixed error before viewer launch”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
- * Side effects: Mutates only test-controlled state through `push`. Failures are not caught.
+ * Gives the UI a null-prototype report whose `repositories` getter increments a counter and throws a private sentinel.
+ * Inputs: The Node test context; creates a manifest, hostile scan result, stdout/stderr collectors, getter-read counter, and a viewer hook that must not launch.
+ * Outputs: Resolves after UI returns the fixed viewer failure, stderr omits the sentinel/path, the getter was read once, and `launched` remains false.
+ * Does not handle: Recovering hostile report data, exposing getter errors, or starting a viewer after view-model materialization fails.
+ * Side effects: Writes/removes the manifest directory, installs a throwing getter, captures stderr, and updates local counters; unexpected failures propagate.
  */
   async (t) => {
   const manifestPath = await writeManifest();

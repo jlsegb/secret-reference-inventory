@@ -57,7 +57,7 @@ import {
  * Reads an isolated fixture manifest and runs the workspace runtime against its issued request.
  *
  * Inputs: `fixture`.
- * Outputs: A promise for the complete workspace scan result.
+ * Outputs: A promise for the workspace scan result, whose repository/deployment partitions may be complete, incomplete, or invalid.
  * Does not handle: Recovering invalid manifests, modifying fixture files, or configuring adapters.
  * Side effects: Reads the manifest, may fail the test, and invokes the workspace scanner.
  */
@@ -74,7 +74,7 @@ async function scanFixture(fixture: WorkspaceFixture) {
  * Performs the two deployment-attestation phases directly for lower-layer cache and snapshot tests.
  *
  * Inputs: `invocation`, `deploymentId`, `repositoryMembers`.
- * Outputs: An issued preparation token after input attestation, or `undefined` when member issuance fails.
+ * Outputs: An issued preparation token after both phases, or `undefined` when member issuance fails or the delegated input attestation later rejects changed/unverifiable invocation provenance.
  * Does not handle: Source preflight, reconciliation, or retrying a failed local input read.
  * Side effects: May read declared provisioning documents through the attestation functions.
  */
@@ -490,20 +490,20 @@ function assertInvalidManifestProvenance(
 
 test("workspace runtime scans an approved sibling repository through a canonical manifest base",
   /**
- * Verifies the callback behavior for “workspace runtime scans an approved sibling repository through a canonical manifest base”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `scanFixture`, `repository`, `equal`, `some`, `includes`, `stringify`.
- * Outputs: A promise that resolves only after 4 equal assertion establish “workspace runtime scans an approved sibling repository through a canonical manifest base”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Creates the default sibling-root fixture and delegates one runtime scan to the fixture callback.
+ * Inputs: No callback arguments; calls `withWorkspaceFixture` with the default API/worker source layout.
+ * Outputs: Resolves after the callback observes a complete API `DATABASE_URL` demand with no fixture root or private marker serialized.
+ * Does not handle: Fixture lifecycle, external repositories, or recovery from scan/assertion failure.
+ * Side effects: The helper creates and removes the temporary root; callback rejection propagates through this awaited call.
  */
   async () => {
   await withWorkspaceFixture(
     /**
- * Verifies the callback behavior for “workspace runtime scans an approved sibling repository through a canonical manifest base”.
- * Inputs: Receives `fixture` from its caller. It invokes `scanFixture`, `repository`, `equal`, `some`, `includes`, `stringify`.
- * Outputs: A promise that resolves only after 4 equal assertion establish “workspace runtime scans an approved sibling repository through a canonical manifest base”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Scans the supplied fixture and inspects the API repository's direct-demand reconciliation record.
+ * Inputs: The `WorkspaceFixture` from `withWorkspaceFixture`, including its manifest/root/private marker.
+ * Outputs: Resolves after API status is complete, a `DATABASE_URL` demand exists, and serialized scan data excludes the root and marker.
+ * Does not handle: Creating or deleting the fixture, changing source files, or recovering failed scans/assertions.
+ * Side effects: Reads the manifest through `scanFixture` and local result graph; outer fixture cleanup owns removal and errors propagate.
  */
     async (fixture) => {
     const result = await scanFixture(fixture);
@@ -531,20 +531,20 @@ test("workspace runtime scans an approved sibling repository through a canonical
 
 test("duplicate keys aggregate only within an explicit shared deployment",
   /**
- * Verifies the callback behavior for “duplicate keys aggregate only within an explicit shared deployment”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `scanFixture`, `deployment`, `deepEqual`, `writeFixtureLayout`, `equal`, `repository`.
- * Outputs: A promise that resolves only after 4 deepEqual, 2 equal assertion groups establish “duplicate keys aggregate only within an explicit shared deployment”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Scans unrelated and then explicitly shared fixture layouts through a temporary fixture callback.
+ * Inputs: No callback arguments; requests `withWorkspaceFixture`'s default layout before its callback rewrites that fixture to `shared`.
+ * Outputs: Resolves after unrelated API/worker deployments have no shared keys and the shared deployment contains both IDs with only `DATABASE_URL`.
+ * Does not handle: Fixture creation/deletion, provider inventories, or recovery from write/scan/assertion errors.
+ * Side effects: The inner callback overwrites fixture layout; `withWorkspaceFixture` removes all temporary files in finally.
  */
   async () => {
   await withWorkspaceFixture(
     /**
- * Verifies the callback behavior for “duplicate keys aggregate only within an explicit shared deployment”.
- * Inputs: Receives `fixture` from its caller. It invokes `scanFixture`, `deployment`, `deepEqual`, `writeFixtureLayout`, `equal`, `repository`.
- * Outputs: A promise that resolves only after 4 deepEqual, 2 equal assertion groups establish “duplicate keys aggregate only within an explicit shared deployment”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Compares scans before and after rewriting the supplied fixture manifest to the shared deployment topology.
+ * Inputs: The helper-provided fixture; reads its default layout and passes the same fixture to `writeFixtureLayout(..., "shared")`.
+ * Outputs: Resolves after independent deployments yield empty arrays, while `shared-production` has `[api, worker]`, one `DATABASE_URL`, and both complete repositories.
+ * Does not handle: Fixture cleanup, arbitrary topology generation, or swallowing write/scan/assertion failure.
+ * Side effects: Mutates test-owned manifest/provisioning files, starts two local scans, and relies on outer helper cleanup.
  */
     async (fixture) => {
     const unrelated = await scanFixture(fixture);
@@ -567,21 +567,21 @@ test("duplicate keys aggregate only within an explicit shared deployment",
 
 test("workspace runtime rejects forged, cloned, and mixed requests without reflecting trap text",
   /**
- * Verifies the callback behavior for “workspace runtime rejects forged, cloned, and mixed requests without reflecting trap text”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `readLocalWorkspaceManifest`, `fail`, `defineProperty`, `revocable`, `revoke`, `equal`, `includes`, `String`, `stringify`.
- * Outputs: A promise that resolves only after 1 fail, 10 equal, 4 rejects assertion groups establish “workspace runtime rejects forged, cloned, and mixed requests without reflecting trap text”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Creates a verified fixture request and delegates hostile capability/clone rejection checks to the fixture callback.
+ * Inputs: No callback arguments; uses `withWorkspaceFixture` to supply an issued request and private fixture paths.
+ * Outputs: Resolves after all proxy/getter/revoked/clone request forms reject with fixed redacted runtime errors without invoking traps.
+ * Does not handle: Constructing a valid replacement capability, fixture cleanup, or catching expected rejection mismatches.
+ * Side effects: The callback creates hostile objects and local flags; fixture removal and propagated errors remain owned by the helper.
  */
   async () => {
   await withWorkspaceFixture(
     /**
-     * Exercises “workspace runtime rejects forged, cloned, and mixed requests without reflecting trap text” through the `withWorkspaceFixture` callback and invokes `readLocalWorkspaceManifest`, `fail`, `defineProperty`, `revocable`, `revoke`.
+     * Exercises forged request values, serialized/structural/platform/proxy clones, and a mixed request against one issued fixture request.
      *
-     * Inputs: Receives `fixture` from the `withWorkspaceFixture` callback.
-     * Outputs: Throws the deliberate test error or completes as consumed by the `withWorkspaceFixture` callback.
-     * Does not handle: It does not create, dispose, or retain the temporary fixture; withWorkspaceFixture owns that lifecycle while this callback uses only its issued paths and test-local assertions.
-     * Side effects: Throws the deliberate sentinel or propagates the error expressed in its body.
+     * Inputs: The fixture callback receives the manifest path/root used to issue `document.request`; it builds throwing proxy traps, a throwing getter, and a revoked proxy carrying `TEST SENTINEL VALUE`.
+     * Outputs: Resolves after every hostile/clone scan rejects as `WorkspaceRuntimeError` without the sentinel, all trap flags remain false, and the issued request serializes without fixture provenance.
+     * Does not handle: Issuing a new request, fixing a rejected capability, fixture deletion, or catching an assertion that finds leaked trap text.
+     * Side effects: Creates/revokes proxies, installs a getter, updates three local flags, and invokes rejected scans; `withWorkspaceFixture` later removes the root.
      */
     async (fixture) => {
     const document = await readLocalWorkspaceManifest(fixture.manifestPath);
@@ -705,20 +705,20 @@ test("workspace runtime rejects forged, cloned, and mixed requests without refle
 
 test("workspace runtime rejects a request after its verified manifest file is replaced",
   /**
- * Verifies the callback behavior for “workspace runtime rejects a request after its verified manifest file is replaced”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `readLocalWorkspaceManifest`, `fail`, `rename`, `join`, `writeFile`, `assertInvalidManifestProvenance`, `scanWorkspace`.
- * Outputs: A promise that resolves only after 1 fail assertion establish “workspace runtime rejects a request after its verified manifest file is replaced”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `rename`, `writeFile`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Issues a fixture manifest request then delegates replacement-of-that-file provenance failure to its callback.
+ * Inputs: No callback arguments; `withWorkspaceFixture` supplies the control directory and manifest path to mutate.
+ * Outputs: Resolves after the callback replaces the manifest and `scanWorkspace` returns the fixed invalid-provenance result.
+ * Does not handle: Restoring the original manifest, retrying scan provenance, or suppressing filesystem/assertion failures.
+ * Side effects: The callback renames and overwrites test files; the fixture helper removes the root afterwards.
  */
   async () => {
   await withWorkspaceFixture(
     /**
- * Verifies the callback behavior for “workspace runtime rejects a request after its verified manifest file is replaced”.
- * Inputs: Receives `fixture` from its caller. It invokes `readLocalWorkspaceManifest`, `fail`, `rename`, `join`, `writeFile`, `assertInvalidManifestProvenance`, `scanWorkspace`.
- * Outputs: A promise that resolves only after 1 fail assertion establish “workspace runtime rejects a request after its verified manifest file is replaced”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `rename`, `writeFile`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Reads an issued request, moves its verified manifest aside, and writes `{}` at the original path before scanning.
+ * Inputs: The provided fixture's manifest/control paths; reads the original request through `readLocalWorkspaceManifest`.
+ * Outputs: Resolves after `assertInvalidManifestProvenance` confirms the subsequent scan is invalid and redacted.
+ * Does not handle: Reissuing the request after the write, restoring files, or handling read/rename/write/assertion errors.
+ * Side effects: Renames and overwrites test-owned files; outer `withWorkspaceFixture` owns recursive cleanup.
  */
     async (fixture) => {
     const document = await readLocalWorkspaceManifest(fixture.manifestPath);
@@ -735,20 +735,20 @@ test("workspace runtime rejects a request after its verified manifest file is re
 
 test("workspace runtime rejects a request after its manifest path is replaced by a symlink",
   /**
- * Verifies the callback behavior for “workspace runtime rejects a request after its manifest path is replaced by a symlink”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `readLocalWorkspaceManifest`, `fail`, `join`, `writeFile`, `rm`, `symlink`, `assertInvalidManifestProvenance`, `scanWorkspace`.
- * Outputs: A promise that resolves only after 1 fail assertion establish “workspace runtime rejects a request after its manifest path is replaced by a symlink”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `writeFile`, `rm`, `symlink`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Issues a fixture request and delegates a post-verification manifest-path symlink substitution to its callback.
+ * Inputs: No callback arguments; obtains fixture control paths through `withWorkspaceFixture`.
+ * Outputs: Resolves after the callback replaces the original path by a symlink and the scan reports invalid manifest provenance.
+ * Does not handle: Following arbitrary links safely, restoring the original file, or catching I/O/assertion errors.
+ * Side effects: The callback writes, removes, and symlinks test-owned files; helper cleanup removes them.
  */
   async () => {
   await withWorkspaceFixture(
     /**
- * Verifies the callback behavior for “workspace runtime rejects a request after its manifest path is replaced by a symlink”.
- * Inputs: Receives `fixture` from its caller. It invokes `readLocalWorkspaceManifest`, `fail`, `join`, `writeFile`, `rm`, `symlink`, `assertInvalidManifestProvenance`, `scanWorkspace`.
- * Outputs: A promise that resolves only after 1 fail assertion establish “workspace runtime rejects a request after its manifest path is replaced by a symlink”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `writeFile`, `rm`, `symlink`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Swaps the issued manifest path for a `replacement.jsonc` symlink after reading its request token.
+ * Inputs: The fixture manifest/control paths and an issued request returned by `readLocalWorkspaceManifest`.
+ * Outputs: Resolves after the scan result satisfies `assertInvalidManifestProvenance` rather than trusting the replacement target.
+ * Does not handle: Symlink target cleanup, regenerating a valid request, or recovery from read/write/remove/link/assertion failures.
+ * Side effects: Writes the replacement, deletes the manifest path, creates a file symlink, and relies on fixture cleanup.
  */
     async (fixture) => {
     const document = await readLocalWorkspaceManifest(fixture.manifestPath);
@@ -767,20 +767,20 @@ test("workspace runtime rejects a request after its manifest path is replaced by
 
 test("workspace runtime rejects a request after its verified canonical base is replaced",
   /**
- * Verifies the callback behavior for “workspace runtime rejects a request after its verified canonical base is replaced”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `readLocalWorkspaceManifest`, `fail`, `rename`, `join`, `mkdir`, `writeFile`, `assertInvalidManifestProvenance`, `scanWorkspace`.
- * Outputs: A promise that resolves only after 1 fail assertion establish “workspace runtime rejects a request after its verified canonical base is replaced”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `rename`, `mkdir`, `writeFile`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Issues a manifest request then delegates replacement of its verified control-directory base to a fixture callback.
+ * Inputs: No callback arguments; `withWorkspaceFixture` supplies the root/control paths used by the issued request.
+ * Outputs: Resolves after the callback replaces the base directory and scanning returns invalid provenance.
+ * Does not handle: Restoring the original control directory, issuing a new request, or masking filesystem/assertion failures.
+ * Side effects: The callback renames/recreates directories and writes a manifest; helper finally cleanup removes the fixture.
  */
   async () => {
   await withWorkspaceFixture(
     /**
- * Verifies the callback behavior for “workspace runtime rejects a request after its verified canonical base is replaced”.
- * Inputs: Receives `fixture` from its caller. It invokes `readLocalWorkspaceManifest`, `fail`, `rename`, `join`, `mkdir`, `writeFile`, `assertInvalidManifestProvenance`, `scanWorkspace`.
- * Outputs: A promise that resolves only after 1 fail assertion establish “workspace runtime rejects a request after its verified canonical base is replaced”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `rename`, `mkdir`, `writeFile`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Moves the fixture control base, recreates it with a new `{}` manifest, then scans the pre-replacement request.
+ * Inputs: The helper-provided fixture and the request returned from its original manifest read.
+ * Outputs: Resolves after `assertInvalidManifestProvenance` validates the changed-base scan result.
+ * Does not handle: Reattesting the new base, restoring the old directory, or handling filesystem/assertion errors.
+ * Side effects: Renames and recreates test directories, writes a new manifest, and leaves deletion to `withWorkspaceFixture`.
  */
     async (fixture) => {
     const document = await readLocalWorkspaceManifest(fixture.manifestPath);
@@ -798,20 +798,20 @@ test("workspace runtime rejects a request after its verified canonical base is r
 
 test("workspace runtime rejects equal and nested canonical root aliases before scanning",
   /**
- * Verifies the callback behavior for “workspace runtime rejects equal and nested canonical root aliases before scanning”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `symlink`, `join`, `writeFile`, `stringify`, `readLocalWorkspaceManifest`, `fail`, `scanWorkspace`, `deepEqual`, `map`.
- * Outputs: A promise that resolves only after 1 fail, 1 deepEqual, 2 equal assertion groups establish “workspace runtime rejects equal and nested canonical root aliases before scanning”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `symlink`, `writeFile`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Creates a fixture then delegates equal and descendant root-alias conflict checks to the fixture callback.
+ * Inputs: No callback arguments; `withWorkspaceFixture` provides the API root, control manifest, and temporary root needed to install aliases.
+ * Outputs: Resolves after all three repository results are invalid with root-conflict diagnostics and no serialized fixture path.
+ * Does not handle: Canonicalizing arbitrary user roots, fixture deletion, or recovery from link/write/scan/assertion failure.
+ * Side effects: The callback writes manifest content and directory links; helper cleanup recursively removes those artifacts.
  */
   async () => {
   await withWorkspaceFixture(
     /**
- * Verifies the callback behavior for “workspace runtime rejects equal and nested canonical root aliases before scanning”.
- * Inputs: Receives `fixture` from its caller. It invokes `symlink`, `join`, `writeFile`, `stringify`, `readLocalWorkspaceManifest`, `fail`, `scanWorkspace`, `deepEqual`, `map`, `equal`.
- * Outputs: A promise that resolves only after 1 fail, 1 deepEqual, 2 equal assertion groups establish “workspace runtime rejects equal and nested canonical root aliases before scanning”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `symlink`, `writeFile`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Adds symlinks to the API root and its `src` child, writes a three-repository manifest, and scans it.
+ * Inputs: The supplied fixture provides API/root/manifest paths; the body constructs `api-alias` and `api-src-alias` descriptors.
+ * Outputs: Resolves after statuses are `[invalid, invalid, invalid]`, every result has `WORKSPACE_REPOSITORY_ROOT_CONFLICT`, and JSON excludes the fixture root.
+ * Does not handle: Removing aliases individually, producing a valid conflicting scan, or handling link/read/scan/assertion failure.
+ * Side effects: Creates directory symlinks and overwrites the fixture manifest; outer fixture cleanup removes them.
  */
     async (fixture) => {
     await symlink(fixture.repositoryRoots.api, join(fixture.root, "api-alias"), "dir");
@@ -881,20 +881,20 @@ test("workspace runtime rejects equal and nested canonical root aliases before s
 
 test("canonical root indexing retains ancestor conflicts across prefix-like siblings",
   /**
- * Verifies the callback behavior for “canonical root indexing retains ancestor conflicts across prefix-like siblings”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `join`, `all`, `mkdir`, `symlink`, `writeFile`, `stringify`, `readLocalWorkspaceManifest`, `fail`, `scanWorkspace`.
- * Outputs: A promise that resolves only after 1 fail, 1 deepEqual assertion groups establish “canonical root indexing retains ancestor conflicts across prefix-like siblings”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `mkdir`, `symlink`, `writeFile`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Creates prefix-like and nested fixture roots to exercise segment-aware ancestor conflict handling.
+ * Inputs: No callback arguments; uses `withWorkspaceFixture` to allocate the root passed to the directory/link/manifest-writing callback.
+ * Outputs: Resolves after the callback observes ancestor and nested roots invalid while the `root-prefix-` sibling remains complete.
+ * Does not handle: Filesystem case-folding policy, fixture retention, or recovery from directory/link/scan failures.
+ * Side effects: The callback creates directories/a symlink and overwrites the manifest; helper cleanup owns removal.
  */
   async () => {
   await withWorkspaceFixture(
     /**
- * Verifies the callback behavior for “canonical root indexing retains ancestor conflicts across prefix-like siblings”.
- * Inputs: Receives `fixture` from its caller. It invokes `join`, `all`, `mkdir`, `symlink`, `writeFile`, `stringify`, `readLocalWorkspaceManifest`, `fail`, `scanWorkspace`, `deepEqual`.
- * Outputs: A promise that resolves only after 1 fail, 1 deepEqual assertion groups establish “canonical root indexing retains ancestor conflicts across prefix-like siblings”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `mkdir`, `symlink`, `writeFile`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Builds `root-prefix`, `root-prefix-`, and a symlinked `root-prefix/nested` manifest topology, then scans it.
+ * Inputs: The supplied fixture root/control manifest; creates ancestor/sibling/nested paths under that temporary root.
+ * Outputs: Resolves after the status projection is exactly `[invalid, complete, invalid]` in manifest order.
+ * Does not handle: Repairing conflicts, producing source facts, or catching directory/link/write/read/assertion errors.
+ * Side effects: Creates directories and a symlink, rewrites the manifest, starts one local scan, and relies on helper cleanup.
  */
     async (fixture) => {
     const ancestor = join(fixture.root, "root-prefix");
@@ -938,20 +938,20 @@ test("canonical root indexing retains ancestor conflicts across prefix-like sibl
 
 test("request member attestation indexes 10,000 resolved roots without pairwise conflict scans",
   /**
- * Verifies the callback behavior for “request member attestation indexes 10,000 resolved roots without pairwise conflict scans”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `from`, `String`, `all`, `map`, `slice`, `mkdir`, `join`, `writeFile`, `stringify`.
- * Outputs: A promise that resolves only after 1 fail, 3 notEqual, 2 equal, 1 ok assertion groups establish “request member attestation indexes 10,000 resolved roots without pairwise conflict scans”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `mkdir`, `writeFile`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Allocates a temporary fixture and delegates ten-thousand repository-root attestation scale checks to its callback.
+ * Inputs: No callback arguments; `withWorkspaceFixture` supplies the root in which the callback creates `scale-0` through `scale-9999`.
+ * Outputs: Resolves after member metrics report ten thousand roots and bounded conflict checks, with `scale-9999` issuable.
+ * Does not handle: Pairwise performance benchmarking outside the exposed metrics, fixture retention, or I/O/assertion recovery.
+ * Side effects: Callback creates directories/manifest; fixture helper removes the full temporary tree.
  */
   async () => {
   await withWorkspaceFixture(
     /**
- * Verifies the callback behavior for “request member attestation indexes 10,000 resolved roots without pairwise conflict scans”.
- * Inputs: Receives `fixture` from its caller. It invokes `from`, `String`, `all`, `map`, `slice`, `mkdir`, `join`, `writeFile`, `stringify`, `readLocalWorkspaceManifest`.
- * Outputs: A promise that resolves only after 1 fail, 3 notEqual, 2 equal, 1 ok assertion groups establish “request member attestation indexes 10,000 resolved roots without pairwise conflict scans”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `mkdir`, `writeFile`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Materializes ten thousand sibling directories in bounded batches, writes a matching v2 manifest, and attests its members.
+ * Inputs: The helper fixture root/manifest path; derives `scale-<index>` IDs and maps them to `../scale/<id>` descriptors.
+ * Outputs: Resolves after attestation exists, repository/resolution counts equal 10,000, conflict checks stay at most twice the count, and the last ID has a handle.
+ * Does not handle: Source scanning, preserving the generated tree, or handling mkdir/write/read/attestation/assertion failure.
+ * Side effects: Creates 10,000 directories and overwrites the manifest; `withWorkspaceFixture` recursively deletes them.
  */
     async (fixture) => {
     const count = 10_000;
@@ -1014,20 +1014,20 @@ test("request member attestation indexes 10,000 resolved roots without pairwise 
 
 test("invocation indexes 10,000 deployment declarations without repeated manifest search",
   /**
- * Verifies the callback behavior for “invocation indexes 10,000 deployment declarations without repeated manifest search”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `from`, `padStart`, `String`, `writeFile`, `stringify`, `map`, `readLocalWorkspaceManifest`, `fail`, `beginVerifiedWorkspaceInvocation`.
- * Outputs: A promise that resolves only after 2 fail, 1 notEqual, 2 equal assertion groups establish “invocation indexes 10,000 deployment declarations without repeated manifest search”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `writeFile`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Allocates a temporary fixture and delegates ten-thousand deployment-index lookup checks to its callback.
+ * Inputs: No callback arguments; supplies a fixture whose manifest is replaced with a v1 API deployment list.
+ * Outputs: Resolves after every declared ID produces a preparation token and invocation metrics report 10,000 declarations and lookups.
+ * Does not handle: Source scans, durable indexes, fixture lifecycle, or recovery from manifest/attestation failures.
+ * Side effects: Inner callback writes the large manifest; `withWorkspaceFixture` removes the generated fixture afterwards.
  */
   async () => {
   await withWorkspaceFixture(
     /**
- * Verifies the callback behavior for “invocation indexes 10,000 deployment declarations without repeated manifest search”.
- * Inputs: Receives `fixture` from its caller. It invokes `from`, `padStart`, `String`, `writeFile`, `stringify`, `map`, `readLocalWorkspaceManifest`, `fail`, `beginVerifiedWorkspaceInvocation`, `attestVerifiedWorkspaceRepositoryMembers`.
- * Outputs: A promise that resolves only after 2 fail, 1 notEqual, 2 equal assertion groups establish “invocation indexes 10,000 deployment declarations without repeated manifest search”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `writeFile`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Writes 10,000 padded deployment IDs into a v1 manifest, creates invocation/member capabilities, and prepares each ID.
+ * Inputs: The supplied fixture manifest path; generates IDs `deployment-index-0000` onward, all referencing the existing API root.
+ * Outputs: Resolves after every member-preparation call is defined and `workspaceInvocationMetrics` reports the expected declaration and lookup counts.
+ * Does not handle: Provisioning inputs, result reconciliation, fixture cleanup, or recovery from write/read/attestation/assertion failure.
+ * Side effects: Overwrites the fixture manifest, creates invocation/member handles, increments lookup metrics, and relies on helper cleanup.
  */
     async (fixture) => {
     const count = 10_000;
@@ -1082,20 +1082,20 @@ test("invocation indexes 10,000 deployment declarations without repeated manifes
 
 test("workspace shared keys require direct demand rather than finite dynamic possibilities",
   /**
- * Verifies the callback behavior for “workspace shared keys require direct demand rather than finite dynamic possibilities”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `writeFile`, `join`, `writeFixtureLayout`, `scanFixture`, `deployment`, `repository`, `equal`, `deepEqual`.
- * Outputs: A promise that resolves only after 1 equal, 1 deepEqual assertion groups establish “workspace shared keys require direct demand rather than finite dynamic possibilities”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `writeFile`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Rewrites the worker source to choose between two environment keys and scans the shared fixture layout.
+ * Inputs: No callback arguments; obtains a default fixture, then its callback writes finite conditional `process.env[choice]` source and switches layout to `shared`.
+ * Outputs: Resolves after worker lookup is `finite` and the shared deployment still has no shared keys because no direct shared demand exists.
+ * Does not handle: Dynamic-value execution, fixture cleanup, or recovery from source write/scan/assertion failures.
+ * Side effects: Callback overwrites worker source and manifest/provisioning layout; helper removes all test files.
  */
   async () => {
   await withWorkspaceFixture(
     /**
- * Verifies the callback behavior for “workspace shared keys require direct demand rather than finite dynamic possibilities”.
- * Inputs: Receives `fixture` from its caller. It invokes `writeFile`, `join`, `writeFixtureLayout`, `scanFixture`, `deployment`, `repository`, `equal`, `deepEqual`.
- * Outputs: A promise that resolves only after 1 equal, 1 deepEqual assertion groups establish “workspace shared keys require direct demand rather than finite dynamic possibilities”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `writeFile`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Replaces `worker.ts` with an `enabled ? DATABASE_URL : OTHER_URL` lookup, rewrites layout, and scans the same fixture.
+ * Inputs: The fixture's worker source path and shared-layout provisioning paths.
+ * Outputs: Resolves after worker's first dynamic domain is `finite` and `shared-production.sharedKeys` is an empty array.
+ * Does not handle: Executing `enabled`, retaining the write, or handling I/O/scan/assertion failure.
+ * Side effects: Overwrites test source/layout and starts a local scan; `withWorkspaceFixture` owns cleanup.
  */
     async (fixture) => {
     await writeFile(
@@ -1121,20 +1121,20 @@ test("workspace shared keys require direct demand rather than finite dynamic pos
 
 test("one repository's parser uncertainty stays scoped to that repository and deployment",
   /**
- * Verifies the callback behavior for “one repository's parser uncertainty stays scoped to that repository and deployment”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `scanFixture`, `equal`, `repository`, `deployment`, `deepEqual`.
- * Outputs: A promise that resolves only after 9 equal, 1 deepEqual assertion groups establish “one repository's parser uncertainty stays scoped to that repository and deployment”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Scans the default fixture to compare complete API/worker deployments with broken parser and dynamic-lookup uncertainty.
+ * Inputs: No callback arguments; asks `withWorkspaceFixture` for its default complete, broken, and user-controlled repository sources.
+ * Outputs: Resolves after API/worker remain complete, broken deployment is incomplete, and dynamic alone has one unbounded user-controlled lookup with no likely keys.
+ * Does not handle: Repairing broken source, fixture retention, or scan/assertion error recovery.
+ * Side effects: Starts one fixture scan and reads result arrays; helper cleans up the temporary tree.
  */
   async () => {
   await withWorkspaceFixture(
     /**
- * Verifies the callback behavior for “one repository's parser uncertainty stays scoped to that repository and deployment”.
- * Inputs: Receives `fixture` from its caller. It invokes `scanFixture`, `equal`, `repository`, `deployment`, `deepEqual`.
- * Outputs: A promise that resolves only after 9 equal, 1 deepEqual assertion groups establish “one repository's parser uncertainty stays scoped to that repository and deployment”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Runs one local workspace scan and inspects the API, worker, broken, and dynamic partitions.
+ * Inputs: The default fixture passed by `withWorkspaceFixture`.
+ * Outputs: Resolves after status and lookup assertions show incomplete uncertainty is restricted to broken/dynamic paths rather than API/worker.
+ * Does not handle: Editing fixture source, provisioning attribution, or catching scan/assertion failure.
+ * Side effects: Reads the manifest/source result through `scanFixture`; outer helper deletes the fixture afterwards.
  */
     async (fixture) => {
     const result = await scanFixture(fixture);
@@ -1160,20 +1160,20 @@ test("one repository's parser uncertainty stays scoped to that repository and de
 
 test("a malformed deployment input is scoped to its deployment, not its code repository",
   /**
- * Verifies the callback behavior for “a malformed deployment input is scoped to its deployment, not its code repository”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `writeFile`, `join`, `scanFixture`, `repository`, `deployment`, `equal`, `some`, `deploymentMember`.
- * Outputs: A promise that resolves only after 5 equal assertion establish “a malformed deployment input is scoped to its deployment, not its code repository”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `writeFile`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Corrupts only `api-production/bindings.json` in a temporary fixture and delegates partition assertions to its callback.
+ * Inputs: No callback arguments; receives fixture infrastructure paths from `withWorkspaceFixture` for the malformed write.
+ * Outputs: Resolves after API code stays complete, API deployment/member becomes incomplete with invalid-JSON coverage, and worker deployment remains complete.
+ * Does not handle: Repairing the malformed JSON, retaining the fixture, or masking file/scan/assertion failure.
+ * Side effects: Inner callback overwrites one provisioning document; helper finally cleanup deletes it.
  */
   async () => {
   await withWorkspaceFixture(
     /**
- * Verifies the callback behavior for “a malformed deployment input is scoped to its deployment, not its code repository”.
- * Inputs: Receives `fixture` from its caller. It invokes `writeFile`, `join`, `scanFixture`, `repository`, `deployment`, `equal`, `some`, `deploymentMember`.
- * Outputs: A promise that resolves only after 5 equal assertion establish “a malformed deployment input is scoped to its deployment, not its code repository”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `writeFile`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Writes a single `{` bindings document, scans, and compares its code repository with both deployment partitions.
+ * Inputs: The fixture's API infrastructure bindings path plus default source/layout data.
+ * Outputs: Resolves after API remains complete, API member carries `APP_LOCAL_INPUT_INVALID_JSON` and incomplete coverage, while worker deployment is complete.
+ * Does not handle: JSON repair, cross-deployment retry, or write/scan/assertion failure handling.
+ * Side effects: Overwrites one fixture document and reads reconciliation diagnostics; helper deletes fixture files later.
  */
     async (fixture) => {
     await writeFile(
@@ -1223,20 +1223,20 @@ test("a malformed deployment input is scoped to its deployment, not its code rep
 
 test("an oversized provisioning document is scoped incomplete and cannot support absence",
   /**
- * Verifies the callback behavior for “an oversized provisioning document is scoped incomplete and cannot support absence”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `fill`, `writeFile`, `join`, `stringify`, `scanFixture`, `deployment`, `deploymentMember`, `equal`, `some`.
- * Outputs: A promise that resolves only after 5 equal assertion establish “an oversized provisioning document is scoped incomplete and cannot support absence”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `writeFile`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Writes an API bindings manifest with 100,001 candidates and a terminal sentinel into a temporary fixture.
+ * Inputs: No callback arguments; fixture callback allocates the oversized candidate array and serializes it to API provisioning input.
+ * Outputs: Resolves after API deployment/member are incomplete, report `APP_PROVISIONING_INPUT_ENTRY_LIMIT_EXCEEDED`, retain incomplete coverage, and never serialize the sentinel.
+ * Does not handle: Streaming oversized input, accepting partial entries, fixture cleanup, or failed I/O/scan/assertion recovery.
+ * Side effects: Allocates a large array and overwrites bindings JSON; helper removes the temporary tree.
  */
   async () => {
   await withWorkspaceFixture(
     /**
- * Verifies the callback behavior for “an oversized provisioning document is scoped incomplete and cannot support absence”.
- * Inputs: Receives `fixture` from its caller. It invokes `fill`, `writeFile`, `join`, `stringify`, `scanFixture`, `deployment`, `deploymentMember`, `equal`, `some`, `String`.
- * Outputs: A promise that resolves only after 5 equal assertion establish “an oversized provisioning document is scoped incomplete and cannot support absence”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `writeFile`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Serializes 100,001 binding candidates, with the last carrying a sentinel, then scans the supplied fixture.
+ * Inputs: The fixture API bindings path and local candidates/sentinel array.
+ * Outputs: Resolves after the affected deployment/member show entry-limit incompleteness and the serialized scan result does not include the sentinel.
+ * Does not handle: Reading entries after the limit, cleaning up the fixture, or handling serialization/write/scan/assertion errors.
+ * Side effects: Allocates and writes a large JSON document, then reads diagnostics/coverage; outer helper removes it.
  */
     async (fixture) => {
     const sentinel = "TEST SENTINEL VALUE";
@@ -1292,20 +1292,20 @@ test("an oversized provisioning document is scoped incomplete and cannot support
 
 test("unscoped inventory without a member-scoped provider binding stays unattributed",
   /**
- * Verifies the callback behavior for “unscoped inventory without a member-scoped provider binding stays unattributed”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `writeFile`, `join`, `stringify`, `scanFixture`, `repository`, `deployment`, `equal`, `some`, `deploymentMember`.
- * Outputs: A promise that resolves only after 5 equal assertion establish “unscoped inventory without a member-scoped provider binding stays unattributed”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `writeFile`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Inserts an unscoped `unused-fixture-resource` inventory item without a matching member-scoped provider binding.
+ * Inputs: No callback arguments; uses the temporary fixture API inventory path and its default manifest/source layout.
+ * Outputs: Resolves after API code stays complete, the item is absent from both record graphs, and API deployment becomes incomplete with `WORKSPACE_DEPLOYMENT_UNATTRIBUTED_INVENTORY`.
+ * Does not handle: Claiming unscoped resources, fixture cleanup, or recovery from write/scan/assertion failure.
+ * Side effects: Callback overwrites inventory JSON and starts a local scan; helper removes the fixture.
  */
   async () => {
   await withWorkspaceFixture(
     /**
- * Verifies the callback behavior for “unscoped inventory without a member-scoped provider binding stays unattributed”.
- * Inputs: Receives `fixture` from its caller. It invokes `writeFile`, `join`, `stringify`, `scanFixture`, `repository`, `deployment`, `equal`, `some`, `deploymentMember`.
- * Outputs: A promise that resolves only after 5 equal assertion establish “unscoped inventory without a member-scoped provider binding stays unattributed”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `writeFile`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Replaces API inventory with one authority-qualified but unscoped resource and scans the fixture.
+ * Inputs: The helper fixture's API inventory file and default deployment data.
+ * Outputs: Resolves after API has no inventory record, its deployment member has no claimed resource, and deployment diagnostics report unattributed inventory.
+ * Does not handle: Adding a provider binding, cleanup, or handling write/scan/assertion failures.
+ * Side effects: Writes fixture inventory, reads result diagnostics, and relies on outer helper cleanup.
  */
     async (fixture) => {
     await writeFile(
@@ -1381,20 +1381,20 @@ test("unscoped inventory without a member-scoped provider binding stays unattrib
 
 test("workspace deployment closed-model verification uses the captured manifest base after chdir",
   /**
- * Verifies the callback behavior for “workspace deployment closed-model verification uses the captured manifest base after chdir”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `join`, `mkdir`, `writeFile`, `stringify`, `closedModelDocumentForWorkspaceRuntime`, `readLocalWorkspaceManifest`, `fail`, `cwd`, `chdir`.
- * Outputs: A promise that resolves only after 1 fail, 2 equal assertion groups establish “workspace deployment closed-model verification uses the captured manifest base after chdir”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `mkdir`, `writeFile`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Builds a root-relative closed-model manifest, changes process CWD, and delegates captured-base validation to the fixture callback.
+ * Inputs: No callback arguments; `withWorkspaceFixture` provides the root/infra paths where the callback writes model and manifest files.
+ * Outputs: Resolves after scanning from an unrelated CWD leaves API deployment complete without `APP_CLOSED_MODEL_ROOT_UNVERIFIED`.
+ * Does not handle: Restoring CWD outside the callback's finally, fixture lifecycle, or I/O/scan/assertion recovery.
+ * Side effects: Callback creates/writes files and temporarily mutates `process.cwd`; helper deletes the root.
  */
   async () => {
   await withWorkspaceFixture(
     /**
- * Verifies the callback behavior for “workspace deployment closed-model verification uses the captured manifest base after chdir”.
- * Inputs: Receives `fixture` from its caller. It invokes `join`, `mkdir`, `writeFile`, `stringify`, `closedModelDocumentForWorkspaceRuntime`, `readLocalWorkspaceManifest`, `fail`, `cwd`, `chdir`, `scanWorkspace`.
- * Outputs: A promise that resolves only after 1 fail, 2 equal assertion groups establish “workspace deployment closed-model verification uses the captured manifest base after chdir”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `mkdir`, `writeFile`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Writes a root-relative manifest/closed-model pair, switches to an unrelated fixture directory, and scans the issued request.
+ * Inputs: Fixture root/infra paths, generated API model JSON, and the process CWD captured for finally restoration.
+ * Outputs: Resolves after API deployment is complete and lacks the closed-model-root-unverified diagnostic despite changed CWD.
+ * Does not handle: Leaving CWD changed, repairing files, fixture deletion, or read/write/scan/assertion failure handling.
+ * Side effects: Creates directory/files and calls `process.chdir` twice; finally restores CWD and outer helper removes the fixture.
  */
     async (fixture) => {
     const manifestPath = join(fixture.root, "workspace.jsonc");
@@ -1466,20 +1466,20 @@ test("workspace deployment closed-model verification uses the captured manifest 
 
 test("multi-member closed provisioning remains independently verifiable after chdir",
   /**
- * Verifies the callback behavior for “multi-member closed provisioning remains independently verifiable after chdir”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `writeFixtureLayout`, `join`, `mkdir`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `productionMemberExecutionScope`, `inventorySnapshot`, `inventoryItem`.
- * Outputs: A promise that resolves only after 1 fail, 9 equal, 1 deepEqual assertion groups establish “multi-member closed provisioning remains independently verifiable after chdir”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `mkdir`, `writeFile`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Creates a shared API/worker deployment with closed-model provisioning and delegates CWD-independent member checks to its fixture callback.
+ * Inputs: No callback arguments; `withWorkspaceFixture` provides paths for shared layout, scoped bindings/inventory, closed model, and an unrelated working directory.
+ * Outputs: Resolves after both members first remain complete after `chdir`, then both become incomplete without absence records when unscoped/mixed ownership inventory is written.
+ * Does not handle: Persisting CWD changes, fixture lifecycle, or write/scan/assertion failure recovery.
+ * Side effects: Callback rewrites provisioning documents and CWD; helper cleanup removes files after its callback settles.
  */
   async () => {
   await withWorkspaceFixture(
     /**
- * Verifies the callback behavior for “multi-member closed provisioning remains independently verifiable after chdir”.
- * Inputs: Receives `fixture` from its caller. It invokes `writeFixtureLayout`, `join`, `mkdir`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `productionMemberExecutionScope`, `inventorySnapshot`, `inventoryItem`, `writeFile`.
- * Outputs: A promise that resolves only after 1 fail, 9 equal, 1 deepEqual assertion groups establish “multi-member closed provisioning remains independently verifiable after chdir”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `mkdir`, `writeFile`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Writes scoped API/worker provisioning and a closed-model manifest, scans from another CWD, then injects unscoped and mixed-ownership inventory snapshots.
+ * Inputs: The fixture's shared layout/infra/root paths plus API and worker runtime execution scopes.
+ * Outputs: Resolves after initial members are complete, later members show `WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED`, and none report `missing-under-declared-model` demand records.
+ * Does not handle: Restoring fixture files, creating a new request after writes, or handling I/O/scan/assertion failure.
+ * Side effects: Creates files/directories, overwrites inventory twice, temporarily changes CWD in a finally-protected block, and relies on helper cleanup.
  */
     async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
@@ -1700,20 +1700,20 @@ test("multi-member closed provisioning remains independently verifiable after ch
 
 test("multi-repository deployment keeps exact provisioning in independent repository-qualified partitions",
   /**
- * Verifies the callback behavior for “multi-repository deployment keeps exact provisioning in independent repository-qualified partitions”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `writeFixtureLayout`, `memberExecutionScope`, `writeFile`, `stringify`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `unscopedInventoryItem`.
- * Outputs: A promise that resolves only after 7 equal, 2 deepEqual assertion groups establish “multi-repository deployment keeps exact provisioning in independent repository-qualified partitions”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `writeFile`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Builds a shared fixture deployment with member-scoped bindings/inventory and delegates partition-isolation assertions to its callback.
+ * Inputs: No callback arguments; callback receives fixture paths to write API/worker scope-specific provisioning and an unscoped inventory item.
+ * Outputs: Resolves after exact resources stay in their own repository-qualified member partitions while the unscoped item remains unattributed/incomplete.
+ * Does not handle: Cross-member ownership inference, fixture deletion, or write/scan/assertion recovery.
+ * Side effects: Callback writes provisioning files and scans the workspace; helper cleanup removes the temporary state.
  */
   async () => {
   await withWorkspaceFixture(
     /**
- * Verifies the callback behavior for “multi-repository deployment keeps exact provisioning in independent repository-qualified partitions”.
- * Inputs: Receives `fixture` from its caller. It invokes `writeFixtureLayout`, `memberExecutionScope`, `writeFile`, `stringify`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `unscopedInventoryItem`, `inventoryItem`.
- * Outputs: A promise that resolves only after 7 equal, 2 deepEqual assertion groups establish “multi-repository deployment keeps exact provisioning in independent repository-qualified partitions”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Mutates only test-controlled state through `writeFile`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Writes shared-layout API/worker scoped candidates/items plus an unscoped inventory item, then scans each member result.
+ * Inputs: The fixture, its shared provisioning paths, and per-member execution scope records created in the callback.
+ * Outputs: Resolves after exact records are independently attributed to their members and the unscoped resource cannot create a cross-member exact binding.
+ * Does not handle: Mutating Core facts after scan, fixture cleanup, or I/O/scan/assertion error handling.
+ * Side effects: Overwrites fixture provisioning JSON and reads deployment/member reconciliation; outer helper deletes the tree.
  */
     async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
@@ -1883,20 +1883,20 @@ test("multi-repository deployment keeps exact provisioning in independent reposi
 
 test("an explicitly shared provider resource remains bound in each exact member partition",
   /**
- * Verifies the callback behavior for “an explicitly shared provider resource remains bound in each exact member partition”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `memberExecutionScope`, `deployment`, `scanFixture`, `equal`.
- * Outputs: A promise that resolves only after 3 equal, 1 deepEqual assertion groups establish “an explicitly shared provider resource remains bound in each exact member partition”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Sets up one provider resource explicitly declared in both API and worker member scopes and scans the shared fixture.
+ * Inputs: No callback arguments; uses fixture callback paths to write shared-layout binding and inventory manifests with matching execution scopes.
+ * Outputs: Resolves after the shared deployment is complete and both member partitions retain the same exact provider resource relation.
+ * Does not handle: Implicit sharing, fixture lifecycle, or recovery from provisioning/scan/assertion failures.
+ * Side effects: Callback writes fixture provisioning inputs and reads reconciliation output; helper removes temporary files.
  */
   async () => {
   await withWorkspaceFixture(
     /**
- * Verifies the callback behavior for “an explicitly shared provider resource remains bound in each exact member partition”.
- * Inputs: Receives `fixture` from its caller. It invokes `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `memberExecutionScope`, `deployment`, `scanFixture`, `equal`, `deepEqual`.
- * Outputs: A promise that resolves only after 3 equal, 1 deepEqual assertion groups establish “an explicitly shared provider resource remains bound in each exact member partition”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Writes matching API/worker scope candidates and inventory entries for one explicitly shared resource, then scans it.
+ * Inputs: The callback fixture and per-member execution scopes used by the binding/inventory builders.
+ * Outputs: Resolves after `shared-production` is complete and each member's records preserve the declared shared resource without ambiguity.
+ * Does not handle: Creating undeclared sharing, fixture cleanup, or handling write/scan/assertion failure.
+ * Side effects: Rewrites shared provisioning files, reads member results, and relies on `withWorkspaceFixture` for deletion.
  */
     async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
@@ -1958,20 +1958,20 @@ test("an explicitly shared provider resource remains bound in each exact member 
 
 test("contradictory inventory ownership makes only listed member partitions inconclusive",
   /**
- * Verifies the callback behavior for “contradictory inventory ownership makes only listed member partitions inconclusive”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `memberExecutionScope`, `inventoryItem`, `deployment`, `scanFixture`.
- * Outputs: A promise that resolves only after 4 equal assertion establish “contradictory inventory ownership makes only listed member partitions inconclusive”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Writes a shared deployment whose inventory ownership contradicts the declared API/worker member partitions.
+ * Inputs: No callback arguments; fixture callback constructs scoped binding candidates and contradictory inventory item declarations.
+ * Outputs: Resolves after only the member partitions named by contradictory ownership become incomplete while unaffected partition facts remain usable.
+ * Does not handle: Resolving contradictory inventory automatically, fixture cleanup, or caught scan/assertion failures.
+ * Side effects: Callback overwrites provisioning documents and scans; the helper deletes the fixture in finally.
  */
   async () => {
   await withWorkspaceFixture(
     /**
- * Verifies the callback behavior for “contradictory inventory ownership makes only listed member partitions inconclusive”.
- * Inputs: Receives `fixture` from its caller. It invokes `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `memberExecutionScope`, `inventoryItem`, `deployment`, `scanFixture`, `deploymentMember`.
- * Outputs: A promise that resolves only after 4 equal assertion establish “contradictory inventory ownership makes only listed member partitions inconclusive”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Rewrites shared provisioning with conflicting scope ownership, scans, and reads API/worker deployment member states.
+ * Inputs: The helper fixture and scoped candidate/item records generated for its shared deployment.
+ * Outputs: Resolves after assertions isolate incomplete diagnostics to the declared conflicting member partitions rather than all members.
+ * Does not handle: Repairing ownership, deleting fixture files, or write/scan/assertion failure recovery.
+ * Side effects: Writes binding/inventory JSON and observes reconciliation output; outer fixture helper cleans up.
  */
     async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
@@ -2047,20 +2047,20 @@ test("contradictory inventory ownership makes only listed member partitions inco
 
 test("a dynamic binding candidate cannot make unscoped inventory shared across members",
   /**
- * Verifies the callback behavior for “a dynamic binding candidate cannot make unscoped inventory shared across members”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `unscopedInventoryItem`, `deployment`, `scanFixture`, `deploymentMember`.
- * Outputs: A promise that resolves only after 1 deepEqual, 3 equal assertion groups establish “a dynamic binding candidate cannot make unscoped inventory shared across members”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Adds a dynamic binding candidate and an unscoped inventory resource to a shared API/worker fixture deployment.
+ * Inputs: No callback arguments; the fixture callback writes shared layout, candidate manifest, and unscoped inventory snapshot.
+ * Outputs: Resolves after the unscoped resource is not promoted to a shared exact relation and member results remain appropriately inconclusive.
+ * Does not handle: Guessing dynamic keys, fixture deletion, or provisioning/scan/assertion error recovery.
+ * Side effects: Callback mutates provisioning files and scans the fixture; helper cleanup removes all artifacts.
  */
   async () => {
   await withWorkspaceFixture(
     /**
- * Verifies the callback behavior for “a dynamic binding candidate cannot make unscoped inventory shared across members”.
- * Inputs: Receives `fixture` from its caller. It invokes `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `unscopedInventoryItem`, `deployment`, `scanFixture`, `deploymentMember`, `deepEqual`.
- * Outputs: A promise that resolves only after 1 deepEqual, 3 equal assertion groups establish “a dynamic binding candidate cannot make unscoped inventory shared across members”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Writes a dynamic binding plus unscoped inventory into `shared-production`, scans, and examines both member partitions.
+ * Inputs: Fixture paths and the callback's candidate/inventory builder values.
+ * Outputs: Resolves after shared-key and member assertions prove a dynamic candidate cannot claim the unscoped resource exactly.
+ * Does not handle: Materializing a finite dynamic key, fixture cleanup, or handling write/scan/assertion failure.
+ * Side effects: Overwrites fixture provisioning JSON and reads scan output; outer helper owns removal.
  */
     async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
@@ -2130,20 +2130,20 @@ test("a dynamic binding candidate cannot make unscoped inventory shared across m
 
 test("a dynamic binding competitor prevents an exact candidate from proving a bound member relation",
   /**
- * Verifies the callback behavior for “a dynamic binding competitor prevents an exact candidate from proving a bound member relation”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `unscopedInventoryItem`, `deployment`, `scanFixture`, `deploymentMember`.
- * Outputs: A promise that resolves only after 4 equal assertion establish “a dynamic binding competitor prevents an exact candidate from proving a bound member relation”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Introduces both exact and dynamic competing bindings for an unscoped inventory item in a shared deployment.
+ * Inputs: No callback arguments; callback creates shared layout and writes the competing candidate/inventory manifests.
+ * Outputs: Resolves after the exact candidate cannot prove a bound member relation and affected member output is conservative.
+ * Does not handle: Selecting a winner from dynamic ambiguity, fixture lifecycle, or caught I/O/scan/assertion failures.
+ * Side effects: Callback rewrites provisioning inputs, invokes scan, and helper cleanup removes the fixture.
  */
   async () => {
   await withWorkspaceFixture(
     /**
- * Verifies the callback behavior for “a dynamic binding competitor prevents an exact candidate from proving a bound member relation”.
- * Inputs: Receives `fixture` from its caller. It invokes `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `unscopedInventoryItem`, `deployment`, `scanFixture`, `deploymentMember`, `equal`.
- * Outputs: A promise that resolves only after 4 equal assertion establish “a dynamic binding competitor prevents an exact candidate from proving a bound member relation”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Writes exact and dynamic competitors with an unscoped item, scans `shared-production`, and inspects member reconciliation.
+ * Inputs: Fixture shared-layout paths and generated binding/inventory records.
+ * Outputs: Resolves after assertions show dynamic competition blocks exact member binding proof rather than assigning the resource.
+ * Does not handle: Resolving ambiguity, cleaning up fixture files, or handling writer/scanner/assertion errors.
+ * Side effects: Mutates fixture provisioning files, reads scan results, and leaves deletion to `withWorkspaceFixture`.
  */
     async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
@@ -2234,20 +2234,20 @@ test("a dynamic binding competitor prevents an exact candidate from proving a bo
 
 test("an unknown binding scope makes only its potentially affected member inconclusive",
   /**
- * Verifies the callback behavior for “an unknown binding scope makes only its potentially affected member inconclusive”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `inventoryItem`, `deployment`, `scanFixture`, `deploymentMember`.
- * Outputs: A promise that resolves only after 5 equal assertion establish “an unknown binding scope makes only its potentially affected member inconclusive”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Writes a shared deployment with one binding whose execution scope is unknown and verifies scoped incompleteness.
+ * Inputs: No arguments; callback receives fixture paths and constructs shared scoped candidates/items including the unknown scope.
+ * Outputs: Resolves after only the potentially affected member is incomplete while the independent sibling remains reconciled.
+ * Does not handle: Inferring an unknown target, fixture cleanup, or recovering write/scan/assertion errors.
+ * Side effects: Callback overwrites provisioning data and scans; helper removes the temporary tree.
  */
   async () => {
   await withWorkspaceFixture(
     /**
- * Verifies the callback behavior for “an unknown binding scope makes only its potentially affected member inconclusive”.
- * Inputs: Receives `fixture` from its caller. It invokes `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `inventoryItem`, `deployment`, `scanFixture`, `deploymentMember`, `equal`.
- * Outputs: A promise that resolves only after 5 equal assertion establish “an unknown binding scope makes only its potentially affected member inconclusive”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Persists an unknown-scope binding beside exact member data, scans shared production, and reads API/worker member states.
+ * Inputs: The fixture paths and callback-built binding/inventory records.
+ * Outputs: Resolves after assertions localize uncertainty to the member that could match the unknown scope.
+ * Does not handle: Scope repair, fixture deletion, or write/scan/assertion error handling.
+ * Side effects: Writes provisioning JSON and reads result records; outer helper cleanup owns deletion.
  */
     async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
@@ -2344,20 +2344,20 @@ test("an unknown binding scope makes only its potentially affected member inconc
 
 test("a partial binding selector cannot turn unscoped inventory into an exact member binding",
   /**
- * Verifies the callback behavior for “a partial binding selector cannot turn unscoped inventory into an exact member binding”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `unscopedInventoryItem`, `deployment`, `scanFixture`, `deploymentMember`.
- * Outputs: A promise that resolves only after 6 equal assertion establish “a partial binding selector cannot turn unscoped inventory into an exact member binding”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Supplies a partial binding selector with an unscoped inventory resource in a shared API/worker deployment.
+ * Inputs: No arguments; callback uses fixture provisioning paths to write the selector, resource, and shared layout.
+ * Outputs: Resolves after no member receives an exact claim for the unscoped resource and affected output remains conservative.
+ * Does not handle: Completing selector conditions, fixture lifecycle, or handling write/scan/assertion failures.
+ * Side effects: Callback mutates test provisioning files and starts a scan; helper performs cleanup.
  */
   async () => {
   await withWorkspaceFixture(
     /**
- * Verifies the callback behavior for “a partial binding selector cannot turn unscoped inventory into an exact member binding”.
- * Inputs: Receives `fixture` from its caller. It invokes `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `unscopedInventoryItem`, `deployment`, `scanFixture`, `deploymentMember`, `equal`.
- * Outputs: A promise that resolves only after 6 equal assertion establish “a partial binding selector cannot turn unscoped inventory into an exact member binding”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Writes partial selector and unscoped inventory documents, scans, and inspects each shared deployment member.
+ * Inputs: The fixture and candidate/item builder values produced in this callback.
+ * Outputs: Resolves after member assertions confirm partial selection cannot establish exact ownership.
+ * Does not handle: Selector expansion, file cleanup, or recovery from write/scan/assertion failures.
+ * Side effects: Overwrites provisioning documents and reads reconciliation; helper removes temporary files.
  */
     async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
@@ -2447,20 +2447,20 @@ test("a partial binding selector cannot turn unscoped inventory into an exact me
 
 test("a shadowed binding cannot claim an otherwise unscoped inventory item",
   /**
- * Verifies the callback behavior for “a shadowed binding cannot claim an otherwise unscoped inventory item”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `unscopedInventoryItem`, `deployment`, `scanFixture`, `deploymentMember`.
- * Outputs: A promise that resolves only after 4 equal assertion establish “a shadowed binding cannot claim an otherwise unscoped inventory item”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Writes active and shadowed API binding candidates plus unscoped inventory into a shared fixture deployment.
+ * Inputs: No arguments; callback creates shared layout and the ordered candidate/resource manifests.
+ * Outputs: Resolves after the shadowed candidate cannot claim its otherwise unscoped inventory item.
+ * Does not handle: Reordering candidates, fixture cleanup, or write/scan/assertion failure recovery.
+ * Side effects: Callback writes provisioning files and scans them; helper removes the root.
  */
   async () => {
   await withWorkspaceFixture(
     /**
- * Verifies the callback behavior for “a shadowed binding cannot claim an otherwise unscoped inventory item”.
- * Inputs: Receives `fixture` from its caller. It invokes `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `unscopedInventoryItem`, `deployment`, `scanFixture`, `deploymentMember`, `equal`.
- * Outputs: A promise that resolves only after 4 equal assertion establish “a shadowed binding cannot claim an otherwise unscoped inventory item”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Persists active/shadowed candidates and unscoped items, scans `shared-production`, and inspects API reconciliation.
+ * Inputs: The callback fixture plus candidate precedence and inventory builder objects.
+ * Outputs: Resolves after the active relation remains eligible while the shadowed candidate has no exact inventory claim.
+ * Does not handle: Precedence resolution changes, cleanup, or write/scan/assertion errors.
+ * Side effects: Rewrites test provisioning JSON and reads scan result; outer helper deletes the fixture.
  */
     async (fixture) => {
     await writeFixtureLayout(fixture, "shared");
@@ -2550,20 +2550,20 @@ test("a shadowed binding cannot claim an otherwise unscoped inventory item",
 
 test("mismatched inventory authority cannot become a cross-member bound relation",
   /**
- * Verifies the callback behavior for “mismatched inventory authority cannot become a cross-member bound relation”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `inventoryItem`, `deployment`, `scanFixture`, `deploymentMember`.
- * Outputs: A promise that resolves only after 5 equal assertion establish “mismatched inventory authority cannot become a cross-member bound relation”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Uses a binding and inventory resource with incompatible provider authorities in a shared deployment.
+ * Inputs: No arguments; callback writes shared layout plus authority-mismatched candidate/item fixtures.
+ * Outputs: Resolves after no cross-member bound relation is emitted and uncertainty stays scoped to the affected member.
+ * Does not handle: Authority translation, fixture cleanup, or recovery from provisioning/scan/assertion errors.
+ * Side effects: Callback mutates fixture provisioning data and scans it; helper cleanup removes artifacts.
  */
   async () => {
   await withWorkspaceFixture(
     /**
- * Verifies the callback behavior for “mismatched inventory authority cannot become a cross-member bound relation”.
- * Inputs: Receives `fixture` from its caller. It invokes `writeFixtureLayout`, `writeDeploymentProvisioning`, `bindingManifest`, `bindingCandidate`, `inventorySnapshot`, `inventoryItem`, `deployment`, `scanFixture`, `deploymentMember`, `equal`.
- * Outputs: A promise that resolves only after 5 equal assertion establish “mismatched inventory authority cannot become a cross-member bound relation”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
- * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ * Writes mismatched-authority binding/inventory documents, scans shared production, and examines member reconciliation records.
+ * Inputs: Fixture paths and authority-qualified builder values.
+ * Outputs: Resolves after assertions show incompatible authority cannot bind a resource across API/worker partitions.
+ * Does not handle: Rebinding authority, cleanup, or handling writer/scanner/assertion failures.
+ * Side effects: Writes JSON fixtures and reads deployment output; `withWorkspaceFixture` cleans up.
  */
     async (fixture) => {
     await writeFixtureLayout(fixture, "shared");

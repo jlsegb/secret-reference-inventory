@@ -36,11 +36,11 @@ const diagnostic =
 
 test("workspace reports are deterministic, versioned, and sort independent results",
   /**
- * Verifies the callback behavior for “workspace reports are deterministic, versioned, and sort independent results”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `id`, `diagnostic`, `renderWorkspaceJson`, `equal`, `buildWorkspaceJsonReport`, `deepEqual`, `map`, `renderWorkspaceTerminal`, `match`.
- * Outputs: It returns normally only after 4 equal, 4 deepEqual, 3 match assertion groups establish “workspace reports are deterministic, versioned, and sort independent results”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
- * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ * Renders one deliberately unsorted API/worker reporting input twice and compares both JSON and terminal projections.
+ * Inputs: No callback arguments; builds incomplete worker/production records with duplicate and unsorted `DATABASE_URL`/`API_KEY` shared keys and member IDs.
+ * Outputs: Returns after JSON is byte-stable, v2/versioned, sorted by repository/member/key, omits raw nested reports, and terminal output marks the incomplete worker summary.
+ * Does not handle: Scanner execution, serialization of unsafe brands, or recovery from reporter/assertion failures.
+ * Side effects: Allocates a local reporting input and rendered strings; thrown reporter errors and failed assertions propagate.
  */
   () => {
   const input: WorkspaceReportingInput = {
@@ -123,11 +123,11 @@ test("workspace reports are deterministic, versioned, and sort independent resul
 
 test("workspace reporter rejects contradictory deployment member identities",
   /**
- * Verifies the callback behavior for “workspace reporter rejects contradictory deployment member identities”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `id`, `throws`, `buildWorkspaceJsonReport`.
- * Outputs: It returns normally only after 1 throws assertion establish “workspace reporter rejects contradictory deployment member identities”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
- * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ * Builds a production deployment whose two member records both identify `api`.
+ * Inputs: No callback arguments; supplies an otherwise minimal invalid reporting input with one declared repository ID and duplicate member entries.
+ * Outputs: Returns only when `buildWorkspaceJsonReport` throws `WORKSPACE_REPORT_DUPLICATE_DEPLOYMENT_MEMBER`.
+ * Does not handle: Repairing duplicate members, rendering a partial report, or catching a mismatched error.
+ * Side effects: Allocates the invalid input and invokes the reporter inside `assert.throws`; any unexpected return or error escapes the assertion.
  */
   () => {
   const input: WorkspaceReportingInput = {
@@ -169,11 +169,11 @@ test("workspace reporter rejects contradictory deployment member identities",
 
 test("workspace reporter rejects duplicate declared deployment repository identities",
   /**
- * Verifies the callback behavior for “workspace reporter rejects duplicate declared deployment repository identities”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `id`, `throws`, `buildWorkspaceJsonReport`.
- * Outputs: It returns normally only after 1 throws assertion establish “workspace reporter rejects duplicate declared deployment repository identities”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
- * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ * Builds a deployment whose declared `repositoryIds` repeats `api` while its member list is singular.
+ * Inputs: No callback arguments; constructs one invalid production input with no repository report entries and duplicate declared IDs.
+ * Outputs: Returns only when `buildWorkspaceJsonReport` throws `WORKSPACE_REPORT_INVALID_INPUT`.
+ * Does not handle: Deduplicating declarations, creating a report after validation failure, or handling a different exception.
+ * Side effects: Allocates the invalid input and runs the reporter under `assert.throws`; failures propagate.
  */
   () => {
   const input: WorkspaceReportingInput = {
@@ -212,11 +212,11 @@ test("workspace reporter rejects duplicate declared deployment repository identi
 
 test("workspace reporter redacts malformed safe brands instead of serializing a sentinel",
   /**
- * Verifies the callback behavior for “workspace reporter redacts malformed safe brands instead of serializing a sentinel”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `id`, `renderWorkspaceJson`, `equal`, `includes`, `match`.
- * Outputs: It returns normally only after 1 equal, 1 match assertion groups establish “workspace reporter redacts malformed safe brands instead of serializing a sentinel”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
- * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ * Attempts to render a repository ID branded from a Stripe-shaped sentinel string.
+ * Inputs: No callback arguments; constructs a one-repository reporting input with the malformed branded identifier and no deployments.
+ * Outputs: Returns after rendered JSON excludes the sentinel and contains `<opaque>` instead.
+ * Does not handle: Validating the forged brand at construction time, redacting external logs, or catching renderer/assertion failure.
+ * Side effects: Allocates the sentinel/input/output string and performs leak assertions; failures propagate.
  */
   () => {
   const sentinel = "sk_live_51Jf2QfZxR3AqVbC8NwY";

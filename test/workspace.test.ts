@@ -125,11 +125,11 @@ const parseUntrustedText = parseWorkspaceManifestText as unknown as (
 
 test("parses a versioned multi-repository JSONC workspace manifest",
   /**
- * Verifies the callback behavior for “parses a versioned multi-repository JSONC workspace manifest”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `join`, `parseWorkspaceManifestText`, `fail`, `stringify`, `equal`, `deepEqual`, `map`, `memberScope`.
- * Outputs: It returns normally only after 1 fail, 2 equal, 2 deepEqual assertion groups establish “parses a versioned multi-repository JSONC workspace manifest”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
- * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ * Parses a hand-built JSONC v2 manifest with `api`/`worker` roots and one production deployment.
+ * Inputs: No callback arguments; the body constructs JSONC containing normalized root spellings, binding/inventory/closed-model descriptors, and two runtime/environment member scopes.
+ * Outputs: Returns after `parseWorkspaceManifestText` yields the v2 schema version, normalized root/descriptors, and the expected deployment projection.
+ * Does not handle: Filesystem root resolution, provisioning reads, or recovery from parser/assertion failures.
+ * Side effects: Allocates local JSONC text and assertion projections; an unexpected parse failure calls `assert.fail` and escapes.
  */
   () => {
   const text = [
@@ -228,11 +228,11 @@ test("parses a versioned multi-repository JSONC workspace manifest",
 
 test("rejects duplicate repository IDs, equal roots, and overlapping roots",
   /**
- * Verifies the callback behavior for “rejects duplicate repository IDs, equal roots, and overlapping roots”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `parseManifest`, `equal`, `includes`, `diagnosticCodes`.
- * Outputs: It returns normally only after 6 equal assertion establish “rejects duplicate repository IDs, equal roots, and overlapping roots”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
- * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ * Builds three invalid repository lists and checks the parser's distinct identity/root diagnostics.
+ * Inputs: No callback arguments; local manifests contain duplicate `api` IDs, equivalent `repositories/api` roots, and an ancestor `repositories` root with a child.
+ * Outputs: Returns after `parseManifest` rejects each manifest with `duplicate-repository-id`, `duplicate-repository-root`, or `ambiguous-repository-root` respectively.
+ * Does not handle: Resolving real directories, repairing the manifests, or accepting partial parser output.
+ * Side effects: Allocates local manifest objects and performs strict assertions; parser or assertion failures propagate to the test runner.
  */
   () => {
   const duplicateId = parseManifest({
@@ -270,11 +270,11 @@ test("rejects duplicate repository IDs, equal roots, and overlapping roots",
 
 test("rejects undeclared and duplicate deployment membership",
   /**
- * Verifies the callback behavior for “rejects undeclared and duplicate deployment membership”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `parseManifest`, `equal`, `includes`, `diagnosticCodes`.
- * Outputs: It returns normally only after 4 equal assertion establish “rejects undeclared and duplicate deployment membership”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
- * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ * Exercises deployment-member validation with an undeclared `worker` and a repeated `api` member.
+ * Inputs: No callback arguments; constructs two one-repository manifests whose production member arrays are deliberately invalid.
+ * Outputs: Returns after both `parseManifest` results are failures carrying `undeclared-deployment-member` and `duplicate-deployment-member`.
+ * Does not handle: Repository-root parsing, provisioned-input validation, or recovery from a failed assertion.
+ * Side effects: Allocates two manifests and reads diagnostic codes; assertion failures propagate.
  */
   () => {
   const undeclared = parseManifest({
@@ -296,11 +296,11 @@ test("rejects undeclared and duplicate deployment membership",
 
 test("requires paired deployment bindings and inventory descriptors",
   /**
- * Verifies the callback behavior for “requires paired deployment bindings and inventory descriptors”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `parseManifest`, `equal`, `includes`, `diagnosticCodes`.
- * Outputs: It returns normally only after 4 equal assertion establish “requires paired deployment bindings and inventory descriptors”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
- * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ * Supplies provisioning deployments with only a bindings descriptor and only a closed-model descriptor.
+ * Inputs: No callback arguments; each local manifest declares `api` and a production deployment with an intentionally incomplete `inputs` object.
+ * Outputs: Returns after both parser results are rejected with `invalid-deployment-inputs`.
+ * Does not handle: Reading descriptor files, synthesizing the missing inventory/bindings pair, or retaining invalid deployments.
+ * Side effects: Allocates manifest objects and checks diagnostics; failures from parsing or assertions are not caught.
  */
   () => {
   const result = parseManifest({
@@ -338,11 +338,11 @@ test("requires paired deployment bindings and inventory descriptors",
 
 test("v2 provisioning maps repositories to explicit, non-overlapping execution scopes",
   /**
- * Verifies the callback behavior for “v2 provisioning maps repositories to explicit, non-overlapping execution scopes”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `parseManifest`, `memberScope`, `fail`, `stringify`, `deepEqual`, `map`, `equal`, `includes`, `diagnosticCodes`, `validManifest`.
- * Outputs: It returns normally only after 1 fail, 1 deepEqual, 11 equal assertion groups establish “v2 provisioning maps repositories to explicit, non-overlapping execution scopes”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
- * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ * Compares accepted distinct/disjoint execution scopes with rejected overlapping, legacy-provisioning, and unknown-channel declarations.
+ * Inputs: No callback arguments; constructs v2 manifests for separate API/worker scope IDs, shared IDs with overlapping stages, disjoint exact stages, v1 scan-only/provisioning, and an invalid delivery channel.
+ * Outputs: Returns after the valid manifest preserves the two scope IDs, disjoint stages remain valid, v1 scan-only normalizes to v2, and each invalid case exposes its specific diagnostic.
+ * Does not handle: Delivery at runtime, adapter parsing, or automatic correction of overlapping scopes.
+ * Side effects: Allocates several local manifests/projections; `assert.fail`, parser errors, and assertion failures propagate.
  */
   () => {
   const distinctTargets = parseManifest({
@@ -515,11 +515,11 @@ test("v2 provisioning maps repositories to explicit, non-overlapping execution s
 
 test("never retains unsafe manifest identifiers, paths, unknown fields, or parse text",
   /**
- * Verifies the callback behavior for “never retains unsafe manifest identifiers, paths, unknown fields, or parse text”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `parseManifest`, `memberScope`, `parseWorkspaceManifestText`, `equal`, `includes`, `diagnosticCodes`, `stringify`, `deepEqual`.
- * Outputs: It returns normally only after 6 equal, 1 deepEqual assertion groups establish “never retains unsafe manifest identifiers, paths, unknown fields, or parse text”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
- * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ * Feeds unsafe identifiers, relative/absolute descriptor paths, an unknown field, and malformed JSON carrying a sentinel into the public parser.
+ * Inputs: No callback arguments; constructs one hostile object manifest and one truncated JSON string with `TEST SENTINEL VALUE`.
+ * Outputs: Returns after unsafe-ID/path/field diagnostics appear, neither serialized result contains the sentinel, and malformed text produces only `invalid-json` at the root.
+ * Does not handle: Redacting external logs, parsing a valid manifest, or recovering from a parser/assertion failure.
+ * Side effects: Allocates sentinel-bearing local inputs and serializes safe result objects for assertions; failures propagate.
  */
   () => {
   const sentinel = "TEST SENTINEL VALUE";
@@ -559,11 +559,11 @@ test("never retains unsafe manifest identifiers, paths, unknown fields, or parse
 
 test("normalizes only manifest-relative descriptors and keeps scan-only deployments valid",
   /**
- * Verifies the callback behavior for “normalizes only manifest-relative descriptors and keeps scan-only deployments valid”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `parseManifest`, `validManifest`, `fail`, `stringify`, `equal`.
- * Outputs: It returns normally only after 1 fail, 3 equal assertion groups establish “normalizes only manifest-relative descriptors and keeps scan-only deployments valid”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
- * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ * Parses a scan-only manifest whose API root contains an internal parent-directory segment.
+ * Inputs: No callback arguments; derives a valid base manifest, replaces its repository root with `repositories/../repositories/api`, and omits deployment inputs.
+ * Outputs: Returns after parsing succeeds with root path `repositories/api` and `inputs === undefined` for the scan-only deployment.
+ * Does not handle: Realpath resolution, provisioning document reads, or recovery from `assert.fail` on parse failure.
+ * Side effects: Allocates the derived manifest and checks parsed fields; assertion failures propagate.
  */
   () => {
   const result = parseManifest({
@@ -582,11 +582,11 @@ test("normalizes only manifest-relative descriptors and keeps scan-only deployme
 
 test("retains explicit leading-parent descriptors for sibling repositories and infra",
   /**
- * Verifies the callback behavior for “retains explicit leading-parent descriptors for sibling repositories and infra”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `parseManifest`, `memberScope`, `fail`, `stringify`, `equal`.
- * Outputs: It returns normally only after 1 fail, 2 equal assertion groups establish “retains explicit leading-parent descriptors for sibling repositories and infra”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
- * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ * Parses sibling repository and infrastructure descriptors that intentionally begin with a parent-directory segment.
+ * Inputs: No callback arguments; constructs API/worker roots and paired provisioning descriptors under a parent infrastructure directory.
+ * Outputs: Returns after successful parsing preserves `../api` and `../infra/production/bindings.json` rather than collapsing the leading-parent relationship.
+ * Does not handle: Containment enforcement at the filesystem boundary, document I/O, or parse-failure recovery.
+ * Side effects: Allocates a manifest and reads normalized descriptors; `assert.fail` and assertion failures propagate.
  */
   () => {
   const result = parseManifest({
@@ -620,11 +620,11 @@ test("retains explicit leading-parent descriptors for sibling repositories and i
 
 test("bounds manifest repository, deployment, and membership cardinality before traversal",
   /**
- * Verifies the callback behavior for “bounds manifest repository, deployment, and membership cardinality before traversal”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `parseManifest`, `from`, `String`, `equal`, `includes`, `diagnosticCodes`, `map`, `floor`.
- * Outputs: It returns normally only after 8 equal assertion establish “bounds manifest repository, deployment, and membership cardinality before traversal”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
- * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ * Constructs arrays just over each public repository, deployment, per-deployment-member, and total-member cardinality limit.
+ * Inputs: No callback arguments; creates indexed repository/deployment records and repeated `api`/shared member arrays sized from the exported maximum constants.
+ * Outputs: Returns after each `parseManifest` result reports its matching `too-many-*` diagnostic before traversal can accept the oversized structure.
+ * Does not handle: Benchmarking allocation cost, truncating arrays, or testing provisioning adapter limits.
+ * Side effects: Allocates large in-memory fixture arrays and local projections; parser/assertion failures propagate.
  */
   () => {
   const tooManyRepositories = parseManifest({
@@ -758,11 +758,11 @@ test("bounds manifest repository, deployment, and membership cardinality before 
 
 test("public parser rejects hostile object manifests before reflection or getter access",
   /**
- * Verifies the callback behavior for “public parser rejects hostile object manifests before reflection or getter access”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `defineProperty`, `revocable`, `revoke`, `parseUntrustedText`, `equal`, `deepEqual`, `includes`, `stringify`.
- * Outputs: It returns normally only after 5 equal, 1 deepEqual assertion groups establish “public parser rejects hostile object manifests before reflection or getter access”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
- * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ * Passes proxy reflection traps, a throwing property getter, and a revoked proxy through the public untyped parser boundary.
+ * Inputs: No callback arguments; creates four hostile values whose traps set local flags and throw `TEST SENTINEL VALUE` if reflection occurs.
+ * Outputs: Returns after each input produces root `invalid-json` without the sentinel, and all three trap-invocation flags remain false.
+ * Does not handle: Trusting arbitrary JavaScript objects, recovering a triggered trap, or sanitizing external exception logs.
+ * Side effects: Creates proxies/getter state, revokes one proxy, and reads mutation flags; assertion failures propagate.
  */
   () => {
   const sentinel = "TEST SENTINEL VALUE";

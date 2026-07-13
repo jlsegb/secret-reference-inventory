@@ -35,11 +35,11 @@ const reconciliation: ReconciliationResult = { records: [], scopeCoverage: [] };
 
 test("N3 scan reporting adapter accepts only normalized result facts",
   /**
- * Verifies the callback behavior for “N3 scan reporting adapter accepts only normalized result facts”.
- * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `id`, `diagnostic`, `workspaceScanToReportingInput`, `equal`, `deepEqual`, `map`.
- * Outputs: It returns normally only after 5 equal, 1 deepEqual assertion groups establish “N3 scan reporting adapter accepts only normalized result facts”; setup, assertion, and awaited-operation failures propagate.
- * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
- * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ * Converts a normalized API/production workspace scan source into reporter input and inspects the projected safe fields.
+ * Inputs: No callback arguments; builds complete API facts plus incomplete production/member diagnostics, one `DATABASE_URL` shared key, and empty reconciliation/reference collections.
+ * Outputs: Returns after the adapter preserves API/production/member IDs and key name while omitting raw `report` and `manifestPath` fields.
+ * Does not handle: Running a scan, rendering JSON/terminal output, or accepting unnormalized source facts.
+ * Side effects: Allocates source/reporting-input objects and reads their projections; adapter/assertion failures propagate.
  */
   () => {
   const scan: WorkspaceScanReportSource = {
