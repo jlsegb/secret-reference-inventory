@@ -1,135 +1,109 @@
 # Secret Reference Inventory
 
-`secret-reference-inventory` is a local-only static analysis CLI for finding
-logical secret and configuration keys that first-party TypeScript and
-JavaScript code reads. It reports references such as `env:DATABASE_URL`, not
-secret values.
+Secret Reference Inventory is a local static-analysis tool for identifying the
+logical configuration and secret keys that first-party TypeScript and
+JavaScript code reads. It records references such as `env:PAYMENTS_API_TOKEN`;
+it is not a secret scanner and does not report secret values.
 
-It is designed to answer a practical cleanup question: “which provisioned
-secrets still have static code demand?” A provisioned resource with no
-compatible static read is a review candidate, never a deletion instruction.
+Its central use is cleanup triage: compare static code demand with local,
+value-free binding and inventory exports to identify resources worth reviewing.
+An inventory item without compatible static demand is a review signal, never a
+deletion instruction.
 
-## Local-only security model
+## What it does—and does not prove
 
-- The CLI makes no runtime network requests and has no telemetry, analytics,
-  account, or service integration.
-- It does not execute repository code, package scripts, build scripts, shell
-  commands, or plugins. Source parsing uses the TypeScript compiler API in
-  syntax-only mode.
-- It does not read values from the process environment or dotenv files. Local
-  JSON inputs are treated as value-free binding/inventory exports and are
-  validated before facts or reports are produced.
-- Reports contain sanitized logical keys, paths, positions, and evidence
-  categories; they contain no source snippets or secret values. Credential-like
-  and high-entropy malformed identifiers are redacted.
+- Scans only the selected first-party repository roots. Dependencies and
+  outside-root imports are intentionally excluded from code demand.
+- Recognizes direct and safely constant-folded environment reads, and records
+  dynamic lookups as finite, pattern, or unbounded uncertainty.
+- Optionally reconciles those reads with local binding and inventory documents.
+- Keeps repositories distinct in workspace reports; a shared key means shared
+  static demand in an explicit deployment, not shared delivery or value.
+- Never executes repository code, scripts, build steps, plugins, IaC, or shell
+  commands. It parses source and JSON/JSONC data only.
+- Makes no runtime network requests and includes no telemetry, analytics,
+  accounts, or service integration. Acquiring dependencies or cloning the
+  repository is separate from running the tool.
 
-Static evidence is intentionally narrower than runtime truth: an exact mapping
-means `exact-declared`, not delivered, authorized, reachable, or executed.
+Static evidence is not runtime proof. A declared mapping does not demonstrate
+that a platform delivered a value, that a role can read it, or that a code path
+executed. See [the evidence model](docs/evidence-model.md) for the exact
+meaning of each conclusion.
 
-## Install and run
+## Quick start
 
-Requires Node.js 24 or newer.
+Node.js 24 or newer is required.
 
-```sh
-npm install --global secret-reference-inventory
-secret-usage scan ./my-repository
-```
-
-Scan with JSON output and write a local report:
-
-```sh
-secret-usage scan ./my-repository --format json --out scan-report.json --require-complete
-```
-
-`--require-complete` exits with status `2` when skipped/failed first-party
-coverage or an unbounded environment lookup prevents a complete conclusion.
-
-Reconcile code demand with local exports of static bindings and inventory:
+The supported development/source path is:
 
 ```sh
-secret-usage reconcile \
-  --root ./my-repository \
-  --bindings ./bindings.json \
-  --inventory ./inventory.json \
-  --closed-model ./closed-model.json \
-  --format sarif \
-  --out secret-usage.sarif \
-  --require-complete
+git clone https://github.com/jlsegb/secret-reference-inventory.git
+cd secret-reference-inventory
+npm ci
+npm run build
+node ./dist/cli/bin.js scan ./example-repository --require-complete
 ```
 
-Explain an item from a JSON scan report:
+After the project is built, use `node ./dist/cli/bin.js` for the supported
+source-checkout workflow. Archive installation is not yet a supported
+distribution path: release smoke validation is currently blocked because its
+assertion expects a workspace report v1 while the runtime emits v2. Registry
+publication is likewise not a documented installation path. Details are in the
+[CLI reference](docs/cli.md#installation-and-distribution-status).
+
+Common commands:
 
 ```sh
-secret-usage explain env:DATABASE_URL --scan-report scan-report.json
+# Scan one first-party repository from this source checkout.
+node ./dist/cli/bin.js scan ./example-repository --format json --out report.json
+
+# Reconcile one repository against local, value-free input documents.
+node ./dist/cli/bin.js reconcile --root ./example-repository \
+  --bindings ./control/bindings.json \
+  --inventory ./control/inventory.json \
+  --format sarif --out findings.sarif
+
+# Scan explicitly named repositories and deployments.
+node ./dist/cli/bin.js workspace scan --manifest ./control/workspace.jsonc --format json
+
+# View a derived workspace report on loopback only.
+node ./dist/cli/bin.js ui --manifest ./control/workspace.jsonc
 ```
 
-Supported output formats are `terminal` (default), `json`, and `sarif`.
+Use `--require-complete` when a nonzero result is needed for incomplete or
+invalid analysis. It cannot turn static evidence into a runtime guarantee.
 
-## Supported local inputs
+## Documentation
 
-The scanner considers first-party files under the supplied root with these
-extensions: `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, and `.cjs`.
-It intentionally analyzes code rather than documentation.
+- [CLI reference](docs/cli.md) — commands, output formats, exit behavior, and
+  local viewer.
+- [Workspace manifests and reports](docs/workspaces.md) — v2 manifest
+  structure, deployment member scopes, report schemas, and v1 migration.
+- [Evidence and reconciliation model](docs/evidence-model.md) — demand,
+  bindings, inventory, dynamic access, coverage, and closed models.
+- [Privacy, boundaries, and limits](docs/privacy-and-limits.md) — local-only
+  behavior, redaction, resource limits, and what remains inconclusive.
+- [Programmatic API](docs/programmatic-api.md) — published package entry
+  points and their boundaries.
+- [Development and contributing](docs/development.md) — verification,
+  documentation requirements, and the worktree workflow.
+- [Technical specification](https://github.com/jlsegb/secret-reference-inventory/blob/main/SPEC.md)
+  — detailed source-repository design contract and planned architecture; the
+  versioned runtime contracts above describe the current implementation.
 
-`reconcile` accepts only local JSON files:
+## Maintainers
 
-- binding manifest: `binding-manifest/v1`;
-- inventory snapshot: `inventory-snapshot/v1`; and
-- optional closed provisioning model: `closed-provisioning-model/v1`.
-
-These inputs describe logical destinations, execution scope, delivery channel,
-conditions, precedence, and provider-qualified resource IDs. They must not be
-used to supply secret values. The tool does not call provider APIs or inspect
-provider permissions/roles.
-
-The `reconcile --scan-report` form is parsed for forward compatibility but is
-not implemented; use `--root` today. `explain` requires a JSON report produced
-by `scan` or `reconcile`.
-
-## What it can establish
-
-- Direct and safely constant-folded environment reads are code demand.
-- Finite/pattern dynamic lookups are reported as bounded candidates; unbounded
-  or user-controlled lookups remain explicit scoped uncertainty.
-- Static binding candidates are reconciled only when their execution unit,
-  phase, stage, delivery channel, destination, conditions, and precedence are
-  compatible.
-- An inventory-listed resource with no compatible first-party static read is
-  labeled `inventory-listed-no-static-read` for review.
-
-## Important limitations
-
-- Static analysis cannot prove a branch executed, an environment value was
-  delivered, a provider role can read a resource, or a dashboard-only setting
-  exists.
-- Outside-root imports and runtime dependencies are intentionally excluded
-  from code demand. The result is about the code and local inputs within the
-  requested root.
-- Ignored, generated, unreadable, oversized, symlinked, or budget-exhausted
-  first-party paths produce scoped incomplete coverage rather than a clean
-  absence claim.
-- Dynamic reflection, runtime-generated code, unsupported languages, and
-  platform configuration not represented in a local binding export can leave
-  findings inconclusive.
-- The tool never deletes, rotates, revokes, or validates a secret. Review
-  candidates alongside deployment configuration and operational evidence.
-
-## Programmatic surface
-
-The package root and `secret-reference-inventory/cli` export the parser and
-CLI runner. `secret-reference-inventory/discovery` and
-`secret-reference-inventory/safety` are the explicitly supported lower-level
-exports. All other paths are private implementation details.
-
-## Development release check
+Run the full local verification suite before proposing a change:
 
 ```sh
 npm run verify
 npm run release:check
 ```
 
-`release:check` builds locally and runs `npm pack --dry-run --ignore-scripts`.
-It verifies the public file list, bin/exports targets, absence of direct
-telemetry/network dependencies or package configuration, and exclusion of
-source, tests, fixtures, caches, and source maps from the tarball. It does not
-publish a package.
+Neither command publishes a package. `release:check` is the intended local
+release gate, but it is currently blocked by the known report-v1-versus-v2
+smoke assertion mismatch; do not treat archive installation as verified until
+that release-code issue is fixed.
+
+Changes must also follow the required function documentation contract in
+[Development and contributing](docs/development.md#required-function-documentation).

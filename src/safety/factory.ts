@@ -48,6 +48,10 @@ import {
   type SafeTimestamp,
   type SanitizedDiagnostic,
 } from "./types.js";
+import {
+  MAX_CLOSED_MODEL_FINITE_KEYS,
+  provisioningInputFitsBudget,
+} from "./provisioning-budget.js";
 
 /**
  * Version included by callers in cache identity.  Changes to a grammar,
@@ -102,8 +106,16 @@ export interface SafePathInput {
 }
 
 /**
- * The sole conversion boundary for untrusted text that may reach facts,
- * diagnostics, caches, or reporters. Raw input never appears in an error.
+ * Converts most untrusted values into safe fact records. Factory-generated
+ * materialization failures use fixed sanitized diagnostic codes and retain no
+ * raw input, except that untrusted closed-model permitted-exclusion rationale
+ * labels are not value-sanitized: an uppercase caller value accepted by
+ * `diagnosticCode` persists verbatim in normalized facts and JSON and can
+ * leak there. The no-value-leak guarantee therefore does not cover those
+ * rationale labels until a separately authorized code change sanitizes them.
+ * This class also does not catch
+ * exceptions from caller-supplied accessors, iterables, or matchers; those can
+ * retain raw text, so callers must contain and sanitize them before exposure.
  */
 export class SafeFactFactory implements FullCoreFactBuilder {
   readonly policyRevision = SAFE_FACT_POLICY_REVISION;
@@ -111,7 +123,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
   readonly #trustedEnvironmentKeys: ReadonlySet<string>;
   readonly #maxFiniteKeyDomain: number;
 
-  public constructor(options: SafeFactFactoryOptions = {}) {
+  /**
+   * Builds the single text-to-safe-fact boundary and validates its two local policy knobs.
+   *
+   * Inputs: Optional trusted environment-key iterable and optional finite-domain ceiling.
+   * Outputs: A factory whose private allowlist and finite-key ceiling are ready for materializers.
+   * Does not handle: Bounding or snapshotting an arbitrary iterable, fetching secrets, checking filesystem paths, or containing/sanitizing an exception from an options accessor or supplied iterator.
+   * Side effects: Reads and iterates supplied options (whose accessors/iterator can throw raw text), allocates a Set, and throws `SafetyConfigurationError` for an invalid observed key or limit.
+   */
+   public constructor(options: SafeFactFactoryOptions = {}) {
     const trusted = new Set<string>();
 
     for (const key of options.trustedEnvironmentKeys ?? []) {
@@ -127,7 +147,11 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     }
 
     const maxFiniteKeyDomain = options.maxFiniteKeyDomain ?? 100;
-    if (!Number.isSafeInteger(maxFiniteKeyDomain) || maxFiniteKeyDomain < 1) {
+    if (
+      !Number.isSafeInteger(maxFiniteKeyDomain) ||
+      maxFiniteKeyDomain < 1 ||
+      maxFiniteKeyDomain > MAX_CLOSED_MODEL_FINITE_KEYS
+    ) {
       throw new SafetyConfigurationError("INVALID_MAX_FINITE_KEY_DOMAIN");
     }
 
@@ -135,7 +159,14 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     this.#maxFiniteKeyDomain = maxFiniteKeyDomain;
   }
 
-  /** Converts every source-derived environment-key spelling through one rule. */
+  /**
+   * Admits a conventional or explicitly trusted environment-key spelling, otherwise replaces it with the opaque sentinel.
+   *
+   * Inputs: One unknown candidate name.
+   * Outputs: A branded safe identifier for an allowed non-token-shaped string, or `OPAQUE_IDENTIFIER`.
+   * Does not handle: Discovering aliases, confirming a key exists, or preserving rejected source text.
+   * Side effects: Reads the factory allowlist and runs the local token classifier; it does not mutate the input.
+   */
   public environmentKey(value: unknown): Identifier {
     if (typeof value !== "string") {
       return OPAQUE_IDENTIFIER;
@@ -151,7 +182,14 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     return OPAQUE_IDENTIFIER;
   }
 
-  /** For tool/config identifiers that have their own non-secret grammar. */
+  /**
+   * Admits a bounded generic identifier only when it passes the grammar and token-shape filter.
+   *
+   * Inputs: One unknown identifier candidate.
+   * Outputs: A branded safe identifier or `OPAQUE_IDENTIFIER` without retaining rejected text.
+   * Does not handle: Environment-key-specific allowlisting or semantic provider-ID validation.
+   * Side effects: Classifies the provided string but does not mutate it or perform external access.
+   */
   public genericIdentifier(value: unknown): Identifier {
     if (
       typeof value !== "string" ||
@@ -165,8 +203,12 @@ export class SafeFactFactory implements FullCoreFactBuilder {
   }
 
   /**
-   * Adapters can use this for a provider-defined structured grammar. The
-   * matcher is adapter-owned code, not repository configuration or a plugin.
+   * Applies an adapter-owned identifier grammar while preventing stateful regular expressions from changing the decision.
+   *
+   * Inputs: An unknown candidate and the adapter's `RegExp` matcher.
+   * Outputs: A safe identifier only for a matching string of at most 512 characters; otherwise the opaque sentinel.
+   * Does not handle: Proving the matcher itself is safe, checking provider existence, keeping rejected text, or containing/sanitizing matcher property/test exceptions.
+   * Side effects: Sets `matcher.lastIndex` to zero before evaluation and again after normal evaluation completion (after `.test` returns normally when a string is tested); a throwing matcher has no guaranteed post-throw reset. Invokes matching behavior that can throw caller-supplied raw text.
    */
   public structuredIdentifier(value: unknown, matcher: RegExp): Identifier {
     // Adapters must not get stateful results from a global/sticky expression.
@@ -186,9 +228,12 @@ export class SafeFactFactory implements FullCoreFactBuilder {
   }
 
   /**
-   * Produces a root-relative report path. PathGuard must establish real-path
-   * containment before calling this method; this method prevents raw paths
-   * from crossing the reporting boundary.
+   * Converts an expected object containing an already canonical, in-root path pair into a display-safe relative path.
+   *
+   * Inputs: An approved root and canonical candidate path as strings.
+   * Outputs: A slash-normalized safe relative path, or `OPAQUE_PATH` for root, escaping, malformed, or token-shaped segments.
+   * Does not handle: Canonicalizing paths, resolving symlinks, proving the root was approved, or null/non-object runtime inputs. For an object with malformed fields it returns `OPAQUE_PATH`; null, a non-object, or a throwing supplied field accessor can propagate a native/raw exception that callers must contain and sanitize.
+   * Side effects: Reads supplied fields, calls Node path helpers, and tests every segment; it does not read the filesystem.
    */
   public safePath(input: SafePathInput): SafePath {
     if (
@@ -211,7 +256,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     const segments = relativePath.split(sep);
     if (
       segments.length === 0 ||
-      segments.some((segment) => !isSafeDisplaySegment(segment))
+      segments.some(/**
+ * Rejects a relative-path segment that cannot safely appear in a report.
+ *
+ * Inputs: One segment split from the computed relative path.
+ * Outputs: True when the segment fails `isSafeDisplaySegment`.
+ * Does not handle: The other path segments or filesystem containment.
+ * Side effects: Invokes the segment safety classifier for this array predicate.
+ */
+(segment) => !isSafeDisplaySegment(segment))
     ) {
       return OPAQUE_PATH;
     }
@@ -219,7 +272,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     return segments.join("/") as SafePath;
   }
 
-  public diagnosticCode(value: unknown): SafeDiagnosticCode {
+  /**
+   * Converts a potential diagnostic label to a bounded uppercase code, substituting one fixed fallback for anything else.
+   *
+   * Inputs: One unknown proposed code.
+   * Outputs: A branded uppercase diagnostic code or `UNSAFE_DIAGNOSTIC`.
+   * Does not handle: Mapping adapter-specific labels or retaining invalid code text.
+   * Side effects: Tests the candidate against the bounded code grammar.
+   */
+   public diagnosticCode(value: unknown): SafeDiagnosticCode {
     if (typeof value !== "string" || !DIAGNOSTIC_CODE_PATTERN.test(value)) {
       return "UNSAFE_DIAGNOSTIC" as SafeDiagnosticCode;
     }
@@ -227,7 +288,14 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     return value as SafeDiagnosticCode;
   }
 
-  /** Returns undefined rather than retaining an invalid untrusted timestamp. */
+  /**
+   * Parses a UTC timestamp spelling accepted by the local grammar and returns JavaScript's canonical ISO UTC serialization.
+   *
+   * Inputs: One unknown timestamp value.
+   * Outputs: A canonical `SafeTimestamp`, or undefined when the grammar or parse is invalid.
+   * Does not handle: Timezone conversion policy beyond ISO UTC, timestamp provenance, or strict lexical/canonical round-trip validation. Calendar-normalizing inputs accepted by `Date.parse` (for example, a non-leap-year February 29) can be returned as a different canonical date.
+   * Side effects: Calls `Date.parse` and allocates a `Date` for accepted strings.
+   */
   public timestamp(value: unknown): SafeTimestamp | undefined {
     if (typeof value !== "string" || !ISO_8601_UTC_PATTERN.test(value)) {
       return undefined;
@@ -241,7 +309,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     return new Date(parsed).toISOString() as SafeTimestamp;
   }
 
-  public location(
+  /**
+   * Constructs a source location while clamping invalid branded coordinates to zero.
+   *
+   * Inputs: A previously safe file path and start/end position objects.
+   * Outputs: A new `SafeLocation` using normalized nonnegative integral positions.
+   * Does not handle: Ordering start before end, re-validating the path brand, or locating source text.
+   * Side effects: Allocates a location and two position objects; it does not modify supplied positions.
+   */
+   public location(
     file: SafePath,
     start: SafePosition,
     end: SafePosition,
@@ -254,8 +330,12 @@ export class SafeFactFactory implements FullCoreFactBuilder {
   }
 
   /**
-   * Parser implementations may retain rich parser errors privately, but only a
-   * fixed code and a pre-sanitized location can leave their worker.
+   * Produces a diagnostic record whose code crosses the same safety boundary as other facts.
+   *
+   * Inputs: An unknown code and an optional already-safe location.
+   * Outputs: A new diagnostic containing the sanitized code and, when supplied, the same location reference.
+   * Does not handle: Validating a location supplied under its type brand or adding contextual text.
+   * Side effects: Calls `diagnosticCode` and allocates the result record.
    */
   public diagnostic(
     code: unknown,
@@ -267,10 +347,20 @@ export class SafeFactFactory implements FullCoreFactBuilder {
       : { code: sanitizedCode, location };
   }
 
-  /** Materializes data-only binding input without preserving unsafe strings. */
+  /**
+   * Validates one raw binding candidate and converts it into a safe, value-free Core binding fact.
+   *
+   * Inputs: An unknown adapter binding record, including scope, destination, precedence, and optional provider resource.
+   * Outputs: On normal return, `{ ok: true, value }` for a fully safe binding or `{ ok: false, diagnostic }` with a fixed sanitized code and no raw input.
+   * Does not handle: Reading a secret value, resolving precedence, proving a binding delivers to a live process, or guaranteeing complete input bounds. Its preflight visits only enumerable own string-keyed object fields, so non-enumerable/symbol/inherited fields can bypass its cap and later be read. It also has no cycle detection or whole-graph object-field quota, and it does not contain/sanitize accessor exceptions.
+   * Side effects: Performs a budget preflight then materializes fields in a second pass; fields/getters can be read twice, can yield different values, and can throw raw text to the caller.
+   */
   public materializeBindingCandidate(
     input: unknown,
   ): FactMaterialization<BindingCandidate> {
+    if (!provisioningInputFitsBudget(input)) {
+      return materializationFailure(this, "PROVISIONING_INPUT_ENTRY_LIMIT_EXCEEDED");
+    }
     const record = asRecord(input);
     if (record === undefined) {
       return materializationFailure(this, "INVALID_BINDING_CANDIDATE");
@@ -334,10 +424,20 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     return { ok: true, value };
   }
 
-  /** Materializes a local inventory export; it never reads provider values. */
+  /**
+   * Validates an inventory snapshot and retains only provider resource identities and optional declared scopes.
+   *
+   * Inputs: An unknown snapshot record with an authority, timestamp, and item array.
+   * Outputs: On normal return, a safe snapshot or a fixed sanitized failure diagnostic; neither returned form represents a secret payload.
+   * Does not handle: Fetching providers, validating authority ownership externally, deduplicating inventory items, or guaranteeing complete input bounds. Its preflight visits only enumerable own string-keyed object fields; a non-enumerable `items` array can bypass the array cap and this method can then accept more than `MAX_PROVISIONING_RAW_ENTRIES` items. It also has no cycle detection or whole-graph object-field quota, and it does not contain/sanitize accessor exceptions.
+   * Side effects: Performs a budget preflight then reads the record/items again; accessors can run in both passes and can throw raw text to the caller.
+   */
   public materializeInventorySnapshot(
     input: unknown,
   ): FactMaterialization<InventorySnapshot> {
+    if (!provisioningInputFitsBudget(input)) {
+      return materializationFailure(this, "PROVISIONING_INPUT_ENTRY_LIMIT_EXCEEDED");
+    }
     const record = asRecord(input);
     if (record === undefined || !Array.isArray(record.items)) {
       return materializationFailure(this, "INVALID_INVENTORY_SNAPSHOT");
@@ -351,7 +451,8 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     }
 
     const items: InventoryItem[] = [];
-    for (const itemInput of record.items) {
+    for (let index = 0; index < record.items.length; index += 1) {
+      const itemInput = record.items[index];
       const item = asRecord(itemInput);
       const providerResourceId = item === undefined
         ? undefined
@@ -383,10 +484,17 @@ export class SafeFactFactory implements FullCoreFactBuilder {
   }
 
   /**
-   * `model` gaps are conservatively represented as binding gaps because Core
-   * intentionally has only demand/binding/inventory coverage domains.
+   * Converts an adapter coverage gap into safe evidence, treating model-domain gaps as binding uncertainty.
+   *
+   * Inputs: An unknown coverage record with an affected selector, input ID, adapter/path ID, domain, and optional reason.
+   * Outputs: On normal return, a safe `CoverageGap` or a fixed sanitized invalid-input diagnostic.
+   * Does not handle: Recovering skipped content, assigning a precise source range, treating a model declaration as evidence of delivery, or guaranteeing complete input bounds. Its preflight visits only enumerable own string-keyed object fields, so non-enumerable/symbol/inherited fields can bypass its cap and later be read. It also has no cycle detection or whole-graph object-field quota, and it does not contain/sanitize accessor exceptions.
+   * Side effects: Preflights then re-reads input properties; safe materializer calls allocate output, can observe accessor changes between passes, and can propagate raw accessor exceptions.
    */
   public materializeCoverageGap(input: unknown): FactMaterialization<CoverageGap> {
+    if (!provisioningInputFitsBudget(input)) {
+      return materializationFailure(this, "PROVISIONING_INPUT_ENTRY_LIMIT_EXCEEDED");
+    }
     const record = asRecord(input);
     if (record === undefined) {
       return materializationFailure(this, "INVALID_COVERAGE_GAP");
@@ -427,13 +535,19 @@ export class SafeFactFactory implements FullCoreFactBuilder {
   }
 
   /**
-   * Closed-model dynamic-domain declarations have no adapter proof by
-   * themselves. Valid static scopes are retained; finitePatternDomains is
-   * deliberately omitted so no expansion can occur.
+   * Converts a declared closed provisioning model into safe scope contracts without trusting dynamic-domain claims as finite coverage.
+   *
+   * Inputs: An unknown model containing schema/input IDs, finite cap, scopes, and optional dynamic-domain declarations.
+   * Outputs: On normal return, safe scopes and coverage contracts or one fixed sanitized materialization failure; dynamic domains are intentionally absent from the value.
+   * Does not handle: Establishing closure at runtime, validating external adapter coverage, promoting declared dynamic keys into strong absence evidence, or guaranteeing complete input bounds. Its preflight visits only enumerable own string-keyed object fields, so non-enumerable/symbol/inherited fields can bypass its cap and later be read. It also has no cycle detection or whole-graph object-field quota, and it does not contain/sanitize accessor exceptions.
+   * Side effects: Preflights then iterates nested arrays/records again, allocating contracts, observing getters more than once, and potentially propagating raw accessor exceptions.
    */
   public materializeClosedModel(
     input: unknown,
   ): FactMaterialization<ClosedProvisioningModel> {
+    if (!provisioningInputFitsBudget(input)) {
+      return materializationFailure(this, "PROVISIONING_INPUT_ENTRY_LIMIT_EXCEEDED");
+    }
     const record = asRecord(input);
     if (record === undefined || !Array.isArray(record.scopes)) {
       return materializationFailure(this, "INVALID_CLOSED_MODEL");
@@ -450,13 +564,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
       modelInputId === undefined ||
       typeof maxFiniteKeyDomain !== "number" ||
       !Number.isSafeInteger(maxFiniteKeyDomain) ||
-      maxFiniteKeyDomain < 1
+      maxFiniteKeyDomain < 1 ||
+      maxFiniteKeyDomain > this.#maxFiniteKeyDomain
     ) {
       return materializationFailure(this, "INVALID_CLOSED_MODEL");
     }
 
     const scopes: ClosedScope[] = [];
-    for (const scopeInput of record.scopes) {
+    for (let index = 0; index < record.scopes.length; index += 1) {
+      const scopeInput = record.scopes[index];
       const scopeRecord = asRecord(scopeInput);
       if (
         scopeRecord === undefined ||
@@ -532,7 +648,14 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     };
   }
 
-  /** A non-coverage warning W3 may surface for an unproven model domain. */
+  /**
+   * Reports the one fixed uncertainty warning when a model declares any dynamic domain.
+   *
+   * Inputs: The raw model-shaped value inspected for a nonempty `dynamicDomains` array.
+   * Outputs: On normal return, a frozen one-element array containing a mutable plain `UNPROVEN_DYNAMIC_DOMAIN` diagnostic record, or a frozen empty array.
+   * Does not handle: Materializing the model, exposing individual domains, deciding whether a scope is closed, deep-freezing the returned diagnostic record, or containing/sanitizing supplied property-accessor exceptions.
+   * Side effects: Reads object/array properties and allocates/freezes a fresh result array; a throwing accessor can propagate raw text to the caller.
+   */
   public closedModelDiagnostics(input: unknown): readonly CoreDiagnostic[] {
     const record = asRecord(input);
     if (record !== undefined && Array.isArray(record.dynamicDomains) && record.dynamicDomains.length > 0) {
@@ -543,7 +666,14 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     return Object.freeze([]);
   }
 
-  /** Materializes a source-adapter reference after all text has crossed safety. */
+  /**
+   * Converts one source-read claim into a safe reference whose untrusted name and evidence must pass nested materializers.
+   *
+   * Inputs: An unknown reference record containing ID, logical key, operation/resolution metadata, location, and evidence chain.
+   * Outputs: On normal return, a safe `SecretReference` or an `INVALID_SECRET_REFERENCE` failure without raw text.
+   * Does not handle: Parsing source, proving execution, accepting missing/invalid evidence, or containing/sanitizing supplied property-accessor exceptions.
+   * Side effects: Reads nested record properties and allocates a reference/evidence graph; accessor errors can propagate raw text to the caller.
+   */
   public materializeSecretReference(
     input: unknown,
   ): FactMaterialization<SecretReference> {
@@ -587,7 +717,14 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     };
   }
 
-  /** Materializes one source-to-execution-scope edge, never an import string. */
+  /**
+   * Converts the relationship from a safe source reference to an execution scope into a Core demand edge.
+   *
+   * Inputs: An unknown edge record with IDs, scope, allowed origin, and evidence chain.
+   * Outputs: On normal return, a safe direct/consumer-derived demand edge or one fixed sanitized invalid-edge diagnostic.
+   * Does not handle: Verifying that the reference exists elsewhere in the graph, deciding reachability, or containing/sanitizing supplied property-accessor exceptions.
+   * Side effects: Reads nested properties and allocates a value-free edge; accessor errors can propagate raw text to the caller.
+   */
   public materializeDemandEdge(input: unknown): FactMaterialization<DemandEdge> {
     const record = asRecord(input);
     if (record === undefined) {
@@ -622,9 +759,12 @@ export class SafeFactFactory implements FullCoreFactBuilder {
   }
 
   /**
-   * Materializes finite/pattern/unbounded dynamic evidence. Invalid finite or
-   * pattern input is rejected so callers must retain scoped uncertainty rather
-   * than serializing a fabricated key list.
+   * Converts one dynamic environment lookup into conservative finite, pattern, or unbounded evidence.
+   *
+   * Inputs: An unknown edge record with scope, domain, origin, optional pattern constraint, likely keys, and evidence.
+   * Outputs: On normal return, a safe dynamic edge only when its likely keys agree with its domain, otherwise a fixed sanitized failure diagnostic.
+   * Does not handle: Inferring omitted likely keys, resolving dynamic input at runtime, making an unbounded domain finite, or containing/sanitizing supplied property-accessor exceptions.
+   * Side effects: Reads nested input properties and allocates the edge/domain; accessor errors can propagate raw text to the caller.
    */
   public materializeDynamicLookupEdge(
     input: unknown,
@@ -672,19 +812,42 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     };
   }
 
-  /** Deterministic, value-free pattern identity derived only from safe location. */
+  /**
+   * Derives a report-safe pattern identifier from already-safe source coordinates and the pattern category.
+   *
+   * Inputs: A `SafeLocation` and an allowed `SafeKeyPattern` kind.
+   * Outputs: A deterministic branded identifier containing its start line, column, and kind.
+   * Does not handle: Global uniqueness across files or validation of values already carrying safety brands.
+   * Side effects: Interpolates the supplied primitives into a new string.
+   */
   public patternId(location: SafeLocation, kind: SafeKeyPattern["kind"]): SafeIdentifier {
     return asSafeIdentifier(
       `pattern-${location.start.line}-${location.start.column}-${kind}`,
     );
   }
 
-  private requiredGenericIdentifier(value: unknown): SafeIdentifier | undefined {
+  /**
+   * Narrows a generic identifier conversion to its concrete safe-string branch.
+   *
+   * Inputs: One unknown identifier value.
+   * Outputs: A safe identifier or undefined when `genericIdentifier` returned the opaque sentinel.
+   * Does not handle: Accepting environment-key exceptions or preserving rejected input.
+   * Side effects: Delegates to `genericIdentifier` and its local classifier.
+   */
+   private requiredGenericIdentifier(value: unknown): SafeIdentifier | undefined {
     const identifier = this.genericIdentifier(value);
     return typeof identifier === "string" ? identifier : undefined;
   }
 
-  private materializeLogicalKey(
+  /**
+   * Validates a namespaced logical key while letting callers choose whether an opaque name is permissible.
+   *
+   * Inputs: An unknown `{ namespace, name }` record and an exact-name requirement.
+   * Outputs: A logical key, including an opaque name only when `requireExact` is false, or undefined.
+   * Does not handle: Resolving a logical key to a provider resource or interpreting its value.
+   * Side effects: Reads record fields and delegates name classification to the namespace-specific converter.
+   */
+   private materializeLogicalKey(
     input: unknown,
     requireExact: boolean,
   ): LogicalKey | undefined {
@@ -703,7 +866,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     return { namespace: record.namespace, name };
   }
 
-  private materializeExecutionScope(input: unknown): ExecutionScope | undefined {
+  /**
+   * Builds the typed process scope used to compare source demand and declared provisioning.
+   *
+   * Inputs: An unknown scope record with IDs, phase, stage predicate, and delivery channel.
+   * Outputs: A safe execution scope or undefined for any invalid field.
+   * Does not handle: Demonstrating the component starts, resolving conditions, or comparing scopes.
+   * Side effects: Reads record fields and creates stage/scope records.
+   */
+   private materializeExecutionScope(input: unknown): ExecutionScope | undefined {
     const record = asRecord(input);
     if (record === undefined) {
       return undefined;
@@ -731,7 +902,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     };
   }
 
-  private materializeOptionalExecutionScopes(
+  /**
+   * Distinguishes an omitted declared-scope list from an invalid list while converting every present scope.
+   *
+   * Inputs: An unknown optional array.
+   * Outputs: Undefined for omission, a converted scope array for valid input, or null for a malformed element/list.
+   * Does not handle: Deduplicating scopes or inferring an omitted scope.
+   * Side effects: Iterates the array and allocates its converted list.
+   */
+   private materializeOptionalExecutionScopes(
     input: unknown,
   ): readonly ExecutionScope[] | undefined | null {
     if (input === undefined) {
@@ -752,7 +931,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     return scopes;
   }
 
-  private materializeScopeSelector(input: unknown): ScopeSelector | undefined {
+  /**
+   * Converts an applicability selector with optional unit/phase/channel dimensions and required stage/condition predicates.
+   *
+   * Inputs: An unknown selector record.
+   * Outputs: A typed selector or undefined when any supplied dimension is invalid.
+   * Does not handle: Evaluating conditions or deciding selector overlap.
+   * Side effects: Reads nested fields and allocates a selector with omitted dimensions left absent.
+   */
+   private materializeScopeSelector(input: unknown): ScopeSelector | undefined {
     const record = asRecord(input);
     if (record === undefined) {
       return undefined;
@@ -783,7 +970,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     };
   }
 
-  private materializeOptionalIdentifierArray(
+  /**
+   * Validates an optional nonempty identifier array without collapsing omission into invalidity.
+   *
+   * Inputs: An unknown optional array of generic identifiers.
+   * Outputs: Undefined for omission, a converted array for valid nonempty input, or null otherwise.
+   * Does not handle: Deduplicating values or accepting opaque identifiers.
+   * Side effects: Iterates input and allocates the converted list.
+   */
+   private materializeOptionalIdentifierArray(
     input: unknown,
   ): readonly SafeIdentifier[] | undefined | null {
     if (input === undefined) {
@@ -803,7 +998,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     return values;
   }
 
-  private materializeOptionalPhases(input: unknown): readonly Phase[] | undefined | null {
+  /**
+   * Validates an optional nonempty execution-phase list while preserving omission.
+   *
+   * Inputs: An unknown optional array.
+   * Outputs: Undefined for omission, the original typed phase array when every value is supported, or null.
+   * Does not handle: Copying, deduplicating, or evaluating phase applicability.
+   * Side effects: Calls `Array.isArray` and `.every`; it retains the caller array reference on success.
+   */
+   private materializeOptionalPhases(input: unknown): readonly Phase[] | undefined | null {
     if (input === undefined) {
       return undefined;
     }
@@ -813,7 +1016,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     return input;
   }
 
-  private materializeOptionalChannels(
+  /**
+   * Validates an optional nonempty delivery-channel list while preserving omission.
+   *
+   * Inputs: An unknown optional array.
+   * Outputs: Undefined for omission, the same valid channel array, or null for an empty/invalid list.
+   * Does not handle: Copying, deduplicating, or proving channel delivery.
+   * Side effects: Uses `.every` to inspect elements and retains the original array reference on success.
+   */
+   private materializeOptionalChannels(
     input: unknown,
   ): readonly DeliveryChannel[] | undefined | null {
     if (input === undefined) {
@@ -825,7 +1036,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     return input;
   }
 
-  private materializeStagePredicate(input: unknown): StagePredicate | undefined {
+  /**
+   * Converts the three supported stage-predicate forms without treating an empty exact list as coverage.
+   *
+   * Inputs: An unknown stage-predicate record.
+   * Outputs: `{ kind: all|unknown }`, a nonempty exact predicate, or undefined.
+   * Does not handle: Matching stages against another selector or inferring an unknown stage.
+   * Side effects: Reads record fields and allocates a predicate for accepted input.
+   */
+   private materializeStagePredicate(input: unknown): StagePredicate | undefined {
     const record = asRecord(input);
     if (record === undefined || typeof record.kind !== "string") {
       return undefined;
@@ -843,7 +1062,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     return { kind: "exact", values };
   }
 
-  private materializeConditionPredicate(input: unknown): ConditionPredicate | undefined {
+  /**
+   * Converts an always, unknown, or nonempty conjunction of safe equality clauses.
+   *
+   * Inputs: An unknown condition record and, for `all`, clause records.
+   * Outputs: A typed predicate or undefined when a clause, operator, or identifier is invalid.
+   * Does not handle: Evaluating condition values in an environment or simplifying equivalent clauses.
+   * Side effects: Iterates clauses and allocates converted clause/predicate records.
+   */
+   private materializeConditionPredicate(input: unknown): ConditionPredicate | undefined {
     const record = asRecord(input);
     if (record === undefined || typeof record.kind !== "string") {
       return undefined;
@@ -873,7 +1100,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     return { kind: "all", clauses };
   }
 
-  private materializeProviderResourceId(input: unknown): ProviderResourceId | undefined {
+  /**
+   * Converts the provider namespace pair that lets inventory and binding facts be joined explicitly.
+   *
+   * Inputs: An unknown record with authority and provider-canonical identifiers.
+   * Outputs: A safe pair or undefined when either identifier is rejected.
+   * Does not handle: Looking up the provider resource, normalizing provider fields, or asserting authority ownership.
+   * Side effects: Reads record fields and allocates the pair.
+   */
+   private materializeProviderResourceId(input: unknown): ProviderResourceId | undefined {
     const record = asRecord(input);
     if (record === undefined) {
       return undefined;
@@ -885,7 +1120,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
       : { authorityId, canonicalId };
   }
 
-  private materializeLocation(input: unknown): SafeLocation | undefined {
+  /**
+   * Recreates a location only when its input path already carries a safe-path representation and coordinates are valid.
+   *
+   * Inputs: An unknown `{ file, start, end }` record.
+   * Outputs: A normalized `SafeLocation` or undefined.
+   * Does not handle: Resolving file paths, validating the source span, or declassifying opaque paths.
+   * Side effects: Reads nested properties and delegates position normalization to `location`.
+   */
+   private materializeLocation(input: unknown): SafeLocation | undefined {
     const record = asRecord(input);
     if (record === undefined || !isSafePathValue(record.file)) {
       return undefined;
@@ -898,7 +1141,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     return this.location(record.file as SafePath, start, end);
   }
 
-  private materializeEvidenceChain(input: unknown): readonly Evidence[] | undefined {
+  /**
+   * Converts a complete ordered evidence chain only when every rule and location can cross the safety boundary.
+   *
+   * Inputs: An unknown array of evidence records with rule, diagnostic code, and location arrays.
+   * Outputs: A new evidence array or undefined when any entry is malformed; an empty array is valid.
+   * Does not handle: Establishing causal truth, deduplicating evidence, or retaining unsafe diagnostic text.
+   * Side effects: Iterates nested arrays, reads properties, and allocates evidence/location arrays.
+   */
+   private materializeEvidenceChain(input: unknown): readonly Evidence[] | undefined {
     if (!Array.isArray(input)) {
       return undefined;
     }
@@ -930,7 +1181,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     return evidence;
   }
 
-  private materializeLogicalKeyArray(
+  /**
+   * Converts a bounded logical-key list and rejects duplicate namespace/name identities.
+   *
+   * Inputs: An unknown key array and a flag requiring concrete names.
+   * Outputs: A newly allocated de-duplicated list or undefined for nonarrays, oversize input, invalid keys, or duplicates.
+   * Does not handle: Sorting keys or validating a relationship to a binding/inventory resource.
+   * Side effects: Allocates a result list and identity set while iterating the input.
+   */
+   private materializeLogicalKeyArray(
     input: unknown,
     requireExact: boolean,
   ): readonly LogicalKey[] | undefined {
@@ -954,7 +1213,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     return keys;
   }
 
-  private materializeDynamicDomain(
+  /**
+   * Converts finite, fixed-segment pattern, or explicitly unbounded dynamic-key evidence under the configured finite cap.
+   *
+   * Inputs: An unknown domain record and the safe dynamic-edge ID used to derive pattern IDs.
+   * Outputs: A typed domain or undefined; finite domains require nonempty unique safe keys within the cap.
+   * Does not handle: Expanding a pattern, deriving finite keys from opaque input, or accepting an unknown reason.
+   * Side effects: Reads nested properties, iterates finite keys, and allocates sets/domain objects.
+   */
+   private materializeDynamicDomain(
     input: unknown,
     edgeId: SafeIdentifier,
   ): DynamicKeyDomain | undefined {
@@ -1013,12 +1280,28 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     return undefined;
   }
 
-  private safePatternSegment(value: unknown): SafeIdentifier | undefined {
+  /**
+   * Narrows an environment-key conversion to a nonempty segment usable in a prefix/suffix pattern.
+   *
+   * Inputs: One unknown fixed pattern segment.
+   * Outputs: A safe nonempty environment-key identifier or undefined.
+   * Does not handle: Arbitrary wildcard syntax or pattern expansion.
+   * Side effects: Delegates to the environment-key safety classifier.
+   */
+   private safePatternSegment(value: unknown): SafeIdentifier | undefined {
     const key = this.environmentKey(value);
     return typeof key === "string" && key.length > 0 ? key : undefined;
   }
 
-  private patternIdForEdge(edgeId: SafeIdentifier, kind: unknown): SafeIdentifier {
+  /**
+   * Builds a bounded pattern identity from an already-safe edge ID without risking an overlong identifier.
+   *
+   * Inputs: A branded edge ID and an unknown proposed pattern kind.
+   * Outputs: An ID with an accepted kind suffix or `unknown`, falling back to a short form over 255 characters.
+   * Does not handle: Global uniqueness or validation of the edge-ID brand at runtime.
+   * Side effects: Allocates/interpolates one or two strings.
+   */
+   private patternIdForEdge(edgeId: SafeIdentifier, kind: unknown): SafeIdentifier {
     const suffix = kind === "prefix" || kind === "suffix" || kind === "surrounded"
       ? kind
       : "unknown";
@@ -1030,7 +1313,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
       : asSafeIdentifier(`pattern-${suffix}`);
   }
 
-  private isDynamicLikelyKeysValid(
+  /**
+   * Enforces the representation invariant between a dynamic domain and its reported likely keys.
+   *
+   * Inputs: A validated dynamic domain and a converted logical-key list.
+   * Outputs: True for no keys on unbounded domains, exact finite-set equality, or env keys matching a pattern.
+   * Does not handle: Validating a key's safety brand or discovering additional possible keys.
+   * Side effects: Allocates a set for finite comparison and runs array predicates over input keys.
+   */
+   private isDynamicLikelyKeysValid(
     domain: DynamicKeyDomain,
     likelyKeys: readonly LogicalKey[],
   ): boolean {
@@ -1048,17 +1339,41 @@ export class SafeFactFactory implements FullCoreFactBuilder {
         }
         actual.add(key.name);
       }
-      return actual.size === domain.keys.length && domain.keys.every((key) => actual.has(key));
+      return actual.size === domain.keys.length && domain.keys.every(/**
+ * Confirms that one finite-domain key is present in the deduplicated reported-key set.
+ *
+ * Inputs: A safe finite domain key.
+ * Outputs: Whether `actual` contains that exact string.
+ * Does not handle: Namespace checks, which the surrounding loop already performed.
+ * Side effects: Reads the closed-over `Set` during `.every`.
+ */
+(key) => actual.has(key));
     }
 
-    return likelyKeys.every((key) =>
+    return likelyKeys.every(/**
+ * Confirms that one reported key is an exact environment key compatible with the fixed-segment pattern.
+ *
+ * Inputs: One converted logical key.
+ * Outputs: True only for a concrete env name accepted by `keyMatchesPattern`.
+ * Does not handle: Matching opaque keys or finding omitted candidates.
+ * Side effects: Reads the closed-over pattern and calls the local matcher during `.every`.
+ */
+(key) =>
       key.namespace === "env" &&
       typeof key.name === "string" &&
       keyMatchesPattern(key.name, domain.pattern),
     );
   }
 
-  private materializeRequiredIdentifierArray(
+  /**
+   * Converts a required nonempty identifier list and rejects repeated values.
+   *
+   * Inputs: An unknown array expected to contain generic identifiers.
+   * Outputs: A newly allocated unique safe-ID list or undefined for an empty, malformed, rejected, or duplicate value.
+   * Does not handle: Sorting, case-folding, or accepting opaque identifiers.
+   * Side effects: Iterates input and allocates a result array plus a duplicate-detection set.
+   */
+   private materializeRequiredIdentifierArray(
     input: unknown,
   ): readonly SafeIdentifier[] | undefined {
     if (!Array.isArray(input) || input.length === 0) {
@@ -1077,7 +1392,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     return values;
   }
 
-  private materializeRootRelativePaths(input: unknown): readonly SafePath[] | undefined {
+  /**
+   * Converts required model-relative paths and rejects repeated safe normalized spellings.
+   *
+   * Inputs: An unknown path array declared by a provisioning model.
+   * Outputs: A new unique safe-path list or undefined for any absent/invalid/duplicate element.
+   * Does not handle: Opening paths, resolving them against a root, or detecting symlink escapes.
+   * Side effects: Iterates values and allocates a result list and duplicate-detection set.
+   */
+   private materializeRootRelativePaths(input: unknown): readonly SafePath[] | undefined {
     if (!Array.isArray(input) || input.length === 0) {
       return undefined;
     }
@@ -1094,7 +1417,14 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     return paths;
   }
 
-  /** Validates a model-declared root without resolving or opening it. */
+  /**
+   * Validates a reportable model-relative path spelling without resolving it against the filesystem.
+   *
+   * Inputs: One unknown relative-path string.
+   * Outputs: `<root>` for the whole-string root marker `.`, a slash-normalized safe path for non-dot safe segments, or undefined.
+   * Does not handle: Normalizing embedded `.` or any `..` segment (it rejects them), filesystem existence, or root containment.
+   * Side effects: Splits and classifies every segment without performing I/O.
+   */
   public rootRelativePath(value: unknown): SafePath | undefined {
     if (typeof value !== "string" || value.length === 0 || isAbsolute(value)) {
       return undefined;
@@ -1103,13 +1433,29 @@ export class SafeFactFactory implements FullCoreFactBuilder {
       return ROOT_RELATIVE_PATH;
     }
     const segments = value.split(/[\\/]/u);
-    if (segments.length === 0 || segments.some((segment) => !isSafeDisplaySegment(segment))) {
+    if (segments.length === 0 || segments.some(/**
+ * Rejects one model path segment that would be unsafe or ambiguous in output.
+ *
+ * Inputs: One slash- or backslash-delimited segment.
+ * Outputs: True when `isSafeDisplaySegment` rejects it.
+ * Does not handle: Joining or resolving the remaining path.
+ * Side effects: Invokes the local segment classifier during `.some`.
+ */
+(segment) => !isSafeDisplaySegment(segment))) {
       return undefined;
     }
     return segments.join("/") as SafePath;
   }
 
-  private materializeExpectedCoverageInputs(
+  /**
+   * Converts declared coverage inputs while retaining their explicit IDs rather than inferring identity from adapter names.
+   *
+   * Inputs: An unknown array of input/domain records with optional adapter and extension declarations.
+   * Outputs: A new list with unique `domain:inputId` identities or undefined for malformed/duplicate records.
+   * Does not handle: Verifying the adapter ran, deriving IDs from names, or accepting unsupported file suffixes.
+   * Side effects: Iterates nested records and allocates output plus a duplicate-detection set.
+   */
+   private materializeExpectedCoverageInputs(
     input: unknown,
   ): readonly ExpectedCoverageInput[] | undefined {
     if (!Array.isArray(input)) {
@@ -1147,7 +1493,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     return values;
   }
 
-  private materializeOptionalExtensions(
+  /**
+   * Converts an optional list of file suffixes into normalized extension identifiers.
+   *
+   * Inputs: An unknown optional array of dot-prefixed alphanumeric suffix strings.
+   * Outputs: Undefined for omission, a normalized `extension-...` list for valid input, or null for empty/invalid/duplicate suffixes.
+   * Does not handle: Compound suffixes, filesystem case semantics, or extension-to-adapter routing.
+   * Side effects: Lowercases suffixes and allocates identifiers, a list, and a duplicate set.
+   */
+   private materializeOptionalExtensions(
     input: unknown,
   ): readonly SafeIdentifier[] | undefined | null {
     if (input === undefined) {
@@ -1172,7 +1526,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     return values;
   }
 
-  private materializePermittedExclusions(
+  /**
+   * Converts declared coverage exclusions into selector/rationale pairs without judging whether an exclusion is appropriate.
+   *
+   * Inputs: An unknown array of selector and rationale records.
+   * Outputs: A new exclusion list or undefined when an entry cannot be materialized. `rationaleCode` is the caller value verbatim when it satisfies the uppercase diagnostic-code grammar, otherwise the fixed `UNSAFE_DIAGNOSTIC` fallback.
+   * Does not handle: Deduplicating selectors, evaluating the exclusion, suppressing downstream findings, or treating a grammar-valid rationale as redacted/safe. An untrusted credential-shaped value composed of uppercase letters, digits, and underscores can satisfy that grammar, persist verbatim in normalized facts and JSON, and leak there; the no-value-leak guarantee does not cover this field until separately authorized code sanitization.
+   * Side effects: Iterates records, calls `diagnosticCode` for each untrusted rationale label, and allocates converted exclusions. A grammar-valid untrusted rationale label is retained verbatim.
+   */
+   private materializePermittedExclusions(
     input: unknown,
   ): readonly PermittedExclusion[] | undefined {
     if (!Array.isArray(input)) {
@@ -1193,7 +1555,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     return values;
   }
 
-  private materializeInventoryAuthorities(
+  /**
+   * Converts inventory authority declarations while requiring a unique authority ID per closed scope.
+   *
+   * Inputs: An unknown array of authority/input-ID records.
+   * Outputs: A new unique-authority list or undefined for malformed or duplicate authorities.
+   * Does not handle: Contacting an inventory source or proving an input is authoritative.
+   * Side effects: Iterates records and allocates the result and authority set.
+   */
+   private materializeInventoryAuthorities(
     input: unknown,
   ): readonly InventoryAuthority[] | undefined {
     if (!Array.isArray(input)) {
@@ -1214,7 +1584,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     return values;
   }
 
-  private materializeAllowedExternalMechanisms(
+  /**
+   * Converts declared out-of-code delivery mechanisms into selector/mechanism records.
+   *
+   * Inputs: An unknown array of selector and mechanism-ID records.
+   * Outputs: A new allowed-mechanism list or undefined for any malformed member.
+   * Does not handle: Verifying an external mechanism is active or resolving its delivery channel.
+   * Side effects: Iterates records and allocates converted values.
+   */
+   private materializeAllowedExternalMechanisms(
     input: unknown,
   ): readonly AllowedExternalMechanism[] | undefined {
     if (!Array.isArray(input)) {
@@ -1233,7 +1611,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
     return values;
   }
 
-  private bindingDiagnosticCode(input: unknown): SafeDiagnosticCode {
+  /**
+   * Maps an adapter reason through the fixed raw-to-safe diagnostic vocabulary.
+   *
+   * Inputs: An unknown reason value.
+   * Outputs: The recognized safe code or the fixed invalid-input code.
+   * Does not handle: Preserving unknown reason text or accepting arbitrary diagnostic labels.
+   * Side effects: Calls the safe diagnostic-code conversion after local vocabulary lookup.
+   */
+   private bindingDiagnosticCode(input: unknown): SafeDiagnosticCode {
     return this.diagnosticCode(
       typeof input === "string" ? rawDiagnosticCodeToSafeCode(input) : "INVALID_INPUT_SHAPE",
     );
@@ -1241,7 +1627,15 @@ export class SafeFactFactory implements FullCoreFactBuilder {
 }
 
 export class SafetyConfigurationError extends Error {
-  public constructor(
+  /**
+   * Constructs the public configuration error with a fixed non-sensitive error code.
+   *
+   * Inputs: One of the two recognized local policy-configuration failure codes.
+   * Outputs: An `Error` instance named `SafetyConfigurationError` whose message is that code.
+   * Does not handle: Input redaction beyond accepting only fixed code literals or attaching a causal error.
+   * Side effects: Initializes inherited error fields and sets `name`.
+   */
+   public constructor(
     code: "INVALID_TRUSTED_ENVIRONMENT_KEY" | "INVALID_MAX_FINITE_KEY_DOMAIN",
   ) {
     super(code);
@@ -1249,12 +1643,28 @@ export class SafetyConfigurationError extends Error {
   }
 }
 
+/**
+ * Narrows a non-null, non-array object to the unchecked property-record shape used by materializers.
+ *
+ * Inputs: One unknown value.
+ * Outputs: The same object under a record assertion, or undefined for primitives, null, and arrays.
+ * Does not handle: Schema validation, prototype safety, getter evaluation, or copying fields.
+ * Side effects: Performs only type/array checks and retains the original object reference.
+ */
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
 }
 
+/**
+ * Creates the uniform value-free error branch returned when a fact cannot cross the safety boundary.
+ *
+ * Inputs: The active factory and a trusted, fixed internal diagnostic label supplied by private callers.
+ * Outputs: `{ ok: false, diagnostic }` with no partial value; the fixed label passes through the factory's diagnostic-code conversion.
+ * Does not handle: Accepting, validating, or sanitizing arbitrary caller-controlled labels; it relies on its private fixed-label call sites, and does not log or recover malformed facts.
+ * Side effects: Calls `factory.diagnosticCode` and allocates the nested result objects.
+ */
 function materializationFailure<T>(
   factory: SafeFactFactory,
   code: string,
@@ -1262,6 +1672,14 @@ function materializationFailure<T>(
   return { ok: false, diagnostic: { code: factory.diagnosticCode(code) } };
 }
 
+/**
+ * Converts an execution scope into the exact, unconditional selector used by demand edges.
+ *
+ * Inputs: One validated execution scope.
+ * Outputs: A new selector fixing its ID, phase, stage, and channel with `condition: always`.
+ * Does not handle: Checking declared stages or evaluating runtime conditions.
+ * Side effects: Allocates selector arrays and a condition record while retaining the stage reference.
+ */
 function selectorFromExecutionScope(scope: ExecutionScope): ScopeSelector {
   return {
     executionUnitIds: [scope.id],
@@ -1272,6 +1690,14 @@ function selectorFromExecutionScope(scope: ExecutionScope): ScopeSelector {
   };
 }
 
+/**
+ * Builds a closed-model selector only when the execution scope's known stages fit the declared stage inventory.
+ *
+ * Inputs: A validated scope and its declared safe stage IDs.
+ * Outputs: An exact unconditional selector or undefined for an unknown/uncovered scope stage.
+ * Does not handle: Deduplicating declared stages, proving the declaration is complete, or evaluating conditions.
+ * Side effects: Runs `.every`/`.includes` on stage arrays and allocates a selector on success.
+ */
 function selectorFromClosedModelScope(
   scope: ExecutionScope,
   declaredStages: readonly SafeIdentifier[],
@@ -1285,7 +1711,15 @@ function selectorFromClosedModelScope(
 
   if (
     stage.kind === "exact" &&
-    !stage.values.every((value) => declaredStages.includes(value))
+    !stage.values.every(/**
+ * Checks that one exact scope-stage value was listed in the model declaration.
+ *
+ * Inputs: One safe stage value from the scope predicate.
+ * Outputs: Whether the closed-over declaration includes it.
+ * Does not handle: Stage-pattern matching or declaration completeness.
+ * Side effects: Reads the `declaredStages` array during `.every`.
+ */
+(value) => declaredStages.includes(value))
   ) {
     return undefined;
   }
@@ -1299,6 +1733,14 @@ function selectorFromClosedModelScope(
   };
 }
 
+/**
+ * Validates the two zero-based coordinates used in a serialized source position.
+ *
+ * Inputs: One unknown record candidate.
+ * Outputs: A `{ line, column }` position for nonnegative safe integers, or undefined.
+ * Does not handle: Position ordering, file association, or coercing numeric strings.
+ * Side effects: Reads the candidate's two properties and allocates a position record on success.
+ */
 function materializePosition(value: unknown): SafePosition | undefined {
   const record = asRecord(value);
   if (
@@ -1315,6 +1757,14 @@ function materializePosition(value: unknown): SafePosition | undefined {
   return { line: record.line, column: record.column };
 }
 
+/**
+ * Narrows a string to either the opaque-path sentinel or a slash-delimited sequence of safe display segments.
+ *
+ * Inputs: One unknown value.
+ * Outputs: A type-guard result for valid `SafePath` representations.
+ * Does not handle: Root containment, existence, backslash normalization, or re-branding a path.
+ * Side effects: Splits non-opaque strings and calls the segment predicate.
+ */
 function isSafePathValue(value: unknown): value is SafePath {
   if (typeof value !== "string") {
     return false;
@@ -1326,68 +1776,196 @@ function isSafePathValue(value: unknown): value is SafePath {
   return segments.length > 0 && segments.every(isSafeDisplaySegment);
 }
 
+/**
+ * Recognizes the closed vocabulary of execution phases accepted by fact materialization.
+ *
+ * Inputs: One unknown value.
+ * Outputs: A type-guard result for `runtime`, `build`, `test`, `dev`, `ci`, or `unknown`.
+ * Does not handle: Phase aliases, runtime detection, or semantic ordering.
+ * Side effects: Performs fixed literal comparisons only.
+ */
 function isPhase(value: unknown): value is Phase {
   return value === "runtime" || value === "build" || value === "test" || value === "dev" || value === "ci" || value === "unknown";
 }
 
+/**
+ * Recognizes the fixed set of provisioning delivery channels represented in scopes.
+ *
+ * Inputs: One unknown value.
+ * Outputs: A type-guard result for known channel literals.
+ * Does not handle: Verifying delivery behavior or mapping provider-specific names.
+ * Side effects: Performs fixed literal comparisons only.
+ */
 function isDeliveryChannel(value: unknown): value is DeliveryChannel {
   return value === "environment" || value === "build-substitution" || value === "mounted-file" || value === "provider-sdk" || value === "unknown";
 }
 
+/**
+ * Recognizes the three logical namespaces permitted in normalized secret keys.
+ *
+ * Inputs: One unknown namespace value.
+ * Outputs: A type-guard result for `env`, `config`, or `secret-manager`.
+ * Does not handle: Mapping aliases or resolving namespace contents.
+ * Side effects: Performs fixed literal comparisons only.
+ */
 function isLogicalNamespace(value: unknown): value is LogicalNamespace {
   return value === "env" || value === "config" || value === "secret-manager";
 }
 
+/**
+ * Recognizes the source classifications allowed on a provisioning binding candidate.
+ *
+ * Inputs: One unknown source-kind value.
+ * Outputs: A type-guard result for `manifest`, `secret-manager`, or `external`.
+ * Does not handle: Validating the associated manifest/provider/external mechanism.
+ * Side effects: Performs fixed literal comparisons only.
+ */
 function isBindingSourceKind(value: unknown): value is BindingCandidate["sourceKind"] {
   return value === "manifest" || value === "secret-manager" || value === "external";
 }
 
+/**
+ * Recognizes whether a binding claim is represented as exact or dynamic.
+ *
+ * Inputs: One unknown resolution value.
+ * Outputs: A type-guard result for `exact` or `dynamic`.
+ * Does not handle: Proving a claim is actually exact.
+ * Side effects: Performs fixed literal comparisons only.
+ */
 function isBindingResolution(value: unknown): value is BindingCandidate["resolution"] {
   return value === "exact" || value === "dynamic";
 }
 
+/**
+ * Recognizes the coverage-domain vocabulary used to attribute incomplete analysis.
+ *
+ * Inputs: One unknown domain value.
+ * Outputs: A type-guard result for `demand`, `binding`, or `inventory`.
+ * Does not handle: Determining whether coverage is actually complete.
+ * Side effects: Performs fixed literal comparisons only.
+ */
 function isCoverageDomain(value: unknown): value is CoverageGap["domain"] {
   return value === "demand" || value === "binding" || value === "inventory";
 }
 
+/**
+ * Recognizes the two explicit policies for imports that resolve outside the scan root.
+ *
+ * Inputs: One unknown policy value.
+ * Outputs: A type-guard result for `out-of-scope` or `included`.
+ * Does not handle: Resolving imports or enforcing either policy.
+ * Side effects: Performs fixed literal comparisons only.
+ */
 function isOutsideRootImportsPolicy(
   value: unknown,
 ): value is "out-of-scope" | "included" {
   return value === "out-of-scope" || value === "included";
 }
 
+/**
+ * Recognizes the source-demand classifications retained on normalized references.
+ *
+ * Inputs: One unknown demand kind.
+ * Outputs: A type-guard result for the five supported Core demand literals.
+ * Does not handle: Inferring demand from source code or ordering demand strength.
+ * Side effects: Performs fixed literal comparisons only.
+ */
 function isDemandKind(value: unknown): value is DemandKind {
   return value === "direct-read" || value === "eager-validation" || value === "declaration-only" || value === "wrapper-definition" || value === "literal-indicator";
 }
 
+/**
+ * Recognizes the operation vocabulary recorded on a secret reference.
+ *
+ * Inputs: One unknown operation value.
+ * Outputs: A type-guard result for `read`, `validate`, `wrapper`, or `literal`.
+ * Does not handle: Executing an operation or confirming runtime behavior.
+ * Side effects: Performs fixed literal comparisons only.
+ */
 function isReferenceOperation(value: unknown): value is SecretReference["operation"] {
   return value === "read" || value === "validate" || value === "wrapper" || value === "literal";
 }
 
+/**
+ * Recognizes the extraction-resolution vocabulary retained in a reference fact.
+ *
+ * Inputs: One unknown resolution value.
+ * Outputs: A type-guard result for literal, folded, wrapper, or dynamic observations.
+ * Does not handle: Re-running extraction or proving a resolution is complete.
+ * Side effects: Performs fixed literal comparisons only.
+ */
 function isReferenceResolution(value: unknown): value is SecretReference["resolution"] {
   return value === "literal" || value === "constant-folded" || value === "wrapper-resolved" || value === "dynamic";
 }
 
+/**
+ * Recognizes the three confidence labels that normalized references may carry.
+ *
+ * Inputs: One unknown confidence value.
+ * Outputs: A type-guard result for `high`, `medium`, or `review`.
+ * Does not handle: Calculating confidence from evidence.
+ * Side effects: Performs fixed literal comparisons only.
+ */
 function isConfidence(value: unknown): value is SecretReference["confidence"] {
   return value === "high" || value === "medium" || value === "review";
 }
 
+/**
+ * Recognizes the exposure labels used to distinguish server, client, worker, tooling, and unknown contexts.
+ *
+ * Inputs: One unknown exposure value.
+ * Outputs: A type-guard result for the supported exposure literals.
+ * Does not handle: Determining deployment visibility or auditing client bundles.
+ * Side effects: Performs fixed literal comparisons only.
+ */
 function isExposure(value: unknown): value is SecretReference["exposure"] {
   return value === "server" || value === "client" || value === "worker" || value === "tooling" || value === "unknown";
 }
 
+/**
+ * Recognizes whether dynamic-key evidence was lexical, user-controlled, or opaque.
+ *
+ * Inputs: One unknown origin value.
+ * Outputs: A type-guard result for the three origin literals.
+ * Does not handle: Reclassifying source expressions or ranking origin reliability.
+ * Side effects: Performs fixed literal comparisons only.
+ */
 function isDynamicOrigin(value: unknown): value is DynamicKeyOrigin {
   return value === "lexical" || value === "user-controlled" || value === "opaque";
 }
 
+/**
+ * Recognizes omission or the two explicit confidence labels for a dynamic pattern constraint.
+ *
+ * Inputs: One unknown value.
+ * Outputs: A type-guard result for undefined, `adapter-proven`, or `not-proven`.
+ * Does not handle: Assessing whether a pattern is in fact proven.
+ * Side effects: Performs fixed literal comparisons only.
+ */
 function isOptionalPatternConstraint(value: unknown): value is DynamicLookupEdge["patternConstraint"] | undefined {
   return value === undefined || value === "adapter-proven" || value === "not-proven";
 }
 
+/**
+ * Recognizes why a dynamic key domain cannot be represented as a bounded finite set.
+ *
+ * Inputs: One unknown reason value.
+ * Outputs: A type-guard result for `user-controlled`, `opaque`, or `over-budget`.
+ * Does not handle: Selecting a reason from source analysis.
+ * Side effects: Performs fixed literal comparisons only.
+ */
 function isUnboundedReason(value: unknown): value is Extract<DynamicKeyDomain, { readonly kind: "unbounded" }>["reason"] {
   return value === "user-controlled" || value === "opaque" || value === "over-budget";
 }
 
+/**
+ * Tests a concrete key against one already-safe fixed prefix, suffix, or both.
+ *
+ * Inputs: A string key and a typed safe pattern.
+ * Outputs: Whether the key satisfies the pattern's fixed segments.
+ * Does not handle: Wildcards beyond the implicit middle gap or validation of the key/pattern brands.
+ * Side effects: Calls string prefix/suffix comparisons only.
+ */
 function keyMatchesPattern(key: string, pattern: SafeKeyPattern): boolean {
   switch (pattern.kind) {
     case "prefix":
@@ -1399,6 +1977,14 @@ function keyMatchesPattern(key: string, pattern: SafeKeyPattern): boolean {
   }
 }
 
+/**
+ * Maps recognized adapter parser labels to the fixed diagnostics that may enter normalized facts.
+ *
+ * Inputs: One raw adapter diagnostic label.
+ * Outputs: The mapped uppercase code or `INVALID_INPUT_SHAPE` for unknown labels.
+ * Does not handle: Passing arbitrary source text through to reports.
+ * Side effects: Reads the local lookup table without mutation.
+ */
 function rawDiagnosticCodeToSafeCode(value: string): string {
   const known: Readonly<Record<string, string>> = {
     "invalid-input-shape": "INVALID_INPUT_SHAPE",
@@ -1422,10 +2008,26 @@ function rawDiagnosticCodeToSafeCode(value: string): string {
   return known[value] ?? "INVALID_INPUT_SHAPE";
 }
 
+/**
+ * Distinguishes the non-string opaque identifier sentinel from a concrete safe identifier.
+ *
+ * Inputs: One normalized `Identifier`.
+ * Outputs: True only when its representation is the opaque non-string branch.
+ * Does not handle: Revalidating a concrete string or revealing rejected source text.
+ * Side effects: Performs a type check only.
+ */
 export function isOpaqueIdentifier(value: Identifier): value is OpaqueIdentifier {
   return typeof value !== "string";
 }
 
+/**
+ * Accepts one bounded report-path segment only when its grammar and token-shape classification are safe.
+ *
+ * Inputs: A string segment with no path separator supplied separately.
+ * Outputs: True for conventional non-dot, non-token-shaped segments up to the configured length.
+ * Does not handle: Joining paths, filesystem containment, or Unicode normalization.
+ * Side effects: Tests the segment grammar and calls `isSecretLikeToken`.
+ */
 export function isSafeDisplaySegment(segment: string): boolean {
   return (
     SAFE_DISPLAY_SEGMENT_PATTERN.test(segment) &&
@@ -1435,9 +2037,24 @@ export function isSafeDisplaySegment(segment: string): boolean {
   );
 }
 
-/** Exported for focused tests; callers must not retain a classifier score. */
+/**
+ * Detects well-known credential prefixes and high-entropy mixed-character strings that should be kept opaque.
+ *
+ * Inputs: One candidate string.
+ * Outputs: True for known token prefixes or long mixed-category strings whose Shannon entropy reaches the local threshold.
+ * Does not handle: Proving that text is a secret or safely recovering a false positive.
+ * Side effects: Tests prefix patterns; for long values, allocates normalized text/category data and computes entropy.
+ */
 export function isSecretLikeToken(value: string): boolean {
-  if (SECRET_LIKE_PREFIXES.some((pattern) => pattern.test(value))) {
+  if (SECRET_LIKE_PREFIXES.some(/**
+ * Tests the candidate string against one known credential-prefix regular expression.
+ *
+ * Inputs: One compiled prefix pattern from the closed classifier list.
+ * Outputs: Whether it matches the closed-over candidate string.
+ * Does not handle: Entropy analysis or deciding the final classification alone.
+ * Side effects: Invokes `RegExp.test` during `.some`; non-global patterns do not retain matcher position.
+ */
+(pattern) => pattern.test(value))) {
     return true;
   }
 
@@ -1455,10 +2072,26 @@ export function isSecretLikeToken(value: string): boolean {
   return categories >= 3 && shannonEntropy(compact) >= 3.5;
 }
 
+/**
+ * Applies the compile-time safe-identifier brand after a caller has already enforced its grammar.
+ *
+ * Inputs: A string established by the caller as safe.
+ * Outputs: The same string with the `SafeIdentifier` brand.
+ * Does not handle: Any runtime validation or token detection.
+ * Side effects: None; this is a type assertion with no allocation.
+ */
 function asSafeIdentifier(value: string): SafeIdentifier {
   return value as SafeIdentifier;
 }
 
+/**
+ * Creates a position copy whose line and column are independently clamped to valid coordinates.
+ *
+ * Inputs: A position-shaped object carrying numeric coordinates.
+ * Outputs: A new safe position using `normalizeCoordinate` for both fields.
+ * Does not handle: Checking ordering relative to another position or source bounds.
+ * Side effects: Reads both input fields and allocates the returned record.
+ */
 function normalizePosition(position: SafePosition): SafePosition {
   return {
     line: normalizeCoordinate(position.line),
@@ -1466,10 +2099,26 @@ function normalizePosition(position: SafePosition): SafePosition {
   };
 }
 
+/**
+ * Keeps a nonnegative safe integer coordinate and substitutes zero for every other number.
+ *
+ * Inputs: One numeric coordinate.
+ * Outputs: The same coordinate when safe/nonnegative, otherwise zero.
+ * Does not handle: Coercion, rounding, or maximum source-file bounds.
+ * Side effects: None; performs numeric predicates only.
+ */
 function normalizeCoordinate(value: number): number {
   return Number.isSafeInteger(value) && value >= 0 ? value : 0;
 }
 
+/**
+ * Computes base-two Shannon entropy over the character-frequency distribution of a string.
+ *
+ * Inputs: One string, expected to be the separator-stripped candidate from the token classifier.
+ * Outputs: Its entropy in bits per character (zero for an empty input or a single-character distribution).
+ * Does not handle: Cryptographic randomness testing, token validation, or Unicode grapheme normalization.
+ * Side effects: Allocates and mutates a local frequency map while traversing characters.
+ */
 function shannonEntropy(value: string): number {
   const counts = new Map<string, number>();
   for (const character of value) {

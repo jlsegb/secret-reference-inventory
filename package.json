@@ -21,7 +21,7 @@
     "access": "public"
   },
   "bin": {
-    "secret-usage": "./dist/cli/main.js"
+    "secret-usage": "./dist/cli/bin.js"
   },
   "exports": {
     ".": {
@@ -39,28 +39,61 @@
     "./safety": {
       "types": "./dist/safety/index.d.ts",
       "import": "./dist/safety/index.js"
+    },
+    "./workspace": {
+      "types": "./dist/workspace/index.d.ts",
+      "import": "./dist/workspace/index.js"
+    },
+    "./viewer": {
+      "types": "./dist/viewer/index.d.ts",
+      "import": "./dist/viewer/index.js"
     }
   },
   "files": [
-    "dist/**/*.js",
-    "dist/**/*.d.ts",
+    "dist/app/**/*.js",
+    "dist/app/**/*.d.ts",
+    "dist/binding-adapters/**/*.js",
+    "dist/binding-adapters/**/*.d.ts",
+    "dist/cli/**/*.js",
+    "dist/cli/**/*.d.ts",
+    "dist/core/**/*.js",
+    "dist/core/**/*.d.ts",
+    "dist/discovery/**/*.js",
+    "dist/discovery/**/*.d.ts",
+    "dist/reporters/**/*.js",
+    "dist/reporters/**/*.d.ts",
+    "dist/safety/**/*.js",
+    "dist/safety/**/*.d.ts",
+    "dist/ts-adapter/**/*.js",
+    "dist/ts-adapter/**/*.d.ts",
+    "dist/viewer/**/*.js",
+    "dist/viewer/**/*.d.ts",
+    "dist/workspace/**/*.js",
+    "dist/workspace/**/*.d.ts",
+    "docs/**/*.md",
     "LICENSE",
     "README.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node ./scripts/write-cli-launcher.mjs",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "test": "tsx --test test/*.test.ts",
     "test:coverage": "tsx --test --experimental-test-coverage test/*.test.ts",
-    "verify": "npm run typecheck && npm test && npm run build",
-    "release:check": "npm run build && node ./scripts/check-release-readiness.mjs"
+    "docs:check": "node ./scripts/docs-check.mjs --root .",
+    "verify": "npm run docs:check && npm run typecheck && npm test && npm run build",
+    "release:smoke": "npm run build && node ./scripts/smoke-local-package-install.mjs",
+    "release:check": "npm run build && node ./scripts/check-release-readiness.mjs && node ./scripts/smoke-local-package-install.mjs"
   },
   "dependencies": {
-    "ignore": "^7.0.5"
+    "ignore": "^7.0.5",
+    "typescript": "^5.8.3"
   },
+  "bundledDependencies": [
+    "ignore",
+    "typescript"
+  ],
   "devDependencies": {
     "@types/node": "^24.0.0",
-    "tsx": "^4.19.3",
-    "typescript": "^5.8.3"
+    "tsx": "^4.19.3"
   }
 }
