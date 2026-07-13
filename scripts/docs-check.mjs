@@ -15,6 +15,12 @@ const GIT_LOGICAL_PATH_FAILURE = "SOURCE_DISCOVERY_TRACKED_LOGICAL_PATH_INVALID"
 const REQUESTED_FILE_INVALID_FAILURE = "SOURCE_DISCOVERY_REQUESTED_FILE_INVALID";
 const REQUESTED_FILE_UNAVAILABLE_FAILURE = "SOURCE_DISCOVERY_REQUESTED_FILE_UNAVAILABLE";
 const OPAQUE_DIAGNOSTIC_FILE = "<opaque-file>";
+const VIEWER_TEMPLATE_LOGICAL_PATH = "src/viewer/server.ts";
+const VIEWER_TEMPLATE_IDENTIFIER = "DOCUMENT_TEMPLATE";
+const VIEWER_SCRIPT_OPEN_MARKER = '<script nonce="__NONCE__">';
+const VIEWER_SCRIPT_CLOSE_MARKER = "</script>";
+const MAX_VIEWER_TEMPLATE_CHARACTERS = 256 * 1024;
+const MAX_VIEWER_SCRIPT_CHARACTERS = 64 * 1024;
 const CLI_USAGE =
   "usage: node scripts/docs-check.mjs [--root <repository-root>] [--file <logical-implementation-file>]...";
 const REJECTED_TEMPLATE_RULES = [
@@ -799,6 +805,262 @@ export function createDiagnostic(logicalPath, sourceFile, node, category, code) 
 }
 
 /**
+ * Determines whether a resolved candidate is the single source file containing the checked viewer script.
+ *
+ * Inputs: One resolved logical/canonical implementation candidate.
+ * Outputs: True only for the explicit viewer server logical path.
+ * Does not handle: Template literals, embedded scripts, or similarly named files in other source locations.
+ * Side effects: None.
+ */
+export function isViewerTemplateCandidate(candidate) {
+  return candidate.logicalPath === VIEWER_TEMPLATE_LOGICAL_PATH;
+}
+
+/**
+ * Finds top-level declarations that claim the explicit embedded viewer template identifier.
+ *
+ * Inputs: The parsed TypeScript source file for the explicit viewer server candidate.
+ * Outputs: The matching declaration records and whether each record is declared with const.
+ * Does not handle: Nested declarations, arbitrary template literals, or names other than the fixed target.
+ * Side effects: None.
+ */
+export function viewerTemplateDeclarations(sourceFile) {
+  const declarations = [];
+  for (const statement of sourceFile.statements) {
+    if (!ts.isVariableStatement(statement)) {
+      continue;
+    }
+    const isConst = (statement.declarationList.flags & ts.NodeFlags.Const) !== 0;
+    for (const declaration of statement.declarationList.declarations) {
+      if (ts.isIdentifier(declaration.name) && declaration.name.text === VIEWER_TEMPLATE_IDENTIFIER) {
+        declarations.push({ declaration, isConst });
+      }
+    }
+  }
+  return declarations;
+}
+
+/**
+ * Determines whether a declaration uses the exact raw template form supported for the embedded viewer script.
+ *
+ * Inputs: One top-level viewer-template declaration record.
+ * Outputs: True only for a const declaration initialized by a no-substitution String.raw tagged template.
+ * Does not handle: Interpolated templates, alternate tags, aliases, runtime evaluation, or template recovery.
+ * Side effects: None.
+ */
+export function isSupportedViewerTemplateDeclaration(templateDeclaration) {
+  const initializer = templateDeclaration.declaration.initializer;
+  return (
+    templateDeclaration.isConst &&
+    initializer !== undefined &&
+    ts.isTaggedTemplateExpression(initializer) &&
+    ts.isPropertyAccessExpression(initializer.tag) &&
+    ts.isIdentifier(initializer.tag.expression) &&
+    initializer.tag.expression.text === "String" &&
+    initializer.tag.name.text === "raw" &&
+    ts.isNoSubstitutionTemplateLiteral(initializer.template)
+  );
+}
+
+/**
+ * Reads bounded raw template content directly from its source span for position-preserving script diagnostics.
+ *
+ * Inputs: A supported no-substitution template literal and its enclosing TypeScript source file.
+ * Outputs: Raw content with its source offset, or one fixed malformed/oversize failure code.
+ * Does not handle: Decoding alternate template tags, evaluating escapes, or accepting interpolated content.
+ * Side effects: None.
+ */
+export function readViewerTemplateText(template, sourceFile) {
+  const literalStart = template.getStart(sourceFile);
+  const literalEnd = template.getEnd();
+  const contentStart = literalStart + 1;
+  const contentEnd = literalEnd - 1;
+  const contentLength = contentEnd - contentStart;
+  if (
+    contentLength < 0 ||
+    sourceFile.text[literalStart] !== "`" ||
+    sourceFile.text[contentEnd] !== "`"
+  ) {
+    return { ok: false, code: "EMBEDDED_VIEWER_TEMPLATE_INVALID" };
+  }
+  if (contentLength > MAX_VIEWER_TEMPLATE_CHARACTERS) {
+    return { ok: false, code: "EMBEDDED_VIEWER_TEMPLATE_TOO_LARGE" };
+  }
+  return {
+    ok: true,
+    text: sourceFile.text.slice(contentStart, contentEnd),
+    contentStart,
+  };
+}
+
+/**
+ * Extracts the one explicitly marked executable viewer script from bounded raw template content.
+ *
+ * Inputs: The bounded raw document-template content.
+ * Outputs: Script text and its template-relative start offset, or one fixed extraction failure code.
+ * Does not handle: HTML parsing beyond the exact marker pair, arbitrary script tags, or malformed recovery.
+ * Side effects: None.
+ */
+export function extractViewerScript(templateText) {
+  const openingIndex = templateText.indexOf(VIEWER_SCRIPT_OPEN_MARKER);
+  if (
+    openingIndex < 0 ||
+    templateText.indexOf(VIEWER_SCRIPT_OPEN_MARKER, openingIndex + VIEWER_SCRIPT_OPEN_MARKER.length) >= 0
+  ) {
+    return { ok: false, code: "EMBEDDED_VIEWER_SCRIPT_EXTRACTION_FAILED" };
+  }
+  const scriptStartOffset = openingIndex + VIEWER_SCRIPT_OPEN_MARKER.length;
+  const closingIndex = templateText.indexOf(VIEWER_SCRIPT_CLOSE_MARKER, scriptStartOffset);
+  if (closingIndex < 0) {
+    return { ok: false, code: "EMBEDDED_VIEWER_SCRIPT_EXTRACTION_FAILED" };
+  }
+  const scriptLength = closingIndex - scriptStartOffset;
+  if (scriptLength > MAX_VIEWER_SCRIPT_CHARACTERS) {
+    return {
+      ok: false,
+      code: "EMBEDDED_VIEWER_SCRIPT_TOO_LARGE",
+      scriptStartOffset,
+    };
+  }
+  return {
+    ok: true,
+    text: templateText.slice(scriptStartOffset, closingIndex),
+    scriptStartOffset,
+  };
+}
+
+/**
+ * Builds a privacy-safe diagnostic anchored to the explicit viewer template or one of its embedded functions.
+ *
+ * Inputs: A logical candidate, outer source file, bounded in-source position, category, and fixed rule code.
+ * Outputs: A deterministic path, line, category, and code diagnostic without embedded source content.
+ * Does not handle: Function names, template text, parser messages, or positions outside the outer source file.
+ * Side effects: None.
+ */
+export function createEmbeddedViewerDiagnostic(candidate, sourceFile, sourcePosition, category, code) {
+  const position = sourceFile.getLineAndCharacterOfPosition(sourcePosition);
+  return {
+    file: safeDiagnosticPath(candidate.logicalPath),
+    line: position.line + 1,
+    category,
+    code,
+  };
+}
+
+/**
+ * Collects direct JSDoc-contract diagnostics for functions parsed from the explicit embedded viewer script.
+ *
+ * Inputs: A resolved viewer candidate and its parsed outer TypeScript source file.
+ * Outputs: Stable malformed-template or per-function documentation diagnostics for that one embedded script.
+ * Does not handle: Other files, other template literals, browser execution, HTML recovery, or JavaScript evaluation.
+ * Side effects: Parses bounded in-memory script text and appends diagnostics to local collections.
+ */
+export function checkEmbeddedViewerScriptDocumentation(candidate, sourceFile) {
+  if (!isViewerTemplateCandidate(candidate)) {
+    return [];
+  }
+  const declarations = viewerTemplateDeclarations(sourceFile);
+  if (declarations.length === 0) {
+    return [
+      {
+        file: safeDiagnosticPath(candidate.logicalPath),
+        line: 0,
+        category: "embedded-viewer-script",
+        code: "EMBEDDED_VIEWER_TEMPLATE_MISSING",
+      },
+    ];
+  }
+  if (declarations.length !== 1 || !isSupportedViewerTemplateDeclaration(declarations[0])) {
+    return [
+      createEmbeddedViewerDiagnostic(
+        candidate,
+        sourceFile,
+        declarations[0].declaration.getStart(sourceFile),
+        "embedded-viewer-script",
+        "EMBEDDED_VIEWER_TEMPLATE_INVALID",
+      ),
+    ];
+  }
+  const template = declarations[0].declaration.initializer.template;
+  const templateText = readViewerTemplateText(template, sourceFile);
+  if (!templateText.ok) {
+    return [
+      createEmbeddedViewerDiagnostic(
+        candidate,
+        sourceFile,
+        template.getStart(sourceFile),
+        "embedded-viewer-script",
+        templateText.code,
+      ),
+    ];
+  }
+  const script = extractViewerScript(templateText.text);
+  if (!script.ok) {
+    return [
+      createEmbeddedViewerDiagnostic(
+        candidate,
+        sourceFile,
+        templateText.contentStart + (script.scriptStartOffset ?? 0),
+        "embedded-viewer-script",
+        script.code,
+      ),
+    ];
+  }
+  const embeddedSource = ts.createSourceFile(
+    "<embedded-viewer-script>",
+    script.text,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.JS,
+  );
+  if (embeddedSource.parseDiagnostics.length > 0) {
+    return [
+      createEmbeddedViewerDiagnostic(
+        candidate,
+        sourceFile,
+        templateText.contentStart + script.scriptStartOffset,
+        "embedded-viewer-script",
+        "EMBEDDED_VIEWER_SCRIPT_PARSE_INVALID",
+      ),
+    ];
+  }
+  const diagnostics = [];
+  const embeddedStart = templateText.contentStart + script.scriptStartOffset;
+
+  /**
+   * Visits embedded JavaScript nodes and records the same direct documentation contract as source functions.
+   *
+   * Inputs: One TypeScript AST node parsed from the bounded embedded viewer script.
+   * Outputs: No return value; matching function diagnostics are appended to the enclosing collection.
+   * Does not handle: JavaScript runtime behavior, parser recovery, or functions outside the explicit viewer script.
+   * Side effects: Mutates the enclosing diagnostics collection.
+   */
+  function visitEmbedded(node) {
+    const category = functionCategory(node);
+    if (category !== undefined) {
+      const jsDoc = associatedJSDoc(node, embeddedSource);
+      const codes = jsDoc === undefined ? ["MISSING_JSDOC"] : documentationIssues(jsDoc);
+      for (const code of codes) {
+        diagnostics.push(
+          createEmbeddedViewerDiagnostic(
+            candidate,
+            sourceFile,
+            embeddedStart + node.getStart(embeddedSource),
+            `embedded-${category}`,
+            code,
+          ),
+        );
+      }
+    }
+    ts.forEachChild(node, visitEmbedded);
+  }
+
+  visitEmbedded(embeddedSource);
+  diagnostics.sort(compareDiagnostics);
+  return diagnostics;
+}
+
+/**
  * Builds a fixed privacy-safe diagnostic for source-discovery failure.
  *
  * Inputs: A fixed discovery failure code.
@@ -864,6 +1126,9 @@ export function checkFileDocumentation(candidate) {
   }
 
   visit(sourceFile);
+  for (const diagnostic of checkEmbeddedViewerScriptDocumentation(candidate, sourceFile)) {
+    diagnostics.push(diagnostic);
+  }
   diagnostics.sort(compareDiagnostics);
   return diagnostics;
 }

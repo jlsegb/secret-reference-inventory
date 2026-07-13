@@ -674,3 +674,217 @@ test(
   );
   },
 );
+
+test(
+  "documentation contract enforces direct structured blocks for the explicit embedded viewer script",
+  /**
+   * Verifies the designated viewer script uses the same required direct JSDoc contract as TypeScript source.
+   *
+   * Inputs: A fresh local source root containing one explicit raw viewer template with documented and incomplete functions.
+   * Outputs: Assertion success for stable embedded-function diagnostics and source-line mapping.
+   * Does not handle: Browser execution, arbitrary HTML parsing, or documentation in unrelated template literals.
+   * Side effects: Creates and removes a local temporary source root and invokes the checker.
+   */
+  async () => {
+    const root = await mkdtemp(join(tmpdir(), "docs-contract-embedded-viewer-"));
+    const privateScriptSentinel = "embedded-script-source-must-not-appear";
+    try {
+      await mkdir(join(root, "src", "viewer"), { recursive: true });
+      const source = [
+        "const DOCUMENT_TEMPLATE = String.raw`<!doctype html>",
+        '<script nonce="__NONCE__">',
+        "const documented =",
+        "/**",
+        " * Renders one documented embedded viewer value.",
+        " *",
+        " * Inputs: A local display label.",
+        " * Outputs: A local display label string.",
+        " * Does not handle: Browser DOM mutation.",
+        " * Side effects: None.",
+        " */",
+        "(label) => label;",
+        "const incomplete =",
+        "/**",
+        " * Renders one incompletely documented embedded viewer value.",
+        " *",
+        " * Inputs: A local display label.",
+        " * Does not handle: Browser DOM mutation.",
+        " * Side effects: None.",
+        " */",
+        `(label) => \"${privateScriptSentinel}\" + label;`,
+        "const undocumented = () => undefined;",
+        "</script>",
+        "`;",
+      ].join("\n");
+      await writeFile(join(root, "src", "viewer", "server.ts"), source, "utf8");
+
+      const result = checker.checkDocumentationContract(root);
+      const report = checker.formatDiagnostics(result);
+      assert.deepEqual(result.diagnostics, [
+        {
+          file: "src/viewer/server.ts",
+          line: source.split("\n").indexOf("(label) => \"embedded-script-source-must-not-appear\" + label;") + 1,
+          category: "embedded-arrow-function",
+          code: "MISSING_OUTPUTS",
+        },
+        {
+          file: "src/viewer/server.ts",
+          line: source.split("\n").indexOf("const undocumented = () => undefined;") + 1,
+          category: "embedded-arrow-function",
+          code: "MISSING_JSDOC",
+        },
+      ]);
+      assert.equal(report.includes(privateScriptSentinel), false);
+      assert.equal(report.includes("documented"), false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
+
+test(
+  "documentation contract fails closed for malformed or oversized explicit viewer templates",
+  /**
+   * Verifies target shape, bounded extraction, and embedded JavaScript parse failures use fixed private diagnostics.
+   *
+   * Inputs: Fresh local viewer-server sources with invalid targets, missing markers, invalid script syntax, and oversized scripts.
+   * Outputs: Assertion success for one deterministic embedded-viewer failure per malformed source.
+   * Does not handle: Repairing template content, recovering browser behavior, or showing parser details.
+   * Side effects: Creates, overwrites, and removes a local temporary source root and invokes the checker.
+   */
+  async () => {
+    const root = await mkdtemp(join(tmpdir(), "docs-contract-embedded-malformed-"));
+    const serverPath = join(root, "src", "viewer", "server.ts");
+    const privateScriptSentinel = "embedded-malformed-source-must-not-appear";
+    try {
+      await mkdir(join(root, "src", "viewer"), { recursive: true });
+      const cases = [
+        {
+          source: "const unrelated = String.raw`<script nonce=\"__NONCE__\"></script>`;\n",
+          line: 0,
+          code: "EMBEDDED_VIEWER_TEMPLATE_MISSING",
+        },
+        {
+          source: 'const DOCUMENT_TEMPLATE = "not-a-raw-template";\n',
+          line: 1,
+          code: "EMBEDDED_VIEWER_TEMPLATE_INVALID",
+        },
+        {
+          source: [
+            "const DOCUMENT_TEMPLATE = String.raw`",
+            '<script nonce="__NONCE__">',
+            `const hidden = \"${privateScriptSentinel}\";`,
+            "`;",
+          ].join("\n"),
+          line: 1,
+          code: "EMBEDDED_VIEWER_SCRIPT_EXTRACTION_FAILED",
+        },
+        {
+          source: [
+            "const DOCUMENT_TEMPLATE = String.raw`",
+            '<script nonce="__NONCE__"></script>',
+            '<script nonce="__NONCE__"></script>',
+            "`;",
+          ].join("\n"),
+          line: 1,
+          code: "EMBEDDED_VIEWER_SCRIPT_EXTRACTION_FAILED",
+        },
+        {
+          source: [
+            "const DOCUMENT_TEMPLATE = String.raw`",
+            '<script nonce="__NONCE__">',
+            "const broken = ;",
+            "</script>",
+            "`;",
+          ].join("\n"),
+          line: 2,
+          code: "EMBEDDED_VIEWER_SCRIPT_PARSE_INVALID",
+        },
+        {
+          source: [
+            "const DOCUMENT_TEMPLATE = String.raw`",
+            '<script nonce="__NONCE__">',
+            `const large = \"${"x".repeat(70 * 1024)}\";`,
+            "</script>",
+            "`;",
+          ].join("\n"),
+          line: 2,
+          code: "EMBEDDED_VIEWER_SCRIPT_TOO_LARGE",
+        },
+        {
+          source: `const DOCUMENT_TEMPLATE = String.raw\`${"x".repeat(270 * 1024)}\`;\n`,
+          line: 1,
+          code: "EMBEDDED_VIEWER_TEMPLATE_TOO_LARGE",
+        },
+      ];
+      for (const testCase of cases) {
+        await writeFile(serverPath, testCase.source, "utf8");
+        const result = checker.checkDocumentationContract(root);
+        const report = checker.formatDiagnostics(result);
+        assert.deepEqual(result.diagnostics, [
+          {
+            file: "src/viewer/server.ts",
+            line: testCase.line,
+            category: "embedded-viewer-script",
+            code: testCase.code,
+          },
+        ]);
+        assert.equal(report.includes(privateScriptSentinel), false);
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
+
+test(
+  "documentation contract does not expand embedded-script inspection beyond the explicit viewer template target",
+  /**
+   * Verifies arbitrary raw templates and a target-named template in another source file remain outside the extension.
+   *
+   * Inputs: A fresh local root with one valid explicit viewer template and unrelated templates containing undocumented JavaScript.
+   * Outputs: Assertion success with no embedded-script diagnostics from the unrelated template literals.
+   * Does not handle: General template analysis or any browser script not stored in the fixed viewer target.
+   * Side effects: Creates and removes a local temporary source root and invokes the checker.
+   */
+  async () => {
+    const root = await mkdtemp(join(tmpdir(), "docs-contract-embedded-scope-"));
+    try {
+      await mkdir(join(root, "src", "viewer"), { recursive: true });
+      const validViewerSource = [
+        "const OTHER_TEMPLATE = String.raw`<script nonce=\"__NONCE__\">const ignored = () => undefined;</script>`;",
+        "const DOCUMENT_TEMPLATE = String.raw`",
+        '<script nonce="__NONCE__">',
+        "const documented =",
+        "/**",
+        " * Produces one documented embedded viewer value.",
+        " *",
+        " * Inputs: None.",
+        " * Outputs: An undefined display value.",
+        " * Does not handle: Browser DOM mutation.",
+        " * Side effects: None.",
+        " */",
+        "() => undefined;",
+        "</script>",
+        "`;",
+      ].join("\n");
+      const unrelatedSource = [
+        "const DOCUMENT_TEMPLATE = String.raw`",
+        '<script nonce="__NONCE__">',
+        "const outsideTarget = () => undefined;",
+        "</script>",
+        "`;",
+      ].join("\n");
+      await Promise.all([
+        writeFile(join(root, "src", "viewer", "server.ts"), validViewerSource, "utf8"),
+        writeFile(join(root, "src", "unrelated.ts"), unrelatedSource, "utf8"),
+      ]);
+
+      const result = checker.checkDocumentationContract(root);
+      assert.equal(result.filesChecked, 2);
+      assert.deepEqual(result.diagnostics, []);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);

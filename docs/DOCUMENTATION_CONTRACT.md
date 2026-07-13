@@ -13,6 +13,24 @@ The checker parses every tracked executable function-like implementation in:
 - `scripts/**/*.mjs`;
 - `test/**/*.ts`.
 
+The only embedded-code extension is deliberately explicit: when the selected
+logical file is `src/viewer/server.ts`, the checker also examines its one
+top-level `const DOCUMENT_TEMPLATE = String.raw\`...\`` declaration. It extracts
+only the single `<script nonce="__NONCE__">...</script>` block from that
+no-substitution raw template and parses its JavaScript function-like nodes.
+Each embedded function has the same direct JSDoc requirement as a source
+function: one purpose sentence plus the four required sections. This does not
+turn the checker into a general HTML or template-literal scanner; scripts in
+other files, other template literals, interpolated templates, aliases, and
+alternate script tags remain outside this contract.
+
+Embedded extraction is bounded to a 256 KiB template and a 64 KiB script before
+the script parser runs. A missing or invalid target, an ambiguous or incomplete
+marker pair, an oversize target, or malformed embedded JavaScript emits a fixed
+`EMBEDDED_VIEWER_*` diagnostic. The diagnostic is anchored to the safe logical
+path and a source line (or line `0` when the target is absent), and never
+includes template text, parser messages, or function names.
+
 For an exact Git repository root, `git ls-files -z -- src scripts test` is the
 authoritative logical candidate inventory. Git values must be canonical,
 slash-delimited logical identifiers; a literal backslash, absolute path, empty
