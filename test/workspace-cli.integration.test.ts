@@ -42,7 +42,7 @@ const emptyReconciliation: ReconciliationResult = { records: [], scopeCoverage: 
 
 test("workspace scan writes a deterministic versioned report and returns incomplete status on request",
   /**
-   * Verifies “workspace scan writes a deterministic versioned report and returns incomplete status on request”.
+   * Asserts the concrete test outcome “workspace scan writes a deterministic versioned report and returns incomplete status on request” after its declared setup and operation.
    *
    * Inputs: `t`.
    * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -123,7 +123,7 @@ test("workspace scan writes a deterministic versioned report and returns incompl
 
 test("workspace scan uses the default N3 local port when no test port is injected",
   /**
-   * Verifies “workspace scan uses the default N3 local port when no test port is injected”.
+   * Asserts the concrete test outcome “workspace scan uses the default N3 local port when no test port is injected” after its declared setup and operation.
    *
    * Inputs: `t`.
    * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -389,7 +389,7 @@ test("workspace invalid input and required-complete UI return nonzero without la
 
 test("workspace UI rejects synthetic-row viewer overflow before starting a listener",
   /**
-   * Verifies “workspace UI rejects synthetic-row viewer overflow before starting a listener”.
+   * Asserts the concrete test outcome “workspace UI rejects synthetic-row viewer overflow before starting a listener” after its declared setup and operation.
    *
    * Inputs: `t`.
    * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -541,7 +541,7 @@ test("workspace UI closes a started viewer when writing its URL fails",
 
 test("workspace UI collapses adversarial report getters to a fixed error before viewer launch",
   /**
-   * Verifies “workspace UI collapses adversarial report getters to a fixed error before viewer launch”.
+   * Asserts the concrete test outcome “workspace UI collapses adversarial report getters to a fixed error before viewer launch” after its declared setup and operation.
    *
    * Inputs: `t`.
    * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -801,7 +801,7 @@ async function rmParent(file: string): Promise<void> {
  *
  * Inputs: `url`.
  * Outputs: A promise resolving to the HTTP response status and complete page body.
- * Does not handle: Redirects, request timeout policy, or page-content validation.
+ * Does not handle: Redirects, request timeout policy, response-size limits, or page-content validation.
  * Side effects: Starts a loopback HTTP GET and registers response/error listeners.
  */
 async function request(url: URL): Promise<{ readonly status: number; readonly body: string }> {
@@ -821,7 +821,7 @@ async function request(url: URL): Promise<{ readonly status: number; readonly bo
        *
        * Inputs: `response`.
        * Outputs: `void`; data/end listeners later resolve status and UTF-8 body, while error rejects.
-       * Does not handle: Issuing a second request, checking page content, or retaining chunks after settlement.
+ * Does not handle: Issuing a second request, checking page content, imposing a response-size limit, or retaining chunks after settlement.
        * Side effects: Registers response event handlers and captures received buffers in a local array.
        */
       (response) => {

@@ -249,10 +249,10 @@ function deployment(id: string, repositories: readonly string[]): FixtureDeploym
 /**
  * Ensures a fixture file's parent exists and writes UTF-8 source or JSON text.
  *
- * Inputs: A test-owned absolute fixture path and complete text content.
+ * Inputs: A caller-supplied absolute fixture path expected by tests to be fixture-owned, plus complete text content.
  * Outputs: A promise resolving after the text is written.
- * Does not handle: Atomic replacement, permissions recovery, encoding selection, or paths outside the fixture supplied by callers.
- * Side effects: Creates parent directories and overwrites the target file.
+ * Does not handle: Atomic replacement, permissions recovery, encoding selection, or validating that the caller-supplied path remains inside a fixture.
+ * Side effects: Creates parent directories and overwrites the caller-selected target file.
  */
 async function writeText(path: string, text: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true });

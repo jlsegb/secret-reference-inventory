@@ -319,7 +319,7 @@ test("workspace UI serves only derived fixture data over loopback",
  *
  * Inputs: `url`.
  * Outputs: A promise for the completed HTTP status, headers, and response body.
- * Does not handle: Redirects, request timeout policy, or response-content validation.
+ * Does not handle: Redirects, request timeout policy, response-size limits, or response-content validation.
  * Side effects: Starts an HTTP GET and registers response/error listeners.
  */
 async function request(url: URL): Promise<{
@@ -343,7 +343,7 @@ async function request(url: URL): Promise<{
        *
        * Inputs: `response`.
        * Outputs: `void`; later response events resolve with status, headers, and UTF-8 body or reject on error.
-       * Does not handle: Starting another request, validating headers, or retaining chunks after settlement.
+ * Does not handle: Starting another request, validating headers, imposing a response-size limit, or retaining chunks after settlement.
        * Side effects: Registers three response listeners, buffers data chunks, and gives event handlers access to `resolve` and `reject`.
        */
       (response) => {

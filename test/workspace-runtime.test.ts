@@ -107,7 +107,7 @@ function repository(
 ): Awaited<ReturnType<typeof scanWorkspace>>["repositories"][number] {
   const entry = result.repositories.find(
     /**
-    * Tests the current candidate against the requested condition.
+    * Evaluates predicate candidate_id equals id.
     *
     * Inputs: `candidate`.
     * Outputs: the `candidate.id === id` result consumed by `result.repositories.find`.
@@ -133,7 +133,7 @@ function deployment(
 ): Awaited<ReturnType<typeof scanWorkspace>>["deployments"][number] {
   const entry = result.deployments.find(
     /**
-    * Tests the current candidate against the requested condition.
+    * Evaluates predicate candidate_id equals id.
     *
     * Inputs: `candidate`.
     * Outputs: the `candidate.id === id` result consumed by `result.deployments.find`.
@@ -159,7 +159,7 @@ function deploymentMember(
 ): ReturnType<typeof deployment>["members"][number] {
   const member = entry.members.find(
     /**
-    * Tests the current candidate against the requested condition.
+    * Evaluates predicate candidate_repositoryId equals repositoryId.
     *
     * Inputs: `candidate`.
     * Outputs: the `candidate.repositoryId === repositoryId` result consumed by `entry.members.find`.
@@ -184,7 +184,7 @@ function emittedReconciliationGraphFacts(
 ): number {
   const recordFacts = reconciliation.records.reduce(
     /**
-    * Accumulates facts for the current record.
+    * Counts this record node together with its retained reasons, direct references, and dynamic lookup contribution.
     *
     * Inputs: `total`, `record`.
     * Outputs: the next accumulator value `{ const reasons = record.reasons.reduce( (reasonTotal, reason) => reasonTotal + 1 + (reason.gapIds?.length ?? 0) + (reason.candidateIds?.length ?? 0), 0, ); const references = record.kind ==`.
@@ -194,7 +194,7 @@ function emittedReconciliationGraphFacts(
     (total, record) => {
     const reasons = record.reasons.reduce(
       /**
-      * Accumulates facts for the current reason.
+      * Counts one reconciliation reason together with its retained gap and candidate identifiers.
       *
       * Inputs: `reasonTotal`, `reason`.
       * Outputs: the next accumulator value `reasonTotal + 1 + (reason.gapIds?.length ?? 0) + (reason.candidateIds?.length ?? 0)`.
@@ -214,7 +214,7 @@ function emittedReconciliationGraphFacts(
   }, 0);
   return recordFacts + reconciliation.scopeCoverage.reduce(
     /**
-    * Accumulates facts for the current coverage.
+    * Counts one scope-coverage node and every retained gap identifier.
     *
     * Inputs: `total`, `coverage`.
     * Outputs: the next accumulator value `total + 1 + coverage.gapIds.length`.
@@ -239,7 +239,7 @@ function evidenceGraphFacts(
 ): number {
   return evidence.reduce(
     /**
-    * Accumulates facts for the current entry.
+    * Counts one evidence node and all retained source-location entries.
     *
     * Inputs: `total`, `entry`.
     * Outputs: the next accumulator value `total + 1 + entry.locations.length`.
@@ -304,7 +304,7 @@ function emittedResultGraphFacts(entry: {
     entry.diagnostics.length +
     entry.references.reduce(
       /**
-      * Accumulates facts for the current reference.
+      * Adds this secret reference's node and evidence-chain contribution to the result total.
       *
       * Inputs: `total`, `reference`.
       * Outputs: the next accumulator value `total + referenceGraphFacts(reference)`.
@@ -314,7 +314,7 @@ function emittedResultGraphFacts(entry: {
       (total, reference) => total + referenceGraphFacts(reference), 0) +
     entry.demandEdges.reduce(
       /**
-      * Accumulates facts for the current edge.
+      * Adds this demand edge's endpoint and evidence-chain contribution to the result total.
       *
       * Inputs: `total`, `edge`.
       * Outputs: the next accumulator value `total + demandEdgeGraphFacts(edge)`.
@@ -324,7 +324,7 @@ function emittedResultGraphFacts(entry: {
       (total, edge) => total + demandEdgeGraphFacts(edge), 0) +
     entry.dynamicLookupEdges.reduce(
       /**
-      * Accumulates facts for the current edge.
+      * Adds this dynamic lookup's endpoints, likely keys, and evidence-chain contribution to the result total.
       *
       * Inputs: `total`, `edge`.
       * Outputs: the next accumulator value `total + dynamicLookupGraphFacts(edge)`.
@@ -349,7 +349,7 @@ function emittedDeploymentGraphFacts(
 ): number {
   return result.deployments.reduce(
     /**
-    * Accumulates facts for the current deployment.
+    * Adds this deployment's shared-key and diagnostic slots plus all member graph facts to the workspace total.
     *
     * Inputs: `total`, `deployment`.
     * Outputs: the next accumulator value `total + deployment.sharedKeys.length + deployment.diagnostics.length + deployment.members.reduce( (memberTotal, member) => memberTotal + emittedResultGraphFacts(member), 0, )`.
@@ -362,7 +362,7 @@ function emittedDeploymentGraphFacts(
     deployment.diagnostics.length +
     deployment.members.reduce(
       /**
-      * Accumulates facts for the current member.
+      * Adds this deployment member's emitted graph facts to the deployment total.
       *
       * Inputs: `memberTotal`, `member`.
       * Outputs: the next accumulator value `memberTotal + emittedResultGraphFacts(member)`.
@@ -389,7 +389,7 @@ function emittedWorkspaceGraphFacts(
   return (
     result.repositories.reduce(
       /**
-      * Accumulates facts for the current repository.
+      * Adds this repository's emitted graph facts to the workspace total.
       *
       * Inputs: `total`, `repository`.
       * Outputs: the next accumulator value `total + emittedResultGraphFacts(repository)`.
@@ -466,7 +466,7 @@ function assertInvalidManifestProvenance(
 ): void {
   assert.equal(result.repositories.every(
     /**
-    * Tests the current repository against the requested condition.
+    * Evaluates predicate repository_status equals "invalid".
     *
     * Inputs: `repository`.
     * Outputs: the `repository.status === "invalid"` result consumed by `result.repositories.every`.
@@ -476,7 +476,7 @@ function assertInvalidManifestProvenance(
     (repository) => repository.status === "invalid"), true);
   assert.equal(result.deployments.every(
     /**
-    * Tests the current deployment against the requested condition.
+    * Evaluates predicate deployment_status equals "invalid".
     *
     * Inputs: `deployment`.
     * Outputs: the `deployment.status === "invalid"` result consumed by `result.deployments.every`.
@@ -500,7 +500,7 @@ test("workspace runtime scans an approved sibling repository through a canonical
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “workspace runtime scans an approved sibling repository through a canonical manifest base”.
+     * Asserts the concrete test outcome “workspace runtime scans an approved sibling repository through a canonical manifest base” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -515,7 +515,7 @@ test("workspace runtime scans an approved sibling repository through a canonical
     assert.equal(
       api?.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "demand" and record_key_name equals "DATABASE_URL".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "demand" && record.key.name === "DATABASE_URL"` result consumed by `api?.reconciliation.records.some`.
@@ -543,7 +543,7 @@ test("duplicate keys aggregate only within an explicit shared deployment",
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “duplicate keys aggregate only within an explicit shared deployment”.
+     * Asserts the concrete test outcome “duplicate keys aggregate only within an explicit shared deployment” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -720,7 +720,7 @@ test("workspace runtime rejects a request after its verified manifest file is re
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “workspace runtime rejects a request after its verified manifest file is replaced”.
+     * Asserts the concrete test outcome “workspace runtime rejects a request after its verified manifest file is replaced” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -752,7 +752,7 @@ test("workspace runtime rejects a request after its manifest path is replaced by
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “workspace runtime rejects a request after its manifest path is replaced by a symlink”.
+     * Asserts the concrete test outcome “workspace runtime rejects a request after its manifest path is replaced by a symlink” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -786,7 +786,7 @@ test("workspace runtime rejects a request after its verified canonical base is r
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “workspace runtime rejects a request after its verified canonical base is replaced”.
+     * Asserts the concrete test outcome “workspace runtime rejects a request after its verified canonical base is replaced” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -819,7 +819,7 @@ test("workspace runtime rejects equal and nested canonical root aliases before s
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “workspace runtime rejects equal and nested canonical root aliases before scanning”.
+     * Asserts the concrete test outcome “workspace runtime rejects equal and nested canonical root aliases before scanning” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -853,7 +853,7 @@ test("workspace runtime rejects equal and nested canonical root aliases before s
     assert.deepEqual(
       result.repositories.map(
         /**
-        * Projects a report value from the current repository.
+        * Extracts repository_status for the enclosing assertion.
         *
         * Inputs: `repository`.
         * Outputs: the `repository.status` result consumed by `result.repositories.map`.
@@ -866,7 +866,7 @@ test("workspace runtime rejects equal and nested canonical root aliases before s
     assert.equal(
       result.repositories.every(
         /**
-        * Tests the current repository against the requested condition.
+        * Evaluates predicate repository_diagnostics_some( (diagnostic) => diagnostic equals "WORKSPACE_REPOSITORY_ROOT_CONFLICT", ).
         *
         * Inputs: `repository`.
         * Outputs: the `repository.diagnostics.some( (diagnostic) => diagnostic === "WORKSPACE_REPOSITORY_ROOT_CONFLICT", )` result consumed by `result.repositories.every`.
@@ -876,7 +876,7 @@ test("workspace runtime rejects equal and nested canonical root aliases before s
         (repository) =>
         repository.diagnostics.some(
           /**
-          * Tests the current diagnostic against the requested condition.
+          * Evaluates predicate diagnostic equals "WORKSPACE_REPOSITORY_ROOT_CONFLICT".
           *
           * Inputs: `diagnostic`.
           * Outputs: the `diagnostic === "WORKSPACE_REPOSITORY_ROOT_CONFLICT"` result consumed by `repository.diagnostics.some`.
@@ -904,7 +904,7 @@ test("canonical root indexing retains ancestor conflicts across prefix-like sibl
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “canonical root indexing retains ancestor conflicts across prefix-like siblings”.
+     * Asserts the concrete test outcome “canonical root indexing retains ancestor conflicts across prefix-like siblings” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -938,7 +938,7 @@ test("canonical root indexing retains ancestor conflicts across prefix-like sibl
     assert.deepEqual(
       result.repositories.map(
         /**
-        * Projects a report value from the current repository.
+        * Extracts repository_status for the enclosing assertion.
         *
         * Inputs: `repository`.
         * Outputs: the `repository.status` result consumed by `result.repositories.map`.
@@ -963,7 +963,7 @@ test("request member attestation indexes 10,000 resolved roots without pairwise 
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “request member attestation indexes 10,000 resolved roots without pairwise conflict scans”.
+     * Asserts the concrete test outcome “request member attestation indexes 10,000 resolved roots without pairwise conflict scans” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -974,7 +974,7 @@ test("request member attestation indexes 10,000 resolved roots without pairwise 
     const count = 10_000;
     const ids = Array.from({ length: count },
       /**
-      * Constructs one generated fixture element.
+      * Builds fixture value "scale-" + String(index).
       *
       * Inputs: `_`, `index`.
       * Outputs: the `"scale-" + String(index)` result consumed by `Array.from`.
@@ -1000,7 +1000,7 @@ test("request member attestation indexes 10,000 resolved roots without pairwise 
       schemaVersion: "workspace-manifest/v2",
       repositories: ids.map(
         /**
-        * Projects a report value from the current id.
+        * Extracts ({ id, root: "__/scale/" + id }) for the enclosing assertion.
         *
         * Inputs: `id`.
         * Outputs: the `({ id, root: "../scale/" + id })` result consumed by `ids.map`.
@@ -1041,7 +1041,7 @@ test("invocation indexes 10,000 deployment declarations without repeated manifes
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “invocation indexes 10,000 deployment declarations without repeated manifest search”.
+     * Asserts the concrete test outcome “invocation indexes 10,000 deployment declarations without repeated manifest search” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -1053,7 +1053,7 @@ test("invocation indexes 10,000 deployment declarations without repeated manifes
     const deploymentIds = Array.from(
       { length: count },
       /**
-      * Constructs one generated fixture element.
+      * Builds fixture value "deployment-index-" + String(index)_padStart(4, "0").
       *
       * Inputs: `_`, `index`.
       * Outputs: the `"deployment-index-" + String(index).padStart(4, "0")` result consumed by `Array.from`.
@@ -1067,7 +1067,7 @@ test("invocation indexes 10,000 deployment declarations without repeated manifes
       repositories: [{ id: "api", root: "../api" }],
       deployments: deploymentIds.map(
         /**
-        * Projects a report value from the current id.
+        * Extracts ({ id, repositories: ["api"] }) for the enclosing assertion.
         *
         * Inputs: `id`.
         * Outputs: the `({ id, repositories: ["api"] })` result consumed by `deploymentIds.map`.
@@ -1111,7 +1111,7 @@ test("workspace shared keys require direct demand rather than finite dynamic pos
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “workspace shared keys require direct demand rather than finite dynamic possibilities”.
+     * Asserts the concrete test outcome “workspace shared keys require direct demand rather than finite dynamic possibilities” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -1152,7 +1152,7 @@ test("one repository's parser uncertainty stays scoped to that repository and de
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “one repository's parser uncertainty stays scoped to that repository and deployment”.
+     * Asserts the concrete test outcome “one repository's parser uncertainty stays scoped to that repository and deployment” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -1193,7 +1193,7 @@ test("a malformed deployment input is scoped to its deployment, not its code rep
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “a malformed deployment input is scoped to its deployment, not its code repository”.
+     * Asserts the concrete test outcome “a malformed deployment input is scoped to its deployment, not its code repository” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -1217,7 +1217,7 @@ test("a malformed deployment input is scoped to its deployment, not its code rep
     assert.equal(
       deploymentMember(apiDeployment, "api")?.diagnostics.some(
         /**
-        * Tests the current diagnostic against the requested condition.
+        * Evaluates predicate diagnostic equals "APP_LOCAL_INPUT_INVALID_JSON".
         *
         * Inputs: `diagnostic`.
         * Outputs: the `diagnostic === "APP_LOCAL_INPUT_INVALID_JSON"` result consumed by `deploymentMember(apiDeployment, "api")?.diagnostics.some`.
@@ -1231,7 +1231,7 @@ test("a malformed deployment input is scoped to its deployment, not its code rep
     assert.equal(
       deploymentMember(apiDeployment, "api")?.reconciliation.scopeCoverage.some(
         /**
-        * Tests the current coverage against the requested condition.
+        * Evaluates predicate coverage_state equals "incomplete".
         *
         * Inputs: `coverage`.
         * Outputs: the `coverage.state === "incomplete"` result consumed by `deploymentMember(apiDeployment, "api")?.reconciliation.scopeCoverage.some`.
@@ -1258,7 +1258,7 @@ test("an oversized provisioning document is scoped incomplete and cannot support
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “an oversized provisioning document is scoped incomplete and cannot support absence”.
+     * Asserts the concrete test outcome “an oversized provisioning document is scoped incomplete and cannot support absence” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -1289,7 +1289,7 @@ test("an oversized provisioning document is scoped incomplete and cannot support
     assert.equal(
       member.diagnostics.some(
         /**
-        * Tests the current diagnostic against the requested condition.
+        * Evaluates predicate String(diagnostic) equals "APP_PROVISIONING_INPUT_ENTRY_LIMIT_EXCEEDED".
         *
         * Inputs: `diagnostic`.
         * Outputs: the `String(diagnostic) === "APP_PROVISIONING_INPUT_ENTRY_LIMIT_EXCEEDED"` result consumed by `member.diagnostics.some`.
@@ -1303,7 +1303,7 @@ test("an oversized provisioning document is scoped incomplete and cannot support
     assert.equal(
       member.reconciliation.scopeCoverage.some(
         /**
-        * Tests the current coverage against the requested condition.
+        * Evaluates predicate coverage_state equals "incomplete".
         *
         * Inputs: `coverage`.
         * Outputs: the `coverage.state === "incomplete"` result consumed by `member.reconciliation.scopeCoverage.some`.
@@ -1329,7 +1329,7 @@ test("unscoped inventory without a member-scoped provider binding stays unattrib
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “unscoped inventory without a member-scoped provider binding stays unattributed”.
+     * Asserts the concrete test outcome “unscoped inventory without a member-scoped provider binding stays unattributed” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -1364,7 +1364,7 @@ test("unscoped inventory without a member-scoped provider binding stays unattrib
     assert.equal(
       api?.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "inventory".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "inventory"` result consumed by `api?.reconciliation.records.some`.
@@ -1378,7 +1378,7 @@ test("unscoped inventory without a member-scoped provider binding stays unattrib
     assert.equal(
       deploymentMember(apiDeployment, "api")?.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "inventory" and record_providerResourceId_canonicalId equals "unused-fixture-resource".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "unused-fixture-resource"` result consumed by `deploymentMember(apiDeployment, "api")?.reconciliation.records.some`.
@@ -1394,7 +1394,7 @@ test("unscoped inventory without a member-scoped provider binding stays unattrib
     assert.equal(
       apiDeployment?.diagnostics.some(
         /**
-        * Tests the current diagnostic against the requested condition.
+        * Evaluates predicate diagnostic equals "WORKSPACE_DEPLOYMENT_UNATTRIBUTED_INVENTORY".
         *
         * Inputs: `diagnostic`.
         * Outputs: the `diagnostic === "WORKSPACE_DEPLOYMENT_UNATTRIBUTED_INVENTORY"` result consumed by `apiDeployment?.diagnostics.some`.
@@ -1420,7 +1420,7 @@ test("workspace deployment closed-model verification uses the captured manifest 
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “workspace deployment closed-model verification uses the captured manifest base after chdir”.
+     * Asserts the concrete test outcome “workspace deployment closed-model verification uses the captured manifest base after chdir” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -1478,7 +1478,7 @@ test("workspace deployment closed-model verification uses the captured manifest 
       assert.equal(
         apiDeployment?.diagnostics.some(
           /**
-          * Tests the current diagnostic against the requested condition.
+          * Evaluates predicate String(diagnostic) equals "APP_CLOSED_MODEL_ROOT_UNVERIFIED".
           *
           * Inputs: `diagnostic`.
           * Outputs: the `String(diagnostic) === "APP_CLOSED_MODEL_ROOT_UNVERIFIED"` result consumed by `apiDeployment?.diagnostics.some`.
@@ -1507,7 +1507,7 @@ test("multi-member closed provisioning remains independently verifiable after ch
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “multi-member closed provisioning remains independently verifiable after chdir”.
+     * Asserts the concrete test outcome “multi-member closed provisioning remains independently verifiable after chdir” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -1599,7 +1599,7 @@ test("multi-member closed provisioning remains independently verifiable after ch
       assert.equal(shared.status, "complete");
       assert.deepEqual(shared.members.map(
         /**
-        * Projects a report value from the current member.
+        * Extracts member_repositoryId for the enclosing assertion.
         *
         * Inputs: `member`.
         * Outputs: the `member.repositoryId` result consumed by `shared.members.map`.
@@ -1612,7 +1612,7 @@ test("multi-member closed provisioning remains independently verifiable after ch
         assert.equal(
           member.diagnostics.some(
             /**
-            * Tests the current diagnostic against the requested condition.
+            * Evaluates predicate diagnostic equals "APP_CLOSED_MODEL_ROOT_UNVERIFIED".
             *
             * Inputs: `diagnostic`.
             * Outputs: the `diagnostic === "APP_CLOSED_MODEL_ROOT_UNVERIFIED"` result consumed by `member.diagnostics.some`.
@@ -1639,7 +1639,7 @@ test("multi-member closed provisioning remains independently verifiable after ch
         assert.equal(
           member.diagnostics.some(
             /**
-            * Tests the current diagnostic against the requested condition.
+            * Evaluates predicate diagnostic equals "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED".
             *
             * Inputs: `diagnostic`.
             * Outputs: the `diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED"` result consumed by `member.diagnostics.some`.
@@ -1653,7 +1653,7 @@ test("multi-member closed provisioning remains independently verifiable after ch
         assert.equal(
           member.reconciliation.records.some(
             /**
-            * Tests the current record against the requested condition.
+            * Evaluates predicate record_kind equals "demand" and record_inventory equals "missing-under-declared-model".
             *
             * Inputs: `record`.
             * Outputs: the `record.kind === "demand" && record.inventory === "missing-under-declared-model"` result consumed by `member.reconciliation.records.some`.
@@ -1697,7 +1697,7 @@ test("multi-member closed provisioning remains independently verifiable after ch
         assert.equal(
           member.diagnostics.some(
             /**
-            * Tests the current diagnostic against the requested condition.
+            * Evaluates predicate diagnostic equals "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED".
             *
             * Inputs: `diagnostic`.
             * Outputs: the `diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED"` result consumed by `member.diagnostics.some`.
@@ -1711,7 +1711,7 @@ test("multi-member closed provisioning remains independently verifiable after ch
         assert.equal(
           member.reconciliation.records.some(
             /**
-            * Tests the current record against the requested condition.
+            * Evaluates predicate record_kind equals "demand" and record_inventory equals "missing-under-declared-model".
             *
             * Inputs: `record`.
             * Outputs: the `record.kind === "demand" && record.inventory === "missing-under-declared-model"` result consumed by `member.reconciliation.records.some`.
@@ -1743,7 +1743,7 @@ test("multi-repository deployment keeps exact provisioning in independent reposi
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “multi-repository deployment keeps exact provisioning in independent repository-qualified partitions”.
+     * Asserts the concrete test outcome “multi-repository deployment keeps exact provisioning in independent repository-qualified partitions” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -1802,7 +1802,7 @@ test("multi-repository deployment keeps exact provisioning in independent reposi
     assert.equal(shared?.status, "complete");
     assert.deepEqual(shared?.members.map(
       /**
-      * Projects a report value from the current member.
+      * Extracts member_repositoryId for the enclosing assertion.
       *
       * Inputs: `member`.
       * Outputs: the `member.repositoryId` result consumed by `shared?.members.map`.
@@ -1818,7 +1818,7 @@ test("multi-repository deployment keeps exact provisioning in independent reposi
     assert.equal(
       api?.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "demand" and record_binding equals "exact-declared" and record_inventory equals "bound".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "demand" && record.binding === "exact-declared" && record.inventory === "bound"` result consumed by `api?.reconciliation.records.some`.
@@ -1835,7 +1835,7 @@ test("multi-repository deployment keeps exact provisioning in independent reposi
     assert.equal(
       worker?.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "demand" and record_binding equals "exact-declared" and record_inventory equals "bound".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "demand" && record.binding === "exact-declared" && record.inventory === "bound"` result consumed by `worker?.reconciliation.records.some`.
@@ -1852,7 +1852,7 @@ test("multi-repository deployment keeps exact provisioning in independent reposi
     assert.equal(
       api?.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "inventory" and record_providerResourceId_canonicalId equals "worker-database".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "worker-database"` result consumed by `api?.reconciliation.records.some`.
@@ -1868,7 +1868,7 @@ test("multi-repository deployment keeps exact provisioning in independent reposi
     assert.equal(
       api?.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "inventory" and record_providerResourceId_canonicalId equals "outsider-database".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "outsider-database"` result consumed by `api?.reconciliation.records.some`.
@@ -1884,7 +1884,7 @@ test("multi-repository deployment keeps exact provisioning in independent reposi
     assert.equal(
       worker?.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "inventory" and record_providerResourceId_canonicalId equals "outsider-database".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "outsider-database"` result consumed by `worker?.reconciliation.records.some`.
@@ -1900,7 +1900,7 @@ test("multi-repository deployment keeps exact provisioning in independent reposi
     assert.equal(
       worker?.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "inventory" and record_providerResourceId_canonicalId equals "api-database".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "api-database"` result consumed by `worker?.reconciliation.records.some`.
@@ -1918,7 +1918,7 @@ test("multi-repository deployment keeps exact provisioning in independent reposi
 
 test("an explicitly shared provider resource remains bound in each exact member partition",
   /**
-   * Verifies “an explicitly shared provider resource remains bound in each exact member partition”.
+   * Asserts the concrete test outcome “an explicitly shared provider resource remains bound in each exact member partition” after its declared setup and operation.
    *
   * Inputs: no arguments.
   * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -1928,7 +1928,7 @@ test("an explicitly shared provider resource remains bound in each exact member 
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “an explicitly shared provider resource remains bound in each exact member partition”.
+     * Asserts the concrete test outcome “an explicitly shared provider resource remains bound in each exact member partition” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -1961,7 +1961,7 @@ test("an explicitly shared provider resource remains bound in each exact member 
       assert.equal(
         member.reconciliation.records.some(
           /**
-          * Tests the current record against the requested condition.
+          * Evaluates predicate record_kind equals "demand" and record_binding equals "exact-declared" and record_inventory equals "bound".
           *
           * Inputs: `record`.
           * Outputs: the `record.kind === "demand" && record.binding === "exact-declared" && record.inventory === "bound"` result consumed by `member.reconciliation.records.some`.
@@ -1978,7 +1978,7 @@ test("an explicitly shared provider resource remains bound in each exact member 
       assert.equal(
         member.diagnostics.some(
           /**
-          * Tests the current diagnostic against the requested condition.
+          * Evaluates predicate diagnostic equals "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED".
           *
           * Inputs: `diagnostic`.
           * Outputs: the `diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED"` result consumed by `member.diagnostics.some`.
@@ -1995,7 +1995,7 @@ test("an explicitly shared provider resource remains bound in each exact member 
 
 test("contradictory inventory ownership makes only listed member partitions inconclusive",
   /**
-   * Verifies “contradictory inventory ownership makes only listed member partitions inconclusive”.
+   * Asserts the concrete test outcome “contradictory inventory ownership makes only listed member partitions inconclusive” after its declared setup and operation.
    *
   * Inputs: no arguments.
   * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -2005,7 +2005,7 @@ test("contradictory inventory ownership makes only listed member partitions inco
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “contradictory inventory ownership makes only listed member partitions inconclusive”.
+     * Asserts the concrete test outcome “contradictory inventory ownership makes only listed member partitions inconclusive” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -2041,7 +2041,7 @@ test("contradictory inventory ownership makes only listed member partitions inco
       assert.equal(
         member?.diagnostics.some(
           /**
-          * Tests the current diagnostic against the requested condition.
+          * Evaluates predicate diagnostic equals "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED".
           *
           * Inputs: `diagnostic`.
           * Outputs: the `diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED"` result consumed by `member?.diagnostics.some`.
@@ -2055,7 +2055,7 @@ test("contradictory inventory ownership makes only listed member partitions inco
       assert.equal(
         member?.reconciliation.records.some(
           /**
-          * Tests the current record against the requested condition.
+          * Evaluates predicate record_kind equals "demand" and record_disposition equals "inconclusive".
           *
           * Inputs: `record`.
           * Outputs: the `record.kind === "demand" && record.disposition === "inconclusive"` result consumed by `member?.reconciliation.records.some`.
@@ -2069,7 +2069,7 @@ test("contradictory inventory ownership makes only listed member partitions inco
       assert.equal(
         member?.reconciliation.records.some(
           /**
-          * Tests the current record against the requested condition.
+          * Evaluates predicate record_kind equals "inventory" and record_inventory equals "inventory-listed-no-static-read".
           *
           * Inputs: `record`.
           * Outputs: the `record.kind === "inventory" && record.inventory === "inventory-listed-no-static-read"` result consumed by `member?.reconciliation.records.some`.
@@ -2086,7 +2086,7 @@ test("contradictory inventory ownership makes only listed member partitions inco
 
 test("a dynamic binding candidate cannot make unscoped inventory shared across members",
   /**
-   * Verifies “a dynamic binding candidate cannot make unscoped inventory shared across members”.
+   * Asserts the concrete test outcome “a dynamic binding candidate cannot make unscoped inventory shared across members” after its declared setup and operation.
    *
   * Inputs: no arguments.
   * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -2096,7 +2096,7 @@ test("a dynamic binding candidate cannot make unscoped inventory shared across m
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “a dynamic binding candidate cannot make unscoped inventory shared across members”.
+     * Asserts the concrete test outcome “a dynamic binding candidate cannot make unscoped inventory shared across members” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -2122,7 +2122,7 @@ test("a dynamic binding candidate cannot make unscoped inventory shared across m
     assert.equal(
       api.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "demand" and record_binding equals "dynamic".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "demand" && record.binding === "dynamic"` result consumed by `api.reconciliation.records.some`.
@@ -2136,7 +2136,7 @@ test("a dynamic binding candidate cannot make unscoped inventory shared across m
     assert.equal(
       api.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "inventory" and record_providerResourceId_canonicalId equals "shared-database".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "shared-database"` result consumed by `api.reconciliation.records.some`.
@@ -2152,7 +2152,7 @@ test("a dynamic binding candidate cannot make unscoped inventory shared across m
     assert.equal(
       worker.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "demand" and record_binding equals "exact-declared" and record_inventory equals "bound".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "demand" && record.binding === "exact-declared" && record.inventory === "bound"` result consumed by `worker.reconciliation.records.some`.
@@ -2171,7 +2171,7 @@ test("a dynamic binding candidate cannot make unscoped inventory shared across m
 
 test("a dynamic binding competitor prevents an exact candidate from proving a bound member relation",
   /**
-   * Verifies “a dynamic binding competitor prevents an exact candidate from proving a bound member relation”.
+   * Asserts the concrete test outcome “a dynamic binding competitor prevents an exact candidate from proving a bound member relation” after its declared setup and operation.
    *
   * Inputs: no arguments.
   * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -2181,7 +2181,7 @@ test("a dynamic binding competitor prevents an exact candidate from proving a bo
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “a dynamic binding competitor prevents an exact candidate from proving a bound member relation”.
+     * Asserts the concrete test outcome “a dynamic binding competitor prevents an exact candidate from proving a bound member relation” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -2228,7 +2228,7 @@ test("a dynamic binding competitor prevents an exact candidate from proving a bo
     assert.equal(
       api.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "demand" and record_binding equals "dynamic" and record_disposition equals "inconclusive".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "demand" && record.binding === "dynamic" && record.disposition === "inconclusive"` result consumed by `api.reconciliation.records.some`.
@@ -2245,7 +2245,7 @@ test("a dynamic binding competitor prevents an exact candidate from proving a bo
     assert.equal(
       api.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "demand" and record_inventory equals "bound".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "demand" && record.inventory === "bound"` result consumed by `api.reconciliation.records.some`.
@@ -2259,7 +2259,7 @@ test("a dynamic binding competitor prevents an exact candidate from proving a bo
     assert.equal(
       api.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "inventory" and record_providerResourceId_canonicalId equals "api-exact-database".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "api-exact-database"` result consumed by `api.reconciliation.records.some`.
@@ -2277,7 +2277,7 @@ test("a dynamic binding competitor prevents an exact candidate from proving a bo
 
 test("an unknown binding scope makes only its potentially affected member inconclusive",
   /**
-   * Verifies “an unknown binding scope makes only its potentially affected member inconclusive”.
+   * Asserts the concrete test outcome “an unknown binding scope makes only its potentially affected member inconclusive” after its declared setup and operation.
    *
   * Inputs: no arguments.
   * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -2287,7 +2287,7 @@ test("an unknown binding scope makes only its potentially affected member inconc
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “an unknown binding scope makes only its potentially affected member inconclusive”.
+     * Asserts the concrete test outcome “an unknown binding scope makes only its potentially affected member inconclusive” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -2341,7 +2341,7 @@ test("an unknown binding scope makes only its potentially affected member inconc
     assert.equal(
       api.diagnostics.some(
         /**
-        * Tests the current diagnostic against the requested condition.
+        * Evaluates predicate diagnostic equals "WORKSPACE_MEMBER_BINDING_OWNERSHIP_UNRESOLVED".
         *
         * Inputs: `diagnostic`.
         * Outputs: the `diagnostic === "WORKSPACE_MEMBER_BINDING_OWNERSHIP_UNRESOLVED"` result consumed by `api.diagnostics.some`.
@@ -2355,7 +2355,7 @@ test("an unknown binding scope makes only its potentially affected member inconc
     assert.equal(
       api.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "demand" and record_disposition equals "inconclusive".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "demand" && record.disposition === "inconclusive"` result consumed by `api.reconciliation.records.some`.
@@ -2373,7 +2373,7 @@ test("an unknown binding scope makes only its potentially affected member inconc
     assert.equal(
       worker.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "demand" and record_inventory equals "bound".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "demand" && record.inventory === "bound"` result consumed by `worker.reconciliation.records.some`.
@@ -2389,7 +2389,7 @@ test("an unknown binding scope makes only its potentially affected member inconc
 
 test("a partial binding selector cannot turn unscoped inventory into an exact member binding",
   /**
-   * Verifies “a partial binding selector cannot turn unscoped inventory into an exact member binding”.
+   * Asserts the concrete test outcome “a partial binding selector cannot turn unscoped inventory into an exact member binding” after its declared setup and operation.
    *
   * Inputs: no arguments.
   * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -2399,7 +2399,7 @@ test("a partial binding selector cannot turn unscoped inventory into an exact me
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “a partial binding selector cannot turn unscoped inventory into an exact member binding”.
+     * Asserts the concrete test outcome “a partial binding selector cannot turn unscoped inventory into an exact member binding” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -2435,7 +2435,7 @@ test("a partial binding selector cannot turn unscoped inventory into an exact me
     assert.equal(
       shared.diagnostics.some(
         /**
-        * Tests the current diagnostic against the requested condition.
+        * Evaluates predicate diagnostic equals "WORKSPACE_DEPLOYMENT_UNATTRIBUTED_INVENTORY".
         *
         * Inputs: `diagnostic`.
         * Outputs: the `diagnostic === "WORKSPACE_DEPLOYMENT_UNATTRIBUTED_INVENTORY"` result consumed by `shared.diagnostics.some`.
@@ -2449,7 +2449,7 @@ test("a partial binding selector cannot turn unscoped inventory into an exact me
     assert.equal(
       api.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "demand" and record_inventory equals "bound".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "demand" && record.inventory === "bound"` result consumed by `api.reconciliation.records.some`.
@@ -2463,7 +2463,7 @@ test("a partial binding selector cannot turn unscoped inventory into an exact me
     assert.equal(
       api.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "demand" and record_binding equals "unresolved".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "demand" && record.binding === "unresolved"` result consumed by `api.reconciliation.records.some`.
@@ -2478,7 +2478,7 @@ test("a partial binding selector cannot turn unscoped inventory into an exact me
     assert.equal(
       worker.diagnostics.some(
         /**
-        * Tests the current diagnostic against the requested condition.
+        * Evaluates predicate diagnostic equals "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED".
         *
         * Inputs: `diagnostic`.
         * Outputs: the `diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED"` result consumed by `worker.diagnostics.some`.
@@ -2494,7 +2494,7 @@ test("a partial binding selector cannot turn unscoped inventory into an exact me
 
 test("a shadowed binding cannot claim an otherwise unscoped inventory item",
   /**
-   * Verifies “a shadowed binding cannot claim an otherwise unscoped inventory item”.
+   * Asserts the concrete test outcome “a shadowed binding cannot claim an otherwise unscoped inventory item” after its declared setup and operation.
    *
   * Inputs: no arguments.
   * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -2504,7 +2504,7 @@ test("a shadowed binding cannot claim an otherwise unscoped inventory item",
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “a shadowed binding cannot claim an otherwise unscoped inventory item”.
+     * Asserts the concrete test outcome “a shadowed binding cannot claim an otherwise unscoped inventory item” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -2552,7 +2552,7 @@ test("a shadowed binding cannot claim an otherwise unscoped inventory item",
     assert.equal(
       shared.diagnostics.some(
         /**
-        * Tests the current diagnostic against the requested condition.
+        * Evaluates predicate diagnostic equals "WORKSPACE_DEPLOYMENT_UNATTRIBUTED_INVENTORY".
         *
         * Inputs: `diagnostic`.
         * Outputs: the `diagnostic === "WORKSPACE_DEPLOYMENT_UNATTRIBUTED_INVENTORY"` result consumed by `shared.diagnostics.some`.
@@ -2566,7 +2566,7 @@ test("a shadowed binding cannot claim an otherwise unscoped inventory item",
     assert.equal(
       api.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "demand" and record_inventory equals "bound".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "demand" && record.inventory === "bound"` result consumed by `api.reconciliation.records.some`.
@@ -2581,7 +2581,7 @@ test("a shadowed binding cannot claim an otherwise unscoped inventory item",
     assert.equal(
       api.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "inventory" and record_providerResourceId_canonicalId equals "api-shadowed-database".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "api-shadowed-database"` result consumed by `api.reconciliation.records.some`.
@@ -2599,7 +2599,7 @@ test("a shadowed binding cannot claim an otherwise unscoped inventory item",
 
 test("mismatched inventory authority cannot become a cross-member bound relation",
   /**
-   * Verifies “mismatched inventory authority cannot become a cross-member bound relation”.
+   * Asserts the concrete test outcome “mismatched inventory authority cannot become a cross-member bound relation” after its declared setup and operation.
    *
   * Inputs: no arguments.
   * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -2609,7 +2609,7 @@ test("mismatched inventory authority cannot become a cross-member bound relation
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “mismatched inventory authority cannot become a cross-member bound relation”.
+     * Asserts the concrete test outcome “mismatched inventory authority cannot become a cross-member bound relation” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -2638,7 +2638,7 @@ test("mismatched inventory authority cannot become a cross-member bound relation
     assert.equal(
       api?.diagnostics.some(
         /**
-        * Tests the current diagnostic against the requested condition.
+        * Evaluates predicate diagnostic equals "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED".
         *
         * Inputs: `diagnostic`.
         * Outputs: the `diagnostic === "WORKSPACE_MEMBER_INVENTORY_OWNERSHIP_UNRESOLVED"` result consumed by `api?.diagnostics.some`.
@@ -2652,7 +2652,7 @@ test("mismatched inventory authority cannot become a cross-member bound relation
     assert.equal(
       api?.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "demand" and record_inventory equals "bound".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "demand" && record.inventory === "bound"` result consumed by `api?.reconciliation.records.some`.
@@ -2668,7 +2668,7 @@ test("mismatched inventory authority cannot become a cross-member bound relation
     assert.equal(
       api?.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "demand" and record_disposition equals "inconclusive".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "demand" && record.disposition === "inconclusive"` result consumed by `api?.reconciliation.records.some`.
@@ -2695,7 +2695,7 @@ test("a broken deployment member does not erase an independently reconciled sibl
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “a broken deployment member does not erase an independently reconciled sibling”.
+     * Asserts the concrete test outcome “a broken deployment member does not erase an independently reconciled sibling” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -2731,7 +2731,7 @@ test("a broken deployment member does not erase an independently reconciled sibl
     assert.equal(
       api?.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "demand" and record_inventory equals "bound".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "demand" && record.inventory === "bound"` result consumed by `api?.reconciliation.records.some`.
@@ -2757,7 +2757,7 @@ test("an unresolved deployment root does not erase a valid sibling partition",
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “an unresolved deployment root does not erase a valid sibling partition”.
+     * Asserts the concrete test outcome “an unresolved deployment root does not erase a valid sibling partition” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -2820,7 +2820,7 @@ test("an unresolved deployment root does not erase a valid sibling partition",
     assert.equal(
       missing.diagnostics.some(
         /**
-        * Tests the current diagnostic against the requested condition.
+        * Evaluates predicate diagnostic equals "WORKSPACE_REPOSITORY_ROOT_UNAVAILABLE".
         *
         * Inputs: `diagnostic`.
         * Outputs: the `diagnostic === "WORKSPACE_REPOSITORY_ROOT_UNAVAILABLE"` result consumed by `missing.diagnostics.some`.
@@ -2846,7 +2846,7 @@ test("one repository can participate in separate deployments without provisionin
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “one repository can participate in separate deployments without provisioning or source-snapshot merge”.
+     * Asserts the concrete test outcome “one repository can participate in separate deployments without provisioning or source-snapshot merge” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -2891,7 +2891,7 @@ test("one repository can participate in separate deployments without provisionin
     assert.equal(
       first?.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "inventory" and record_providerResourceId_canonicalId equals "first-database".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "first-database"` result consumed by `first?.reconciliation.records.some`.
@@ -2905,7 +2905,7 @@ test("one repository can participate in separate deployments without provisionin
     assert.equal(
       first?.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "inventory" and record_providerResourceId_canonicalId equals "second-database".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "second-database"` result consumed by `first?.reconciliation.records.some`.
@@ -2919,7 +2919,7 @@ test("one repository can participate in separate deployments without provisionin
     assert.equal(
       second?.reconciliation.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_kind equals "inventory" and record_providerResourceId_canonicalId equals "second-database".
         *
         * Inputs: `record`.
         * Outputs: the `record.kind === "inventory" && record.providerResourceId.canonicalId === "second-database"` result consumed by `second?.reconciliation.records.some`.
@@ -2950,7 +2950,7 @@ test("workspace runtime exposes the exact narrow N5 port shape",
   const port: WorkspaceScanPort<WorkspaceScanReportSource> = createLocalWorkspaceScanPort();
   await withWorkspaceFixture(
     /**
-     * Verifies “workspace runtime exposes the exact narrow N5 port shape”.
+     * Asserts the concrete test outcome “workspace runtime exposes the exact narrow N5 port shape” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -2980,7 +2980,7 @@ test("runtime deployment preparation bounds broad binding and inventory fanout",
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “runtime deployment preparation bounds broad binding and inventory fanout”.
+     * Asserts the concrete test outcome “runtime deployment preparation bounds broad binding and inventory fanout” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -2992,7 +2992,7 @@ test("runtime deployment preparation bounds broad binding and inventory fanout",
     const candidateCount = 1_001;
     const repositoryIds = Array.from({ length: memberCount },
       /**
-      * Constructs one generated fixture element.
+      * Builds fixture value "fanout-" + String(index).
       *
       * Inputs: `_`, `index`.
       * Outputs: the `"fanout-" + String(index)` result consumed by `Array.from`.
@@ -3012,12 +3012,12 @@ test("runtime deployment preparation bounds broad binding and inventory fanout",
       (id) => mkdir(join(fixture.root, id), { recursive: true })));
     const memberScopes = repositoryIds.map(
       /**
-      * Projects a report value from the current index.
-      *
-      * Inputs: `repositoryId`, `index`.
-      * Outputs: the `({ repositoryId, scope: { id: "fanout-runtime", componentId: "fanout-runtime", phase: "runtime", stage: { kind: "exact", values: ["fanout-stage-" + String(index)] }, channel: "environment", ` result consumed by `repositoryIds.map`.
-       * Does not handle: Iterating the surrounding collection, validating sibling entries, or mutating source inputs.
-       * Side effects: Reads the current callback input and returns its projected in-memory value.
+       * Creates one repository-owned runtime/environment scope with an index-specific exact stage for the fanout fixture.
+       *
+       * Inputs: The current repository ID and its array index.
+       * Outputs: A member-scope declaration using the shared fanout component and a unique `fanout-stage-<index>` stage.
+       * Does not handle: Creating repository directories, validating cross-member scope overlap, or writing the manifest.
+       * Side effects: Allocates one nested fixture object.
        */
       (repositoryId, index) => ({
       repositoryId,
@@ -3038,7 +3038,7 @@ test("runtime deployment preparation bounds broad binding and inventory fanout",
     };
     const deployments = ["binding-fanout", "inventory-fanout"].map(
       /**
-      * Projects a report value from the current id.
+      * Extracts ({ id, repositories: repositoryIds, inputs: { bindings: "__/infra/" + id + "/bindings_json", inventory: "__/infra/" + id + "/inventory_json", memberScopes, }, }) for the enclosing assertion.
       *
       * Inputs: `id`.
       * Outputs: the `({ id, repositories: repositoryIds, inputs: { bindings: "../infra/" + id + "/bindings.json", inventory: "../infra/" + id + "/inventory.json", memberScopes, }, })` result consumed by `["binding-fanout", "inventory-fanout"].map`.
@@ -3060,7 +3060,7 @@ test("runtime deployment preparation bounds broad binding and inventory fanout",
         schemaVersion: "workspace-manifest/v2",
         repositories: repositoryIds.map(
           /**
-          * Projects a report value from the current id.
+          * Extracts ({ id, root: "__/" + id }) for the enclosing assertion.
           *
           * Inputs: `id`.
           * Outputs: the `({ id, root: "../" + id })` result consumed by `repositoryIds.map`.
@@ -3087,7 +3087,7 @@ test("runtime deployment preparation bounds broad binding and inventory fanout",
       const bindingCandidates = deployment.id === "binding-fanout"
         ? Array.from({ length: candidateCount },
           /**
-          * Constructs one generated fixture element.
+          * Builds fixture value bindingCandidate( "fanout", "binding-resource-" + String(index), "fixture-authority", broadScope, "exact", { kind: "all" }, String(index), ).
           *
           * Inputs: `_`, `index`.
           * Outputs: the `bindingCandidate( "fanout", "binding-resource-" + String(index), "fixture-authority", broadScope, "exact", { kind: "all" }, String(index), )` result consumed by `Array.from`.
@@ -3107,7 +3107,7 @@ test("runtime deployment preparation bounds broad binding and inventory fanout",
       const inventoryItems = deployment.id === "inventory-fanout"
         ? Array.from({ length: candidateCount },
           /**
-          * Constructs one generated fixture element.
+          * Builds fixture value inventoryItem( "fanout", "inventory-resource-" + String(index), "fixture-authority", broadScope, ).
           *
           * Inputs: `_`, `index`.
           * Outputs: the `inventoryItem( "fanout", "inventory-resource-" + String(index), "fixture-authority", broadScope, )` result consumed by `Array.from`.
@@ -3135,7 +3135,7 @@ test("runtime deployment preparation bounds broad binding and inventory fanout",
     assert.equal(
       deployment(result, "binding-fanout").diagnostics.some(
         /**
-        * Tests the current diagnostic against the requested condition.
+        * Evaluates predicate String(diagnostic) equals "WORKSPACE_DEPLOYMENT_BINDING_FANOUT_EXCEEDED".
         *
         * Inputs: `diagnostic`.
         * Outputs: the `String(diagnostic) === "WORKSPACE_DEPLOYMENT_BINDING_FANOUT_EXCEEDED"` result consumed by `deployment(result, "binding-fanout").diagnostics.some`.
@@ -3149,7 +3149,7 @@ test("runtime deployment preparation bounds broad binding and inventory fanout",
     assert.equal(
       deployment(result, "inventory-fanout").diagnostics.some(
         /**
-        * Tests the current diagnostic against the requested condition.
+        * Evaluates predicate String(diagnostic) equals "WORKSPACE_DEPLOYMENT_INVENTORY_FANOUT_EXCEEDED" or String(diagnostic) equals "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED".
         *
         * Inputs: `diagnostic`.
         * Outputs: the `String(diagnostic) === "WORKSPACE_DEPLOYMENT_INVENTORY_FANOUT_EXCEEDED" || String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED"` result consumed by `deployment(result, "inventory-fanout").diagnostics.some`.
@@ -3177,7 +3177,7 @@ test("runtime projection budget bounds source-rich member output deterministical
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “runtime projection budget bounds source-rich member output deterministically”.
+     * Asserts the concrete test outcome “runtime projection budget bounds source-rich member output deterministically” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -3190,7 +3190,7 @@ test("runtime projection budget bounds source-rich member output deterministical
     const repositoryIds = Array.from(
       { length: memberCount },
       /**
-      * Constructs one generated fixture element.
+      * Builds fixture value "projection-" + String(index).
       *
       * Inputs: `_`, `index`.
       * Outputs: the `"projection-" + String(index)` result consumed by `Array.from`.
@@ -3202,7 +3202,7 @@ test("runtime projection budget bounds source-rich member output deterministical
     const source = Array.from(
       { length: readsPerMember },
       /**
-      * Constructs one generated fixture element.
+      * Builds fixture value "export const value" + String(index) + " = process_env_PROJECTION_KEY_" + String(index) + ";".
       *
       * Inputs: `_`, `index`.
       * Outputs: the `"export const value" + String(index) + " = process.env.PROJECTION_KEY_" + String(index) + ";"` result consumed by `Array.from`.
@@ -3227,12 +3227,12 @@ test("runtime projection budget bounds source-rich member output deterministical
     }));
     const memberScopes = repositoryIds.map(
       /**
-      * Projects a report value from the current repositoryId.
-      *
-      * Inputs: `repositoryId`.
-      * Outputs: the `({ repositoryId, scope: { id: "scope-" + repositoryId, componentId: "component-" + repositoryId, phase: "runtime" as const, stage: { kind: "all" as const }, channel: "environment" as const, ` result consumed by `repositoryIds.map`.
-       * Does not handle: Iterating the surrounding collection, validating sibling entries, or mutating source inputs.
-       * Side effects: Reads the current callback input and returns its projected in-memory value.
+       * Creates one all-stage runtime/environment scope that isolates a projection-budget fixture repository.
+       *
+       * Inputs: The current repository ID.
+       * Outputs: A member-scope declaration whose scope and component IDs are derived from that repository ID.
+       * Does not handle: Creating source files, checking scope overlap, or updating the workspace manifest.
+       * Side effects: Allocates one nested fixture object.
        */
       (repositoryId) => ({
       repositoryId,
@@ -3248,7 +3248,7 @@ test("runtime projection budget bounds source-rich member output deterministical
       schemaVersion: "workspace-manifest/v2",
       repositories: repositoryIds.map(
         /**
-        * Projects a report value from the current id.
+        * Extracts ({ id, root: "__/" + id }) for the enclosing assertion.
         *
         * Inputs: `id`.
         * Outputs: the `({ id, root: "../" + id })` result consumed by `repositoryIds.map`.
@@ -3283,7 +3283,7 @@ test("runtime projection budget bounds source-rich member output deterministical
       .filter(isBudgetFallbackMember)
       .map(
         /**
-        * Projects a report value from the current member.
+        * Extracts member_repositoryId for the enclosing assertion.
         *
         * Inputs: `member`.
         * Outputs: the `member.repositoryId` result consumed by `first.members .filter(isBudgetFallbackMember) .map`.
@@ -3297,7 +3297,7 @@ test("runtime projection budget bounds source-rich member output deterministical
     assert.ok(emittedWorkspaceGraphFacts(firstWorkspace) <= 100_000);
     for (const member of first.members.filter(
       /**
-      * Tests the current entry against the requested condition.
+      * Evaluates predicate exhausted_includes(entry_repositoryId).
       *
       * Inputs: `entry`.
       * Outputs: the `exhausted.includes(entry.repositoryId)` result consumed by `first.members.filter`.
@@ -3311,7 +3311,7 @@ test("runtime projection budget bounds source-rich member output deterministical
       assert.equal(
         member.reconciliation.scopeCoverage.some(
           /**
-          * Tests the current coverage against the requested condition.
+          * Evaluates predicate coverage_state equals "incomplete".
           *
           * Inputs: `coverage`.
           * Outputs: the `coverage.state === "incomplete"` result consumed by `member.reconciliation.scopeCoverage.some`.
@@ -3324,7 +3324,7 @@ test("runtime projection budget bounds source-rich member output deterministical
       assert.equal(
         member.reconciliation.records.some(
           /**
-          * Tests the current record against the requested condition.
+          * Evaluates predicate record_coverage equals "complete".
           *
           * Inputs: `record`.
           * Outputs: the `record.coverage === "complete"` result consumed by `member.reconciliation.records.some`.
@@ -3341,7 +3341,7 @@ test("runtime projection budget bounds source-rich member output deterministical
       .filter(isBudgetFallbackMember)
       .map(
         /**
-        * Projects a report value from the current member.
+        * Extracts member_repositoryId for the enclosing assertion.
         *
         * Inputs: `member`.
         * Outputs: the `member.repositoryId` result consumed by `second.members .filter(isBudgetFallbackMember) .map`.
@@ -3365,7 +3365,7 @@ test("repository-only admission shares the invocation graph ledger",
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “repository-only admission shares the invocation graph ledger”.
+     * Asserts the concrete test outcome “repository-only admission shares the invocation graph ledger” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -3378,7 +3378,7 @@ test("repository-only admission shares the invocation graph ledger",
     const repositoryIds = Array.from(
       { length: repositoryCount },
       /**
-      * Constructs one generated fixture element.
+      * Builds fixture value "repository-budget-" + String(index).
       *
       * Inputs: `_`, `index`.
       * Outputs: the `"repository-budget-" + String(index)` result consumed by `Array.from`.
@@ -3390,7 +3390,7 @@ test("repository-only admission shares the invocation graph ledger",
     const source = Array.from(
       { length: readsPerRepository },
       /**
-      * Constructs one generated fixture element.
+      * Builds fixture value "export const value" + String(index) + " = process_env_REPOSITORY_BUDGET_KEY_" + String(index) + ";".
       *
       * Inputs: `_`, `index`.
       * Outputs: the `"export const value" + String(index) + " = process.env.REPOSITORY_BUDGET_KEY_" + String(index) + ";"` result consumed by `Array.from`.
@@ -3419,7 +3419,7 @@ test("repository-only admission shares the invocation graph ledger",
       schemaVersion: "workspace-manifest/v1",
       repositories: repositoryIds.map(
         /**
-        * Projects a report value from the current id.
+        * Extracts ({ id, root: "__/" + id }) for the enclosing assertion.
         *
         * Inputs: `id`.
         * Outputs: the `({ id, root: "../" + id })` result consumed by `repositoryIds.map`.
@@ -3437,7 +3437,7 @@ test("repository-only admission shares the invocation graph ledger",
       .filter(isBudgetFallbackResult)
       .map(
         /**
-        * Projects a report value from the current repository.
+        * Extracts repository_id for the enclosing assertion.
         *
         * Inputs: `repository`.
         * Outputs: the `repository.id` result consumed by `first.repositories .filter(isBudgetFallbackResult) .map`.
@@ -3453,7 +3453,7 @@ test("repository-only admission shares the invocation graph ledger",
     assert.deepEqual(
       second.repositories.filter(isBudgetFallbackResult).map(
         /**
-        * Projects a report value from the current repository.
+        * Extracts repository_id for the enclosing assertion.
         *
         * Inputs: `repository`.
         * Outputs: the `repository.id` result consumed by `second.repositories.filter(isBudgetFallbackResult).map`.
@@ -3478,7 +3478,7 @@ test("nested coverage evidence is admitted before Core record materialization",
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “nested coverage evidence is admitted before Core record materialization”.
+     * Asserts the concrete test outcome “nested coverage evidence is admitted before Core record materialization” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -3490,7 +3490,7 @@ test("nested coverage evidence is admitted before Core record materialization",
     const source = Array.from(
       { length: demandCount },
       /**
-      * Constructs one generated fixture element.
+      * Builds fixture value "export const value" + String(index) + " = process_env_NESTED_EVIDENCE_KEY_" + String(index) + ";".
       *
       * Inputs: `_`, `index`.
       * Outputs: the `"export const value" + String(index) + " = process.env.NESTED_EVIDENCE_KEY_" + String(index) + ";"` result consumed by `Array.from`.
@@ -3507,7 +3507,7 @@ test("nested coverage evidence is admitted before Core record materialization",
     const invalidCandidates = Array.from(
       { length: 1_000 },
       /**
-      * Constructs one generated fixture element.
+      * Builds fixture value ({ invalid: "not-a-binding-candidate" }).
       *
       * Inputs: no arguments.
       * Outputs: the `({ invalid: "not-a-binding-candidate" })` result consumed by `Array.from`.
@@ -3567,7 +3567,7 @@ test("workspace projection budget does not reset for the same source in later de
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “workspace projection budget does not reset for the same source in later deployments”.
+     * Asserts the concrete test outcome “workspace projection budget does not reset for the same source in later deployments” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -3579,7 +3579,7 @@ test("workspace projection budget does not reset for the same source in later de
     const reads = Array.from(
       { length: 1_001 },
       /**
-      * Constructs one generated fixture element.
+      * Builds fixture value "export const repeat" + String(index) + " = process_env_REPEAT_KEY_" + String(index) + ";".
       *
       * Inputs: `_`, `index`.
       * Outputs: the `"export const repeat" + String(index) + " = process.env.REPEAT_KEY_" + String(index) + ";"` result consumed by `Array.from`.
@@ -3597,12 +3597,12 @@ test("workspace projection budget does not reset for the same source in later de
     ]);
     const deployments = Array.from({ length: deploymentCount },
       /**
-      * Constructs one generated fixture element.
-      *
-      * Inputs: `_`, `index`.
-      * Outputs: the `({ id: "workspace-budget-" + String(index), repositories: ["api"], inputs: { bindings: "../infra/workspace-budget-repeat/bindings.json", inventory: "../infra/workspace-budget-repeat/inventor` result consumed by `Array.from`.
-       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
-       * Side effects: Produces only the current in-memory fixture value.
+       * Builds one API deployment declaration that reuses the workspace-budget provisioning inputs while retaining a unique member scope.
+       *
+       * Inputs: The unused Array.from value and deployment index.
+       * Outputs: A deployment record named `workspace-budget-<index>` with the shared binding/inventory descriptors and an index-specific API scope.
+       * Does not handle: Writing provisioning files, running the scan, or validating the manifest.
+       * Side effects: Allocates one nested deployment fixture object.
        */
       (_, index) => ({
       id: "workspace-budget-" + String(index),
@@ -3636,7 +3636,7 @@ test("workspace projection budget does not reset for the same source in later de
     const exhausted = first.deployments
       .filter(
         /**
-        * Tests the current entry against the requested condition.
+        * Evaluates predicate isBudgetFallbackMember(deploymentMember(entry, "api")).
         *
         * Inputs: `entry`.
         * Outputs: the `isBudgetFallbackMember(deploymentMember(entry, "api"))` result consumed by `first.deployments .filter`.
@@ -3665,7 +3665,7 @@ test("workspace projection budget does not reset for the same source in later de
       assert.equal(
         member.reconciliation.records.some(
           /**
-          * Tests the current record against the requested condition.
+          * Evaluates predicate record_coverage equals "complete".
           *
           * Inputs: `record`.
           * Outputs: the `record.coverage === "complete"` result consumed by `member.reconciliation.records.some`.
@@ -3681,7 +3681,7 @@ test("workspace projection budget does not reset for the same source in later de
     const exhaustedAgain = second.deployments
       .filter(
         /**
-        * Tests the current entry against the requested condition.
+        * Evaluates predicate isBudgetFallbackMember(deploymentMember(entry, "api")).
         *
         * Inputs: `entry`.
         * Outputs: the `isBudgetFallbackMember(deploymentMember(entry, "api"))` result consumed by `second.deployments .filter`.
@@ -3715,7 +3715,7 @@ test("scan-only deployments share one invocation budget and reset on the next sc
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “scan-only deployments share one invocation budget and reset on the next scan”.
+     * Asserts the concrete test outcome “scan-only deployments share one invocation budget and reset on the next scan” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -3726,7 +3726,7 @@ test("scan-only deployments share one invocation budget and reset on the next sc
     const reads = Array.from(
       { length: 1_001 },
       /**
-      * Constructs one generated fixture element.
+      * Builds fixture value "export const scanOnly" + String(index) + " = process_env_SCAN_ONLY_KEY_" + String(index) + ";".
       *
       * Inputs: `_`, `index`.
       * Outputs: the `"export const scanOnly" + String(index) + " = process.env.SCAN_ONLY_KEY_" + String(index) + ";"` result consumed by `Array.from`.
@@ -3738,7 +3738,7 @@ test("scan-only deployments share one invocation budget and reset on the next sc
     await writeFile(join(fixture.repositoryRoots.api, "src", "index.ts"), reads, "utf8");
     const deployments = Array.from({ length: 101 },
       /**
-      * Constructs one generated fixture element.
+      * Builds fixture value ({ id: "scan-only-budget-" + String(index), repositories: ["api"], }).
       *
       * Inputs: `_`, `index`.
       * Outputs: the `({ id: "scan-only-budget-" + String(index), repositories: ["api"], })` result consumed by `Array.from`.
@@ -3761,7 +3761,7 @@ test("scan-only deployments share one invocation budget and reset on the next sc
     const exhausted = first.deployments
       .filter(
         /**
-        * Tests the current entry against the requested condition.
+        * Evaluates predicate isBudgetFallbackMember(deploymentMember(entry, "api")).
         *
         * Inputs: `entry`.
         * Outputs: the `isBudgetFallbackMember(deploymentMember(entry, "api"))` result consumed by `first.deployments .filter`.
@@ -3792,7 +3792,7 @@ test("scan-only deployments share one invocation budget and reset on the next sc
     const exhaustedAgain = second.deployments
       .filter(
         /**
-        * Tests the current entry against the requested condition.
+        * Evaluates predicate isBudgetFallbackMember(deploymentMember(entry, "api")).
         *
         * Inputs: `entry`.
         * Outputs: the `isBudgetFallbackMember(deploymentMember(entry, "api"))` result consumed by `second.deployments .filter`.
@@ -3826,7 +3826,7 @@ test("shared-key output is withheld when source graph budget is exhausted",
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “shared-key output is withheld when source graph budget is exhausted”.
+     * Asserts the concrete test outcome “shared-key output is withheld when source graph budget is exhausted” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -3837,7 +3837,7 @@ test("shared-key output is withheld when source graph budget is exhausted",
     const reads = Array.from(
       { length: 900 },
       /**
-      * Constructs one generated fixture element.
+      * Builds fixture value "export const shared" + String(index) + " = process_env_SHARED_BUDGET_KEY_" + String(index) + ";".
       *
       * Inputs: `_`, `index`.
       * Outputs: the `"export const shared" + String(index) + " = process.env.SHARED_BUDGET_KEY_" + String(index) + ";"` result consumed by `Array.from`.
@@ -3852,7 +3852,7 @@ test("shared-key output is withheld when source graph budget is exhausted",
     ]);
     const deployments = Array.from({ length: 20 },
       /**
-      * Constructs one generated fixture element.
+      * Builds fixture value ({ id: "shared-key-budget-" + String(index), repositories: ["api", "worker"], }).
       *
       * Inputs: `_`, `index`.
       * Outputs: the `({ id: "shared-key-budget-" + String(index), repositories: ["api", "worker"], })` result consumed by `Array.from`.
@@ -3877,7 +3877,7 @@ test("shared-key output is withheld when source graph budget is exhausted",
     const result = await scanWorkspace(document.request);
     const budgetExhausted = result.deployments.filter(
       /**
-      * Tests the current entry against the requested condition.
+      * Evaluates predicate entry_diagnostics_some( (diagnostic) => String(diagnostic) equals "WORKSPACE_DEPLOYMENT_SHARED_KEY_BUDGET_EXCEEDED" or String(diagnostic) equals "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED",.
       *
       * Inputs: `entry`.
       * Outputs: the `entry.diagnostics.some( (diagnostic) => String(diagnostic) === "WORKSPACE_DEPLOYMENT_SHARED_KEY_BUDGET_EXCEEDED" || String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED", ` result consumed by `result.deployments.filter`.
@@ -3886,7 +3886,7 @@ test("shared-key output is withheld when source graph budget is exhausted",
        */
       (entry) => entry.diagnostics.some(
       /**
-      * Tests the current diagnostic against the requested condition.
+      * Evaluates predicate String(diagnostic) equals "WORKSPACE_DEPLOYMENT_SHARED_KEY_BUDGET_EXCEEDED" or String(diagnostic) equals "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED".
       *
       * Inputs: `diagnostic`.
       * Outputs: the `String(diagnostic) === "WORKSPACE_DEPLOYMENT_SHARED_KEY_BUDGET_EXCEEDED" || String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED"` result consumed by `entry.diagnostics.some`.
@@ -3928,7 +3928,7 @@ test("provisioning records share the invocation graph budget before Core materia
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “provisioning records share the invocation graph budget before Core materializes them”.
+     * Asserts the concrete test outcome “provisioning records share the invocation graph budget before Core materializes them” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -3952,12 +3952,12 @@ test("provisioning records share the invocation graph budget before Core materia
     };
     const candidates = Array.from({ length: 1_001 },
       /**
-      * Constructs one generated fixture element.
-      *
-      * Inputs: `_`, `index`.
-      * Outputs: the `({ id: "provisioning-binding-" + String(index), adapterId: "fixture", scope, destination: { namespace: "env", name: "PROVISIONING_KEY_" + String(index) }, sourceKind: "secret-manager", provi` result consumed by `Array.from`.
-       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
-       * Side effects: Produces only the current in-memory fixture value.
+       * Builds one exact secret-manager binding candidate with index-specific destination and provider-resource IDs for the provisioning graph budget.
+       *
+       * Inputs: The unused Array.from value and candidate index.
+       * Outputs: A complete fixture binding candidate using the shared all-stage runtime scope and always-applicable condition.
+       * Does not handle: Writing the binding manifest, resolving provider resources, or invoking the provisioning adapter.
+       * Side effects: Allocates one nested binding fixture object.
        */
       (_, index) => ({
       id: "provisioning-binding-" + String(index),
@@ -3981,7 +3981,7 @@ test("provisioning records share the invocation graph budget before Core materia
     }));
     const items = Array.from({ length: 1_001 },
       /**
-      * Constructs one generated fixture element.
+      * Builds fixture value ({ providerResourceId: { authorityId: "fixture-authority", canonicalId: "provisioning-resource-" + String(index), }, declaredScopes: [scope], }).
       *
       * Inputs: `_`, `index`.
       * Outputs: the `({ providerResourceId: { authorityId: "fixture-authority", canonicalId: "provisioning-resource-" + String(index), }, declaredScopes: [scope], })` result consumed by `Array.from`.
@@ -4001,12 +4001,12 @@ test("provisioning records share the invocation graph budget before Core materia
     ]);
     const deployments = Array.from({ length: 101 },
       /**
-      * Constructs one generated fixture element.
-      *
-      * Inputs: `_`, `index`.
-      * Outputs: the `({ id: "provisioning-graph-" + String(index).padStart(3, "0"), repositories: ["api"], inputs: { bindings: "../infra/provisioning-graph-budget/bindings.json", inventory: "../infra/provisionin` result consumed by `Array.from`.
-       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
-       * Side effects: Produces only the current in-memory fixture value.
+       * Builds one API deployment declaration that points to the shared provisioning-graph binding and inventory documents.
+       *
+       * Inputs: The unused Array.from value and deployment index.
+       * Outputs: A zero-padded `provisioning-graph-<index>` deployment with the shared API member scope.
+       * Does not handle: Creating provisioning documents, scanning, or validating the generated manifest.
+       * Side effects: Allocates one nested deployment fixture object.
        */
       (_, index) => ({
       id: "provisioning-graph-" + String(index).padStart(3, "0"),
@@ -4029,7 +4029,7 @@ test("provisioning records share the invocation graph budget before Core materia
     assert.ok(emittedWorkspaceGraphFacts(result) <= 100_000);
     assert.ok(result.deployments.some(
       /**
-      * Tests the current entry against the requested condition.
+      * Evaluates predicate deploymentMember(entry, "api")_reconciliation_records_length is at least 1_001.
       *
       * Inputs: `entry`.
       * Outputs: the `deploymentMember(entry, "api").reconciliation.records.length >= 1_001` result consumed by `result.deployments.some`.
@@ -4041,7 +4041,7 @@ test("provisioning records share the invocation graph budget before Core materia
     ));
     const exhausted = result.deployments.filter(
       /**
-      * Tests the current entry against the requested condition.
+      * Evaluates predicate isBudgetFallbackMember(deploymentMember(entry, "api")).
       *
       * Inputs: `entry`.
       * Outputs: the `isBudgetFallbackMember(deploymentMember(entry, "api"))` result consumed by `result.deployments.filter`.
@@ -4072,7 +4072,7 @@ test("finite condition partition floods fall back before Core selection material
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “finite condition partition floods fall back before Core selection materializes”.
+     * Asserts the concrete test outcome “finite condition partition floods fall back before Core selection materializes” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -4097,12 +4097,12 @@ test("finite condition partition floods fall back before Core selection material
     // after resolution. This deliberately stays under the 5 MiB input gate.
     const candidates = Array.from({ length: 10_000 },
       /**
-      * Constructs one generated fixture element.
-      *
-      * Inputs: `_`, `index`.
-      * Outputs: the `({ id: "c" + String(index), adapterId: "a", scope, destination: { namespace: "env", name: "F" }, sourceKind: "external", appliesWhen: { executionUnitIds: [scope.id], phases: ["runtime"], sta` result consumed by `Array.from`.
-       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
-       * Side effects: Produces only the current in-memory fixture value.
+       * Builds one externally sourced binding candidate with an index-specific finite condition clause for condition-partition flooding.
+       *
+       * Inputs: The unused Array.from value and candidate index.
+       * Outputs: An exact candidate for destination `F` that shares the fixture scope but differs by condition value.
+       * Does not handle: Writing adapter input, resolving bindings, or evaluating the condition.
+       * Side effects: Allocates one nested binding fixture object.
        */
       (_, index) => ({
       id: "c" + String(index),
@@ -4162,7 +4162,7 @@ test("finite condition partition floods fall back before Core selection material
     assert.equal(
       entry.diagnostics.some(
         /**
-        * Tests the current diagnostic against the requested condition.
+        * Evaluates predicate String(diagnostic) equals "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED".
         *
         * Inputs: `diagnostic`.
         * Outputs: the `String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED"` result consumed by `entry.diagnostics.some`.
@@ -4195,7 +4195,7 @@ test("inventory projection bounds 10k by 10k resource matches without pairwise w
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “inventory projection bounds 10k by 10k resource matches without pairwise work”.
+     * Asserts the concrete test outcome “inventory projection bounds 10k by 10k resource matches without pairwise work” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -4222,12 +4222,12 @@ test("inventory projection bounds 10k by 10k resource matches without pairwise w
     // exceed the invocation cap, so Core must never receive these candidates.
     const candidates = Array.from({ length: 10_000 },
       /**
-      * Constructs one generated fixture element.
-      *
-      * Inputs: `_`, `index`.
-      * Outputs: the `({ id: "c" + String(index), adapterId: "a", scope, destination: { namespace: "env", name: "K" + String(index) }, sourceKind: "external", providerResourceId: { authorityId: "a", canonicalId: ` result consumed by `Array.from`.
-       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
-       * Side effects: Produces only the current in-memory fixture value.
+       * Builds one externally sourced binding candidate with a unique environment destination and matching provider resource for projection fanout.
+       *
+       * Inputs: The unused Array.from value and candidate index.
+       * Outputs: An exact candidate whose `K<index>` destination and `r<index>` resource identity are distinct.
+       * Does not handle: Creating inventory items, running reconciliation, or writing adapter input.
+       * Side effects: Allocates one nested binding fixture object.
        */
       (_, index) => ({
       id: "c" + String(index),
@@ -4260,7 +4260,7 @@ test("inventory projection bounds 10k by 10k resource matches without pairwise w
       asOf: "2026-07-12T00:00:00Z",
       items: Array.from({ length: 10_000 },
         /**
-        * Constructs one generated fixture element.
+        * Builds fixture value ({ providerResourceId: { authorityId: "a", canonicalId: "r" + String(index) }, }).
         *
         * Inputs: `_`, `index`.
         * Outputs: the `({ providerResourceId: { authorityId: "a", canonicalId: "r" + String(index) }, })` result consumed by `Array.from`.
@@ -4299,7 +4299,7 @@ test("inventory projection bounds 10k by 10k resource matches without pairwise w
     assert.equal(
       entry.diagnostics.some(
         /**
-        * Tests the current diagnostic against the requested condition.
+        * Evaluates predicate String(diagnostic) equals "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED".
         *
         * Inputs: `diagnostic`.
         * Outputs: the `String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED"` result consumed by `entry.diagnostics.some`.
@@ -4329,7 +4329,7 @@ test("maximum legal deployment membership reserves compact fallback and aggregat
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “maximum legal deployment membership reserves compact fallback and aggregate status capacity”.
+     * Asserts the concrete test outcome “maximum legal deployment membership reserves compact fallback and aggregate status capacity” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -4339,7 +4339,7 @@ test("maximum legal deployment membership reserves compact fallback and aggregat
     async (fixture) => {
     const repositoryIds = Array.from({ length: 5 },
       /**
-      * Constructs one generated fixture element.
+      * Builds fixture value "r" + String(index).
       *
       * Inputs: `_`, `index`.
       * Outputs: the `"r" + String(index)` result consumed by `Array.from`.
@@ -4361,7 +4361,7 @@ test("maximum legal deployment membership reserves compact fallback and aggregat
     ));
     const deployments = Array.from({ length: 10_000 },
       /**
-      * Constructs one generated fixture element.
+      * Builds fixture value ({ id: "d" + String(index), repositories: repositoryIds, }).
       *
       * Inputs: `_`, `index`.
       * Outputs: the `({ id: "d" + String(index), repositories: repositoryIds, })` result consumed by `Array.from`.
@@ -4376,7 +4376,7 @@ test("maximum legal deployment membership reserves compact fallback and aggregat
       schemaVersion: "workspace-manifest/v1",
       repositories: repositoryIds.map(
         /**
-        * Projects a report value from the current id.
+        * Extracts ({ id, root: "__/" + id }) for the enclosing assertion.
         *
         * Inputs: `id`.
         * Outputs: the `({ id, root: "../" + id })` result consumed by `repositoryIds.map`.
@@ -4394,7 +4394,7 @@ test("maximum legal deployment membership reserves compact fallback and aggregat
     assert.equal(
       result.deployments.reduce(
         /**
-        * Accumulates facts for the current entry.
+        * Sums the member partitions of each maximum-cardinality deployment for the capacity assertion.
         *
         * Inputs: `count`, `entry`.
         * Outputs: the next accumulator value `count + entry.members.length`.
@@ -4406,7 +4406,7 @@ test("maximum legal deployment membership reserves compact fallback and aggregat
     );
     assert.equal(result.deployments.every(
       /**
-      * Tests the current entry against the requested condition.
+      * Evaluates predicate entry_diagnostics_length is at most 1.
       *
       * Inputs: `entry`.
       * Outputs: the `entry.diagnostics.length <= 1` result consumed by `result.deployments.every`.
@@ -4417,7 +4417,7 @@ test("maximum legal deployment membership reserves compact fallback and aggregat
     assert.ok(emittedWorkspaceGraphFacts(result) <= 100_000);
     assert.ok(result.deployments.some(
       /**
-      * Tests the current entry against the requested condition.
+      * Evaluates predicate entry_members_some(isBudgetFallbackMember).
       *
       * Inputs: `entry`.
       * Outputs: the `entry.members.some(isBudgetFallbackMember)` result consumed by `result.deployments.some`.
@@ -4443,7 +4443,7 @@ test("invocation document cache reuses verified reads and caps unique input byte
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “invocation document cache reuses verified reads and caps unique input bytes before parse”.
+     * Asserts the concrete test outcome “invocation document cache reuses verified reads and caps unique input bytes before parse” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -4492,12 +4492,12 @@ test("invocation document cache reuses verified reads and caps unique input byte
     });
     const deploymentFor =
       /**
-       * Verifies “invocation document cache reuses verified reads and caps unique input bytes before parse”.
+       * Builds one API deployment declaration that selects a binding filename while sharing the cache-budget inventory document.
        *
-      * Inputs: `id`, `binding`.
-      * Outputs: a promise that settles after its awaited workspace operations and assertions.
-       * Does not handle: Recovering fixture setup, runtime-operation, or assertion failures; the test runner observes them.
-      * Side effects: runs `scope`.
+       * Inputs: A deployment ID and binding-document filename.
+       * Outputs: A one-member deployment with descriptors under the input-budget fixture directory and a matching generated scope.
+       * Does not handle: Writing input files, parsing the manifest, or invoking the workspace scanner.
+       * Side effects: Calls `scope` and allocates one nested deployment object.
        */
       (id: string, binding: string) => ({
       id,
@@ -4513,7 +4513,7 @@ test("invocation document cache reuses verified reads and caps unique input byte
       deploymentFor("cache-01", "repeat.json"),
       ...Array.from({ length: 23 },
         /**
-        * Constructs one generated fixture element.
+        * Builds fixture value deploymentFor("input-" + String(index)_padStart(2, "0"), "unique-" + String(index) + "_json").
         *
         * Inputs: `_`, `index`.
         * Outputs: the `deploymentFor("input-" + String(index).padStart(2, "0"), "unique-" + String(index) + ".json")` result consumed by `Array.from`.
@@ -4538,7 +4538,7 @@ test("invocation document cache reuses verified reads and caps unique input byte
     assert.equal(
       deploymentMember(cachedSecond, "api").diagnostics.some(
         /**
-        * Tests the current diagnostic against the requested condition.
+        * Evaluates predicate String(diagnostic) equals "APP_LOCAL_INPUT_BUDGET_EXCEEDED".
         *
         * Inputs: `diagnostic`.
         * Outputs: the `String(diagnostic) === "APP_LOCAL_INPUT_BUDGET_EXCEEDED"` result consumed by `deploymentMember(cachedSecond, "api").diagnostics.some`.
@@ -4552,7 +4552,7 @@ test("invocation document cache reuses verified reads and caps unique input byte
     assert.equal(
       deploymentMember(overflow, "api").diagnostics.some(
         /**
-        * Tests the current diagnostic against the requested condition.
+        * Evaluates predicate String(diagnostic) equals "APP_LOCAL_INPUT_BUDGET_EXCEEDED".
         *
         * Inputs: `diagnostic`.
         * Outputs: the `String(diagnostic) === "APP_LOCAL_INPUT_BUDGET_EXCEEDED"` result consumed by `deploymentMember(overflow, "api").diagnostics.some`.
@@ -4579,7 +4579,7 @@ test("an evicted descriptor payload cannot silently mix a later input snapshot",
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “an evicted descriptor payload cannot silently mix a later input snapshot”.
+     * Asserts the concrete test outcome “an evicted descriptor payload cannot silently mix a later input snapshot” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -4611,12 +4611,12 @@ test("an evicted descriptor payload cannot silently mix a later input snapshot",
     const fillerCount = Math.ceil(MAX_WORKSPACE_INVOCATION_DOCUMENT_CACHE_ENTRIES / 2);
     const fillers = Array.from({ length: fillerCount },
       /**
-      * Constructs one generated fixture element.
-      *
-      * Inputs: `_`, `index`.
-      * Outputs: the `({ id: "descriptor-filler-" + String(index).padStart(4, "0"), repositories: ["api"], inputs: { bindings: "../infra/descriptor-snapshot/filler-" + String(index) + "-bindings.json", inventory:` result consumed by `Array.from`.
-       * Does not handle: Inserting this value into a collection, executing a scan, or performing I/O.
-       * Side effects: Produces only the current in-memory fixture value.
+       * Builds one descriptor-cache filler deployment with unique binding and inventory document paths.
+       *
+       * Inputs: The unused Array.from value and filler index.
+       * Outputs: A zero-padded `descriptor-filler-<index>` API deployment using that filler pair and the shared scope.
+       * Does not handle: Writing the filler files, invoking cache reads, or reconciling the deployment.
+       * Side effects: Allocates one nested deployment fixture object.
        */
       (_, index) => ({
       id: "descriptor-filler-" + String(index).padStart(4, "0"),
@@ -4737,7 +4737,7 @@ test("an evicted descriptor payload cannot silently mix a later input snapshot",
       assert.equal(
         analysis.diagnostics.some(
           /**
-          * Tests the current diagnostic against the requested condition.
+          * Evaluates predicate String(diagnostic) equals "APP_LOCAL_INPUT_SNAPSHOT_CHANGED".
           *
           * Inputs: `diagnostic`.
           * Outputs: the `String(diagnostic) === "APP_LOCAL_INPUT_SNAPSHOT_CHANGED"` result consumed by `analysis.diagnostics.some`.
@@ -4750,7 +4750,7 @@ test("an evicted descriptor payload cannot silently mix a later input snapshot",
       );
       assert.equal(analysis.result.records.some(
         /**
-        * Tests the current record against the requested condition.
+        * Evaluates predicate record_coverage equals "complete".
         *
         * Inputs: `record`.
         * Outputs: the `record.coverage === "complete"` result consumed by `analysis.result.records.some`.
@@ -4776,7 +4776,7 @@ test("coverage-gap fanout is budgeted without retaining a partial member gap gra
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “coverage-gap fanout is budgeted without retaining a partial member gap graph”.
+     * Asserts the concrete test outcome “coverage-gap fanout is budgeted without retaining a partial member gap graph” after its declared setup and operation.
      *
     * Inputs: `fixture`.
     * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -4786,7 +4786,7 @@ test("coverage-gap fanout is budgeted without retaining a partial member gap gra
     async (fixture) => {
     const repositoryIds = Array.from({ length: 100 },
       /**
-      * Constructs one generated fixture element.
+      * Builds fixture value "gap-" + String(index).
       *
       * Inputs: `_`, `index`.
       * Outputs: the `"gap-" + String(index)` result consumed by `Array.from`.
@@ -4812,7 +4812,7 @@ test("coverage-gap fanout is budgeted without retaining a partial member gap gra
     await mkdir(inputRoot, { recursive: true });
     const malformedCandidates = Array.from({ length: 1_001 },
       /**
-      * Constructs one generated fixture element.
+      * Builds fixture value ({ invalid: "x"_repeat(5_000), }).
       *
       * Inputs: no arguments.
       * Outputs: the `({ invalid: "x".repeat(5_000), })` result consumed by `Array.from`.
@@ -4832,7 +4832,7 @@ test("coverage-gap fanout is budgeted without retaining a partial member gap gra
     ]);
     const memberScopes = repositoryIds.map(
       /**
-      * Projects a report value from the current repositoryId.
+      * Extracts ({ repositoryId, scope: { id: "coverage-" + repositoryId, componentId: "coverage-" + repositoryId, phase: "runtime", stage: { kind: "all" }, channel: "environment", }, }) for the enclosing assertion.
       *
       * Inputs: `repositoryId`.
       * Outputs: the `({ repositoryId, scope: { id: "coverage-" + repositoryId, componentId: "coverage-" + repositoryId, phase: "runtime", stage: { kind: "all" }, channel: "environment", }, })` result consumed by `repositoryIds.map`.
@@ -4853,7 +4853,7 @@ test("coverage-gap fanout is budgeted without retaining a partial member gap gra
       schemaVersion: "workspace-manifest/v2",
       repositories: repositoryIds.map(
         /**
-        * Projects a report value from the current id.
+        * Extracts ({ id, root: "__/" + id }) for the enclosing assertion.
         *
         * Inputs: `id`.
         * Outputs: the `({ id, root: "../" + id })` result consumed by `repositoryIds.map`.
@@ -4878,7 +4878,7 @@ test("coverage-gap fanout is budgeted without retaining a partial member gap gra
     assert.equal(
       fanout.diagnostics.some(
         /**
-        * Tests the current diagnostic against the requested condition.
+        * Evaluates predicate String(diagnostic) equals "WORKSPACE_DEPLOYMENT_COVERAGE_GAP_FANOUT_EXCEEDED".
         *
         * Inputs: `diagnostic`.
         * Outputs: the `String(diagnostic) === "WORKSPACE_DEPLOYMENT_COVERAGE_GAP_FANOUT_EXCEEDED"` result consumed by `fanout.diagnostics.some`.
@@ -4894,7 +4894,7 @@ test("coverage-gap fanout is budgeted without retaining a partial member gap gra
       assert.equal(
         member.diagnostics.some(
           /**
-          * Tests the current diagnostic against the requested condition.
+          * Evaluates predicate String(diagnostic) equals "WORKSPACE_MEMBER_COVERAGE_GAP_FANOUT_EXCEEDED".
           *
           * Inputs: `diagnostic`.
           * Outputs: the `String(diagnostic) === "WORKSPACE_MEMBER_COVERAGE_GAP_FANOUT_EXCEEDED"` result consumed by `member.diagnostics.some`.
@@ -4908,7 +4908,7 @@ test("coverage-gap fanout is budgeted without retaining a partial member gap gra
       assert.equal(
         member.reconciliation.records.some(
           /**
-          * Tests the current record against the requested condition.
+          * Evaluates predicate record_coverage equals "complete".
           *
           * Inputs: `record`.
           * Outputs: the `record.coverage === "complete"` result consumed by `member.reconciliation.records.some`.
@@ -5389,12 +5389,12 @@ function closedModelDocumentForSharedWorkspaceRuntime(): object {
     maxFiniteKeyDomain: 8,
     scopes: ["api", "worker"].map(
       /**
-      * Projects a report value from the current repositoryId.
-      *
-      * Inputs: `repositoryId`.
-      * Outputs: the `({ scope: productionMemberExecutionScope(repositoryId), declaredStages: ["production"], closed: true, approvedFirstPartyRoots: [repositoryId], bindingRoots: ["infra/shared-production/binding` result consumed by `["api", "worker"].map`.
-       * Does not handle: Iterating the surrounding collection, validating sibling entries, or mutating source inputs.
-       * Side effects: Reads the current callback input and returns its projected in-memory value.
+       * Creates the closed-model record for one production member of the shared API/worker deployment.
+       *
+       * Inputs: The member repository ID.
+       * Outputs: Its production scope, approved first-party root, expected binding input, inventory authority, and empty exemption/mechanism lists.
+       * Does not handle: Reading the closed-model file, validating the model, or sharing data with the other member record.
+       * Side effects: Calls `productionMemberExecutionScope` and allocates nested model configuration objects.
        */
       (repositoryId) => ({
       scope: productionMemberExecutionScope(repositoryId),

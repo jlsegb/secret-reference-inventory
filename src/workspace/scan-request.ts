@@ -40,7 +40,7 @@ const ISSUED_SCAN_REQUESTS = new WeakMap<object, WorkspaceScanRequestContext>();
  *
  * Inputs: A bounded-read capability issued by the local manifest reader.
  * Outputs: An issued manifest token and opaque scan request, or read-invalid/manifest-invalid without source paths or text.
- * Does not handle: Arbitrary strings, copied bounded-read results, malformed manifests, or later filesystem changes.
+ * Does not handle: Arbitrary strings or copied bounded-read results, later filesystem changes, or recovery from an invalid manifest; malformed manifest text is reported as `manifest-invalid`.
  * Side effects: Parses the retained manifest text and registers an opaque request context in a private WeakMap.
  */
 export function parseVerifiedWorkspaceManifestRead(

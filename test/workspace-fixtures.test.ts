@@ -14,7 +14,7 @@ import {
 
 test("multi-repository fixture uses safe sibling roots and explicit deployment layouts",
   /**
-   * Verifies “multi-repository fixture uses safe sibling roots and explicit deployment layouts”.
+   * Asserts the concrete test outcome “multi-repository fixture uses safe sibling roots and explicit deployment layouts” after its declared setup and operation.
    *
    * Inputs: no arguments.
    * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -24,7 +24,7 @@ test("multi-repository fixture uses safe sibling roots and explicit deployment l
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “multi-repository fixture uses safe sibling roots and explicit deployment layouts”.
+     * Asserts the concrete test outcome “multi-repository fixture uses safe sibling roots and explicit deployment layouts” after its declared setup and operation.
      *
      * Inputs: `fixture`.
      * Outputs: a promise that settles after its awaited workspace operations and assertions.
@@ -81,7 +81,7 @@ test("fixture isolates parser failure and user-controlled lookup behavior",
   async () => {
   await withWorkspaceFixture(
     /**
-     * Verifies “fixture isolates parser failure and user-controlled lookup behavior”.
+     * Asserts the concrete test outcome “fixture isolates parser failure and user-controlled lookup behavior” after its declared setup and operation.
      *
      * Inputs: `fixture`.
      * Outputs: a promise that settles after its awaited workspace operations and assertions.

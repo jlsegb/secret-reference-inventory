@@ -351,7 +351,7 @@ test("workspace request construction never forwards path-like or structured shor
  *
  * Inputs: `viewer`.
  * Outputs: A promise resolving to the complete viewer response decoded as UTF-8.
- * Does not handle: Redirect policy, HTTP status validation, or page-content assertions.
+ * Does not handle: Redirect policy, HTTP status validation, response-size limits, or page-content assertions.
  * Side effects: Starts a loopback HTTP GET and installs response/error listeners.
  */
 async function request(viewer: LocalReportViewer): Promise<string> {
@@ -371,7 +371,7 @@ async function request(viewer: LocalReportViewer): Promise<string> {
        *
        * Inputs: `response`.
        * Outputs: `void`; the registered event handlers later resolve a UTF-8 page or reject on response error.
-       * Does not handle: Starting an additional request, checking redaction, or retaining buffers after resolution.
+ * Does not handle: Starting an additional request, checking redaction, imposing a response-size limit, or retaining buffers after resolution.
        * Side effects: Adds data/error/end listeners and captures received buffers in `chunks`.
        */
       (response) => {
