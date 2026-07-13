@@ -154,12 +154,12 @@ export async function attestVerifiedWorkspaceDeploymentMembers(
 }
 
 /**
- * Attests and caches a provisioning deployment's declared documents after source/shared-key preflight admission.
+ * Attests a provisioning deployment's declared documents once, then reuses that invocation-local attestation.
  *
  * Inputs: A preparation capability previously issued for one deployment.
- * Outputs: The same token after a scan-only fast path or after full attestation; declared document read/parse/budget failures remain as AttestedJsonReadResult entries, while only unknown tokens, failed provenance/revalidation, or unexpected failures return undefined.
- * Does not handle: Source scanning, provider calls, per-document adapter interpretation, or retrying a failed local read.
- * Side effects: Revalidates request provenance, performs bounded local I/O when provisioning applies, caches document-result failures as well as successes, and writes the full WeakMap attestation.
+ * Outputs: The same token after a scan-only fast path, a cached provisioning-attestation hit, or first full attestation; declared document read/parse/budget failures remain as AttestedJsonReadResult entries, while an unknown token, failed first-attestation provenance check, or unexpected failure returns undefined.
+ * Does not handle: Source scanning, provider calls, per-document adapter interpretation, retrying a failed local read, or revalidating provenance on a cached-attestation hit.
+ * Side effects: On the first provisioning attestation only, revalidates request provenance, performs bounded local I/O, caches document-result failures as well as successes, and writes the full WeakMap attestation; scan-only and cached hits return before filesystem I/O or revalidation.
  */
 export async function attestVerifiedWorkspaceDeploymentInputs(
   input: unknown,

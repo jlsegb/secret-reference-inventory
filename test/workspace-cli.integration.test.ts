@@ -42,13 +42,12 @@ const emptyReconciliation: ReconciliationResult = { records: [], scopeCoverage: 
 
 test("workspace scan writes a deterministic versioned report and returns incomplete status on request",
   /**
-   * Asserts the concrete test outcome “workspace scan writes a deterministic versioned report and returns incomplete status on request” after its declared setup and operation.
-   *
-   * Inputs: `t`.
-   * Outputs: a promise that settles after its awaited workspace operations and assertions.
-   * Does not handle: Recovering fixture, CLI, or assertion failures; those reject the test callback.
-   * Side effects: runs `writeManifest`, `t.after`, `runCli`, `createLocalCliHandlers`, `scanPort`, `assert.equal`.
-   */
+ * Verifies the callback behavior for “workspace scan writes a deterministic versioned report and returns incomplete status on request”.
+ * Inputs: Receives `t` from its caller. It invokes `writeManifest`, `after`, `rmParent`, `runCli`, `createLocalCliHandlers`, `scanPort`, `push`, `equal`, `join`, `parse`.
+ * Outputs: A promise that resolves only after 5 equal, 1 deepEqual assertion groups establish “workspace scan writes a deterministic versioned report and returns incomplete status on request”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
+ * Side effects: Mutates only test-controlled state through `push`. Failures are not caught.
+ */
   async (t) => {
   const manifestPath = await writeManifest();
   t.after(
@@ -123,13 +122,12 @@ test("workspace scan writes a deterministic versioned report and returns incompl
 
 test("workspace scan uses the default N3 local port when no test port is injected",
   /**
-   * Asserts the concrete test outcome “workspace scan uses the default N3 local port when no test port is injected” after its declared setup and operation.
-   *
-   * Inputs: `t`.
-   * Outputs: a promise that settles after its awaited workspace operations and assertions.
-   * Does not handle: Recovering manifest, CLI, or assertion failures; the test runner observes them.
-   * Side effects: runs `writeManifest`, `t.after`, `runCli`, `createLocalCliHandlers`, `assert.equal`, `stderr.join`.
-   */
+ * Verifies the callback behavior for “workspace scan uses the default N3 local port when no test port is injected”.
+ * Inputs: Receives `t` from its caller. It invokes `writeManifest`, `after`, `rmParent`, `runCli`, `createLocalCliHandlers`, `push`, `equal`, `join`, `parse`.
+ * Outputs: A promise that resolves only after 5 equal assertion establish “workspace scan uses the default N3 local port when no test port is injected”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
+ * Side effects: Mutates only test-controlled state through `push`. Failures are not caught.
+ */
   async (t) => {
   const manifestPath = await writeManifest();
   t.after(
@@ -191,13 +189,12 @@ test("workspace scan uses the default N3 local port when no test port is injecte
 
 test("workspace UI launches a loopback-only viewer from derived report data",
   /**
-   * Exercises the “workspace UI launches a loopback-only viewer from derived report data” scenario through `writeManifest`, `after`, `rmParent`, `runCli`, `createLocalCliHandlers`.
-   *
-   * Inputs: The Node test context `t` plus the fixture and imports established for “workspace UI launches a loopback-only viewer from derived report data”.
-   * Outputs: Normal completion only after the “workspace UI launches a loopback-only viewer from derived report data” assertions hold; setup, assertion, and awaited-operation failures propagate.
-   * Does not handle: It neither invokes an installed binary nor exposes an externally reachable listener; it drives injected CLI collaborators against the test-created manifest path.
-   * Side effects: Drives the loopback test resource through `writeManifest`, `after`, `rmParent`, `runCli`, `createLocalCliHandlers`.
-   */
+ * Verifies the callback behavior for “workspace UI launches a loopback-only viewer from derived report data”.
+ * Inputs: Receives `t` from its caller. It invokes `writeManifest`, `after`, `rmParent`, `runCli`, `createLocalCliHandlers`, `scanPort`, `startLocalReportViewer`, `push`, `all`, `map`.
+ * Outputs: A promise that resolves only after 4 equal, 2 match assertion groups establish “workspace UI launches a loopback-only viewer from derived report data”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
+ * Side effects: Mutates only test-controlled state through `push`. Failures are not caught.
+ */
   async (t) => {
   const manifestPath = await writeManifest();
   t.after(
@@ -285,13 +282,12 @@ test("workspace UI launches a loopback-only viewer from derived report data",
 
 test("workspace invalid input and required-complete UI return nonzero without launching",
   /**
-   * Exercises the “workspace invalid input and required-complete UI return nonzero without launching” scenario through `mkdtemp`, `join`, `tmpdir`, `after`, `rm`.
-   *
-   * Inputs: The Node test context `t` plus the fixture and imports established for “workspace invalid input and required-complete UI return nonzero without launching”.
-   * Outputs: Normal completion only after the “workspace invalid input and required-complete UI return nonzero without launching” assertions hold; setup, assertion, and awaited-operation failures propagate.
-   * Does not handle: It neither invokes an installed binary nor exposes an externally reachable listener; it drives injected CLI collaborators against the test-created manifest path.
-   * Side effects: Creates, changes, or removes test-owned fixture files through `mkdtemp`, `join`, `tmpdir`, `after`, `rm`.
-   */
+ * Verifies the callback behavior for “workspace invalid input and required-complete UI return nonzero without launching”.
+ * Inputs: Receives `t` from its caller. It invokes `mkdtemp`, `join`, `tmpdir`, `after`, `rm`, `runCli`, `createLocalCliHandlers`, `scanPort`, `push`, `equal`.
+ * Outputs: A promise that resolves only after 5 equal assertion establish “workspace invalid input and required-complete UI return nonzero without launching”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
+ * Side effects: Mutates only test-controlled state through `rm`, `push`. Failures are not caught.
+ */
   async (t) => {
   const root = await mkdtemp(join(tmpdir(), "secret-usage-workspace-cli-invalid-"));
   t.after(
@@ -389,13 +385,12 @@ test("workspace invalid input and required-complete UI return nonzero without la
 
 test("workspace UI rejects synthetic-row viewer overflow before starting a listener",
   /**
-   * Asserts the concrete test outcome “workspace UI rejects synthetic-row viewer overflow before starting a listener” after its declared setup and operation.
-   *
-   * Inputs: `t`.
-   * Outputs: a promise that settles after its awaited workspace operations and assertions.
-   * Does not handle: Recovering fixture, CLI, or assertion failures; the test runner observes them.
-   * Side effects: runs `writeManifest`, `t.after`, `runCli`, `createLocalCliHandlers`, `overflowingScanPort`, `assert.equal`.
-   */
+ * Verifies the callback behavior for “workspace UI rejects synthetic-row viewer overflow before starting a listener”.
+ * Inputs: Receives `t` from its caller. It invokes `writeManifest`, `after`, `rmParent`, `runCli`, `createLocalCliHandlers`, `overflowingScanPort`, `push`, `equal`, `join`.
+ * Outputs: A promise that resolves only after 3 equal assertion establish “workspace UI rejects synthetic-row viewer overflow before starting a listener”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
+ * Side effects: Mutates only test-controlled state through `push`. Failures are not caught.
+ */
   async (t) => {
   const manifestPath = await writeManifest();
   t.after(
@@ -457,13 +452,12 @@ test("workspace UI rejects synthetic-row viewer overflow before starting a liste
 
 test("workspace UI closes a started viewer when writing its URL fails",
   /**
-   * Exercises the “workspace UI closes a started viewer when writing its URL fails” scenario through `writeManifest`, `after`, `rmParent`, `runCli`, `createLocalCliHandlers`.
-   *
-   * Inputs: The Node test context `t` plus the fixture and imports established for “workspace UI closes a started viewer when writing its URL fails”.
-   * Outputs: Normal completion only after the “workspace UI closes a started viewer when writing its URL fails” assertions hold; setup, assertion, and awaited-operation failures propagate.
-   * Does not handle: It neither invokes an installed binary nor exposes an externally reachable listener; it drives injected CLI collaborators against the test-created manifest path.
-   * Side effects: Drives the loopback test resource through `writeManifest`, `after`, `rmParent`, `runCli`, `createLocalCliHandlers`.
-   */
+ * Verifies the callback behavior for “workspace UI closes a started viewer when writing its URL fails”.
+ * Inputs: Receives `t` from its caller. It invokes `writeManifest`, `after`, `rmParent`, `runCli`, `createLocalCliHandlers`, `scanPort`, `push`, `equal`, `join`.
+ * Outputs: A promise that resolves only after 3 equal assertion establish “workspace UI closes a started viewer when writing its URL fails”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
+ * Side effects: Mutates only test-controlled state through `push`. Failures are not caught.
+ */
   async (t) => {
   const manifestPath = await writeManifest();
   t.after(
@@ -541,13 +535,12 @@ test("workspace UI closes a started viewer when writing its URL fails",
 
 test("workspace UI collapses adversarial report getters to a fixed error before viewer launch",
   /**
-   * Asserts the concrete test outcome “workspace UI collapses adversarial report getters to a fixed error before viewer launch” after its declared setup and operation.
-   *
-   * Inputs: `t`.
-   * Outputs: a promise that settles after its awaited workspace operations and assertions.
-   * Does not handle: Recovering setup, getter, CLI, or assertion failures; the test runner observes them.
-   * Side effects: runs `writeManifest`, `t.after`, `Object.create`, `Object.defineProperty`, `runCli`, `createLocalCliHandlers`.
-   */
+ * Verifies the callback behavior for “workspace UI collapses adversarial report getters to a fixed error before viewer launch”.
+ * Inputs: Receives `t` from its caller. It invokes `writeManifest`, `after`, `rmParent`, `create`, `defineProperty`, `runCli`, `createLocalCliHandlers`, `push`, `equal`, `join`.
+ * Outputs: A promise that resolves only after 5 equal assertion establish “workspace UI collapses adversarial report getters to a fixed error before viewer launch”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
+ * Side effects: Mutates only test-controlled state through `push`. Failures are not caught.
+ */
   async (t) => {
   const manifestPath = await writeManifest();
   t.after(

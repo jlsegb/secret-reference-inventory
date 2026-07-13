@@ -125,13 +125,12 @@ const parseUntrustedText = parseWorkspaceManifestText as unknown as (
 
 test("parses a versioned multi-repository JSONC workspace manifest",
   /**
-   * Exercises the “parses a versioned multi-repository JSONC workspace manifest” scenario through `join`, `parseWorkspaceManifestText`, `fail`, `stringify`, `equal`.
-   *
-   * Inputs: No callback parameters; it closes over the fixture and imports established for “parses a versioned multi-repository JSONC workspace manifest”.
-   * Outputs: Normal completion only after the “parses a versioned multi-repository JSONC workspace manifest” assertions hold; setup, assertion, and awaited-operation failures propagate.
-   * Does not handle: It neither reads a manifest path nor initiates a workspace scan; it parses or validates only the constructed in-memory input used by this test.
-   * Side effects: Runs assertions through `join`, `parseWorkspaceManifestText`, `fail`, `stringify`, `equal`; assertion failures escape.
-   */
+ * Verifies the callback behavior for “parses a versioned multi-repository JSONC workspace manifest”.
+ * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `join`, `parseWorkspaceManifestText`, `fail`, `stringify`, `equal`, `deepEqual`, `map`, `memberScope`.
+ * Outputs: It returns normally only after 1 fail, 2 equal, 2 deepEqual assertion groups establish “parses a versioned multi-repository JSONC workspace manifest”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
+ * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ */
   () => {
   const text = [
     "{",
@@ -229,13 +228,12 @@ test("parses a versioned multi-repository JSONC workspace manifest",
 
 test("rejects duplicate repository IDs, equal roots, and overlapping roots",
   /**
-   * Exercises the “rejects duplicate repository IDs, equal roots, and overlapping roots” scenario through `parseManifest`, `equal`, `includes`, `diagnosticCodes`.
-   *
-   * Inputs: No callback parameters; it closes over the fixture and imports established for “rejects duplicate repository IDs, equal roots, and overlapping roots”.
-   * Outputs: Normal completion only after the “rejects duplicate repository IDs, equal roots, and overlapping roots” assertions hold; setup, assertion, and awaited-operation failures propagate.
-   * Does not handle: It neither reads a manifest path nor initiates a workspace scan; it parses or validates only the constructed in-memory input used by this test.
-   * Side effects: Runs assertions through `parseManifest`, `equal`, `includes`, `diagnosticCodes`; assertion failures escape.
-   */
+ * Verifies the callback behavior for “rejects duplicate repository IDs, equal roots, and overlapping roots”.
+ * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `parseManifest`, `equal`, `includes`, `diagnosticCodes`.
+ * Outputs: It returns normally only after 6 equal assertion establish “rejects duplicate repository IDs, equal roots, and overlapping roots”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
+ * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ */
   () => {
   const duplicateId = parseManifest({
     schemaVersion: WORKSPACE_MANIFEST_SCHEMA_VERSION,
@@ -272,13 +270,12 @@ test("rejects duplicate repository IDs, equal roots, and overlapping roots",
 
 test("rejects undeclared and duplicate deployment membership",
   /**
-   * Exercises the “rejects undeclared and duplicate deployment membership” scenario through `parseManifest`, `equal`, `includes`, `diagnosticCodes`.
-   *
-   * Inputs: No callback parameters; it closes over the fixture and imports established for “rejects undeclared and duplicate deployment membership”.
-   * Outputs: Normal completion only after the “rejects undeclared and duplicate deployment membership” assertions hold; setup, assertion, and awaited-operation failures propagate.
-   * Does not handle: It neither reads a manifest path nor initiates a workspace scan; it parses or validates only the constructed in-memory input used by this test.
-   * Side effects: Runs assertions through `parseManifest`, `equal`, `includes`, `diagnosticCodes`; assertion failures escape.
-   */
+ * Verifies the callback behavior for “rejects undeclared and duplicate deployment membership”.
+ * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `parseManifest`, `equal`, `includes`, `diagnosticCodes`.
+ * Outputs: It returns normally only after 4 equal assertion establish “rejects undeclared and duplicate deployment membership”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
+ * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ */
   () => {
   const undeclared = parseManifest({
     schemaVersion: WORKSPACE_MANIFEST_SCHEMA_VERSION,
@@ -299,13 +296,12 @@ test("rejects undeclared and duplicate deployment membership",
 
 test("requires paired deployment bindings and inventory descriptors",
   /**
-   * Exercises the “requires paired deployment bindings and inventory descriptors” scenario through `parseManifest`, `equal`, `includes`, `diagnosticCodes`.
-   *
-   * Inputs: No callback parameters; it closes over the fixture and imports established for “requires paired deployment bindings and inventory descriptors”.
-   * Outputs: Normal completion only after the “requires paired deployment bindings and inventory descriptors” assertions hold; setup, assertion, and awaited-operation failures propagate.
-   * Does not handle: It neither reads a manifest path nor initiates a workspace scan; it parses or validates only the constructed in-memory input used by this test.
-   * Side effects: Runs assertions through `parseManifest`, `equal`, `includes`, `diagnosticCodes`; assertion failures escape.
-   */
+ * Verifies the callback behavior for “requires paired deployment bindings and inventory descriptors”.
+ * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `parseManifest`, `equal`, `includes`, `diagnosticCodes`.
+ * Outputs: It returns normally only after 4 equal assertion establish “requires paired deployment bindings and inventory descriptors”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
+ * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ */
   () => {
   const result = parseManifest({
     schemaVersion: WORKSPACE_MANIFEST_SCHEMA_VERSION,
@@ -342,13 +338,12 @@ test("requires paired deployment bindings and inventory descriptors",
 
 test("v2 provisioning maps repositories to explicit, non-overlapping execution scopes",
   /**
-   * Exercises the “v2 provisioning maps repositories to explicit, non-overlapping execution scopes” scenario through `parseManifest`, `memberScope`, `fail`, `stringify`, `deepEqual`.
-   *
-   * Inputs: No callback parameters; it closes over the fixture and imports established for “v2 provisioning maps repositories to explicit, non-overlapping execution scopes”.
-   * Outputs: Normal completion only after the “v2 provisioning maps repositories to explicit, non-overlapping execution scopes” assertions hold; setup, assertion, and awaited-operation failures propagate.
-   * Does not handle: It neither reads a manifest path nor initiates a workspace scan; it parses or validates only the constructed in-memory input used by this test.
-   * Side effects: Runs assertions through `parseManifest`, `memberScope`, `fail`, `stringify`, `deepEqual`; assertion failures escape.
-   */
+ * Verifies the callback behavior for “v2 provisioning maps repositories to explicit, non-overlapping execution scopes”.
+ * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `parseManifest`, `memberScope`, `fail`, `stringify`, `deepEqual`, `map`, `equal`, `includes`, `diagnosticCodes`, `validManifest`.
+ * Outputs: It returns normally only after 1 fail, 1 deepEqual, 11 equal assertion groups establish “v2 provisioning maps repositories to explicit, non-overlapping execution scopes”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
+ * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ */
   () => {
   const distinctTargets = parseManifest({
     schemaVersion: WORKSPACE_MANIFEST_SCHEMA_VERSION,
@@ -520,13 +515,12 @@ test("v2 provisioning maps repositories to explicit, non-overlapping execution s
 
 test("never retains unsafe manifest identifiers, paths, unknown fields, or parse text",
   /**
-   * Exercises the “never retains unsafe manifest identifiers, paths, unknown fields, or parse text” scenario through `parseManifest`, `memberScope`, `parseWorkspaceManifestText`, `equal`, `includes`.
-   *
-   * Inputs: No callback parameters; it closes over the fixture and imports established for “never retains unsafe manifest identifiers, paths, unknown fields, or parse text”.
-   * Outputs: Normal completion only after the “never retains unsafe manifest identifiers, paths, unknown fields, or parse text” assertions hold; setup, assertion, and awaited-operation failures propagate.
-   * Does not handle: It neither reads a manifest path nor initiates a workspace scan; it parses or validates only the constructed in-memory input used by this test.
-   * Side effects: Runs assertions through `parseManifest`, `memberScope`, `parseWorkspaceManifestText`, `equal`, `includes`; assertion failures escape.
-   */
+ * Verifies the callback behavior for “never retains unsafe manifest identifiers, paths, unknown fields, or parse text”.
+ * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `parseManifest`, `memberScope`, `parseWorkspaceManifestText`, `equal`, `includes`, `diagnosticCodes`, `stringify`, `deepEqual`.
+ * Outputs: It returns normally only after 6 equal, 1 deepEqual assertion groups establish “never retains unsafe manifest identifiers, paths, unknown fields, or parse text”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
+ * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ */
   () => {
   const sentinel = "TEST SENTINEL VALUE";
   const result = parseManifest({
@@ -565,13 +559,12 @@ test("never retains unsafe manifest identifiers, paths, unknown fields, or parse
 
 test("normalizes only manifest-relative descriptors and keeps scan-only deployments valid",
   /**
-   * Exercises the “normalizes only manifest-relative descriptors and keeps scan-only deployments valid” scenario through `parseManifest`, `validManifest`, `fail`, `stringify`, `equal`.
-   *
-   * Inputs: No callback parameters; it closes over the fixture and imports established for “normalizes only manifest-relative descriptors and keeps scan-only deployments valid”.
-   * Outputs: Normal completion only after the “normalizes only manifest-relative descriptors and keeps scan-only deployments valid” assertions hold; setup, assertion, and awaited-operation failures propagate.
-   * Does not handle: It neither reads a manifest path nor initiates a workspace scan; it parses or validates only the constructed in-memory input used by this test.
-   * Side effects: Runs assertions through `parseManifest`, `validManifest`, `fail`, `stringify`, `equal`; assertion failures escape.
-   */
+ * Verifies the callback behavior for “normalizes only manifest-relative descriptors and keeps scan-only deployments valid”.
+ * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `parseManifest`, `validManifest`, `fail`, `stringify`, `equal`.
+ * Outputs: It returns normally only after 1 fail, 3 equal assertion groups establish “normalizes only manifest-relative descriptors and keeps scan-only deployments valid”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
+ * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ */
   () => {
   const result = parseManifest({
     ...validManifest(),
@@ -589,13 +582,12 @@ test("normalizes only manifest-relative descriptors and keeps scan-only deployme
 
 test("retains explicit leading-parent descriptors for sibling repositories and infra",
   /**
-   * Exercises the “retains explicit leading-parent descriptors for sibling repositories and infra” scenario through `parseManifest`, `memberScope`, `fail`, `stringify`, `equal`.
-   *
-   * Inputs: No callback parameters; it closes over the fixture and imports established for “retains explicit leading-parent descriptors for sibling repositories and infra”.
-   * Outputs: Normal completion only after the “retains explicit leading-parent descriptors for sibling repositories and infra” assertions hold; setup, assertion, and awaited-operation failures propagate.
-   * Does not handle: It neither reads a manifest path nor initiates a workspace scan; it parses or validates only the constructed in-memory input used by this test.
-   * Side effects: Runs assertions through `parseManifest`, `memberScope`, `fail`, `stringify`, `equal`; assertion failures escape.
-   */
+ * Verifies the callback behavior for “retains explicit leading-parent descriptors for sibling repositories and infra”.
+ * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `parseManifest`, `memberScope`, `fail`, `stringify`, `equal`.
+ * Outputs: It returns normally only after 1 fail, 2 equal assertion groups establish “retains explicit leading-parent descriptors for sibling repositories and infra”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
+ * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ */
   () => {
   const result = parseManifest({
     schemaVersion: WORKSPACE_MANIFEST_SCHEMA_VERSION,
@@ -628,13 +620,12 @@ test("retains explicit leading-parent descriptors for sibling repositories and i
 
 test("bounds manifest repository, deployment, and membership cardinality before traversal",
   /**
-   * Exercises the “bounds manifest repository, deployment, and membership cardinality before traversal” scenario through `parseManifest`, `from`, `String`, `equal`, `includes`.
-   *
-   * Inputs: No callback parameters; it closes over the fixture and imports established for “bounds manifest repository, deployment, and membership cardinality before traversal”.
-   * Outputs: Normal completion only after the “bounds manifest repository, deployment, and membership cardinality before traversal” assertions hold; setup, assertion, and awaited-operation failures propagate.
-   * Does not handle: It neither reads a manifest path nor initiates a workspace scan; it parses or validates only the constructed in-memory input used by this test.
-   * Side effects: Runs assertions through `parseManifest`, `from`, `String`, `equal`, `includes`; assertion failures escape.
-   */
+ * Verifies the callback behavior for “bounds manifest repository, deployment, and membership cardinality before traversal”.
+ * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `parseManifest`, `from`, `String`, `equal`, `includes`, `diagnosticCodes`, `map`, `floor`.
+ * Outputs: It returns normally only after 8 equal assertion establish “bounds manifest repository, deployment, and membership cardinality before traversal”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
+ * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ */
   () => {
   const tooManyRepositories = parseManifest({
     schemaVersion: WORKSPACE_MANIFEST_SCHEMA_VERSION,
@@ -767,13 +758,12 @@ test("bounds manifest repository, deployment, and membership cardinality before 
 
 test("public parser rejects hostile object manifests before reflection or getter access",
   /**
-   * Exercises the “public parser rejects hostile object manifests before reflection or getter access” scenario through `defineProperty`, `revocable`, `revoke`, `parseUntrustedText`.
-   *
-   * Inputs: No callback parameters; it closes over the fixture and imports established for “public parser rejects hostile object manifests before reflection or getter access”.
-   * Outputs: Normal completion only after the “public parser rejects hostile object manifests before reflection or getter access” assertions hold; setup, assertion, and awaited-operation failures propagate.
-   * Does not handle: It neither reads a manifest path nor initiates a workspace scan; it parses or validates only the constructed in-memory input used by this test.
-   * Side effects: Installs and revokes hostile test objects, then passes them to the in-memory parser.
-   */
+ * Verifies the callback behavior for “public parser rejects hostile object manifests before reflection or getter access”.
+ * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `defineProperty`, `revocable`, `revoke`, `parseUntrustedText`, `equal`, `deepEqual`, `includes`, `stringify`.
+ * Outputs: It returns normally only after 5 equal, 1 deepEqual assertion groups establish “public parser rejects hostile object manifests before reflection or getter access”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
+ * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ */
   () => {
   const sentinel = "TEST SENTINEL VALUE";
   let prototypeTrapInvoked = false;

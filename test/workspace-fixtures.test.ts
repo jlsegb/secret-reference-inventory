@@ -14,23 +14,21 @@ import {
 
 test("multi-repository fixture uses safe sibling roots and explicit deployment layouts",
   /**
-   * Asserts the concrete test outcome “multi-repository fixture uses safe sibling roots and explicit deployment layouts” after its declared setup and operation.
-   *
-   * Inputs: no arguments.
-   * Outputs: a promise that settles after its awaited workspace operations and assertions.
-   * Does not handle: Recovering fixture setup or assertion failures; the Node test runner observes them.
-   * Side effects: runs `withWorkspaceFixture`.
-   */
+ * Verifies the callback behavior for “multi-repository fixture uses safe sibling roots and explicit deployment layouts”.
+ * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `realpath`, `join`, `split`, `relative`, `equal`, `readFile`, `parseWorkspaceManifestText`, `deepEqual`, `map`.
+ * Outputs: A promise that resolves only after 5 equal, 2 deepEqual assertion groups establish “multi-repository fixture uses safe sibling roots and explicit deployment layouts”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
+ * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ */
   async () => {
   await withWorkspaceFixture(
     /**
-     * Asserts the concrete test outcome “multi-repository fixture uses safe sibling roots and explicit deployment layouts” after its declared setup and operation.
-     *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: Owning fixture creation or deletion, inspecting external paths, or suppressing assertion failures.
-     * Side effects: runs `realpath`, `relative(controlRoot, apiRoot).split(sep).join`, `relative(controlRoot, apiRoot).split`, `relative`, `assert.equal`, `readFile`.
-     */
+ * Verifies the callback behavior for “multi-repository fixture uses safe sibling roots and explicit deployment layouts”.
+ * Inputs: Receives `fixture` from its caller. It invokes `realpath`, `join`, `split`, `relative`, `equal`, `readFile`, `parseWorkspaceManifestText`, `deepEqual`, `map`, `writeFixtureLayout`.
+ * Outputs: A promise that resolves only after 5 equal, 2 deepEqual assertion groups establish “multi-repository fixture uses safe sibling roots and explicit deployment layouts”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
+ * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ */
     async (fixture) => {
     const apiRoot = await realpath(fixture.repositoryRoots.api);
     const controlRoot = await realpath(fixture.controlRoot);
@@ -71,23 +69,21 @@ test("multi-repository fixture uses safe sibling roots and explicit deployment l
 
 test("fixture isolates parser failure and user-controlled lookup behavior",
   /**
-   * Exercises the “fixture isolates parser failure and user-controlled lookup behavior” scenario through `withWorkspaceFixture`, `all`, `scanLocalRoot`, `equal`, `some`.
-   *
-   * Inputs: No callback parameters; it closes over the fixture and imports established for “fixture isolates parser failure and user-controlled lookup behavior”.
-   * Outputs: Normal completion only after the “fixture isolates parser failure and user-controlled lookup behavior” assertions hold; setup, assertion, and awaited-operation failures propagate.
-   * Does not handle: It neither invokes the CLI nor leaves fixture state behind; it creates and examines only the temporary layout owned by `withWorkspaceFixture`.
-   * Side effects: Runs assertions through `withWorkspaceFixture`, `all`, `scanLocalRoot`, `equal`, `some`; assertion failures escape.
-   */
+ * Verifies the callback behavior for “fixture isolates parser failure and user-controlled lookup behavior”.
+ * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `all`, `scanLocalRoot`, `equal`, `some`, `deepEqual`.
+ * Outputs: A promise that resolves only after 6 equal, 1 deepEqual assertion groups establish “fixture isolates parser failure and user-controlled lookup behavior”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
+ * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ */
   async () => {
   await withWorkspaceFixture(
     /**
-     * Asserts the concrete test outcome “fixture isolates parser failure and user-controlled lookup behavior” after its declared setup and operation.
-     *
-     * Inputs: `fixture`.
-     * Outputs: a promise that settles after its awaited workspace operations and assertions.
-     * Does not handle: Owning fixture cleanup, performing CLI dispatch, or suppressing parser/scan assertion failures.
-     * Side effects: runs `Promise.all`, `scanLocalRoot`, `assert.equal`, `broken.result.scopeCoverage.some`, `assert.deepEqual`.
-     */
+ * Verifies the callback behavior for “fixture isolates parser failure and user-controlled lookup behavior”.
+ * Inputs: Receives `fixture` from its caller. It invokes `all`, `scanLocalRoot`, `equal`, `some`, `deepEqual`.
+ * Outputs: A promise that resolves only after 6 equal, 1 deepEqual assertion groups establish “fixture isolates parser failure and user-controlled lookup behavior”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
+ * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ */
     async (fixture) => {
     const [broken, dynamic] = await Promise.all([
       scanLocalRoot(fixture.repositoryRoots.broken),

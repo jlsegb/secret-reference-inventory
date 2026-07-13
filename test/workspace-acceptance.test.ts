@@ -135,13 +135,12 @@ function assertNoFixtureLeak(text: string, fixture: WorkspaceFixture): void {
 
 test("workspace CLI keeps duplicate keys separate until deployment sharing is explicit",
   /**
-   * Exercises the “workspace CLI keeps duplicate keys separate until deployment sharing is explicit” scenario through `withWorkspaceFixture`, `runWorkspaceCli`, `equal`, `assertNoFixtureLeak`, `parseWorkspaceReport`.
-   *
-   * Inputs: No callback parameters; it closes over the fixture and imports established for “workspace CLI keeps duplicate keys separate until deployment sharing is explicit”.
-   * Outputs: Normal completion only after the “workspace CLI keeps duplicate keys separate until deployment sharing is explicit” assertions hold; setup, assertion, and awaited-operation failures propagate.
-   * Does not handle: It neither accesses a user workspace nor leaves a viewer alive; it confines the check to `withWorkspaceFixture`, injected CLI collaborators, and registered cleanup.
-   * Side effects: Runs assertions through `withWorkspaceFixture`, `runWorkspaceCli`, `equal`, `assertNoFixtureLeak`, `parseWorkspaceReport`; assertion failures escape.
-   */
+ * Verifies the callback behavior for “workspace CLI keeps duplicate keys separate until deployment sharing is explicit”.
+ * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `withWorkspaceFixture`, `runWorkspaceCli`, `equal`, `assertNoFixtureLeak`, `parseWorkspaceReport`, `findRepository`, `findDeployment`, `deepEqual`, `includes`, `writeFixtureLayout`.
+ * Outputs: A promise that resolves only after 16 equal, 6 deepEqual, 1 match assertion groups establish “workspace CLI keeps duplicate keys separate until deployment sharing is explicit”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
+ * Side effects: Runs assertions and reads test-local state; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ */
   async () => {
   await withWorkspaceFixture(
     /**
@@ -232,13 +231,12 @@ test("workspace CLI keeps duplicate keys separate until deployment sharing is ex
 
 test("workspace UI serves only derived fixture data over loopback",
   /**
-   * Exercises the “workspace UI serves only derived fixture data over loopback” scenario through `withWorkspaceFixture`, `after`, `all`, `map`, `close`.
-   *
-   * Inputs: The Node test context `t` plus the fixture and imports established for “workspace UI serves only derived fixture data over loopback”.
-   * Outputs: Normal completion only after the “workspace UI serves only derived fixture data over loopback” assertions hold; setup, assertion, and awaited-operation failures propagate.
-   * Does not handle: It neither accesses a user workspace nor leaves a viewer alive; it confines the check to `withWorkspaceFixture`, injected CLI collaborators, and registered cleanup.
-   * Side effects: Drives the loopback test resource through `withWorkspaceFixture`, `after`, `all`, `map`, `close`.
-   */
+ * Verifies the callback behavior for “workspace UI serves only derived fixture data over loopback”.
+ * Inputs: Receives `t` from its caller. It invokes `withWorkspaceFixture`, `after`, `all`, `map`, `close`, `runWorkspaceCli`, `startLocalReportViewer`, `push`, `equal`, `assertNoFixtureLeak`.
+ * Outputs: A promise that resolves only after 8 equal, 1 notEqual, 3 match, 1 doesNotMatch assertion groups establish “workspace UI serves only derived fixture data over loopback”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Fixture allocation and recursive cleanup are owned by `withWorkspaceFixture`; Node’s test runner owns registration and timeout policy.
+ * Side effects: Mutates only test-controlled state through `push`; `withWorkspaceFixture` removes its fixture root. Failures are not caught.
+ */
   async (t) => {
   await withWorkspaceFixture(
     /**

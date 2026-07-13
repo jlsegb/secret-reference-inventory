@@ -14,13 +14,12 @@ const privatePathMarker = "source/private-config-value.ts";
 
 test("workspace viewer model supports repository/result navigation without source data",
   /**
-   * Exercises the “workspace viewer model supports repository/result navigation without source data” scenario through `startLocalReportViewer`, `workspaceReportToViewerRequest`, `after`, `close`, `request`.
-   *
-   * Inputs: The Node test context `t` plus the fixture and imports established for “workspace viewer model supports repository/result navigation without source data”.
-   * Outputs: Normal completion only after the “workspace viewer model supports repository/result navigation without source data” assertions hold; setup, assertion, and awaited-operation failures propagate.
-   * Does not handle: It neither reads code/provisioning sources nor serves an externally reachable address; it converts supplied report data and controls only the test-local viewer.
-   * Side effects: Drives the loopback test resource through `startLocalReportViewer`, `workspaceReportToViewerRequest`, `after`, `close`, `request`.
-   */
+ * Verifies the callback behavior for “workspace viewer model supports repository/result navigation without source data”.
+ * Inputs: Receives `t` from its caller. It invokes `startLocalReportViewer`, `workspaceReportToViewerRequest`, `after`, `close`, `request`, `equal`, `includes`, `match`.
+ * Outputs: A promise that resolves only after 1 equal, 7 match assertion groups establish “workspace viewer model supports repository/result navigation without source data”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
+ * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ */
   async (t) => {
   const report: WorkspaceJsonReport = {
     schemaVersion: "secret-reference-inventory/workspace-report/v2",
@@ -103,13 +102,12 @@ test("workspace viewer model supports repository/result navigation without sourc
 
 test("viewer repository limit includes the synthetic deployments repository",
   /**
-   * Exercises the “viewer repository limit includes the synthetic deployments repository” scenario through `from`, `String`, `throws`, `workspaceReportToViewerRequest`.
-   *
-   * Inputs: No callback parameters; it closes over the fixture and imports established for “viewer repository limit includes the synthetic deployments repository”.
-   * Outputs: Normal completion only after the “viewer repository limit includes the synthetic deployments repository” assertions hold; setup, assertion, and awaited-operation failures propagate.
-   * Does not handle: It neither reads code/provisioning sources nor starts a listener; it converts supplied test report data only into a viewer request.
-   * Side effects: Runs assertions through `from`, `String`, `throws`, `workspaceReportToViewerRequest`; assertion failures escape.
-   */
+ * Verifies the callback behavior for “viewer repository limit includes the synthetic deployments repository”.
+ * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `from`, `String`, `throws`, `workspaceReportToViewerRequest`.
+ * Outputs: It returns normally only after 1 throws assertion establish “viewer repository limit includes the synthetic deployments repository”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
+ * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ */
   () => {
   const report: WorkspaceJsonReport = {
     schemaVersion: "secret-reference-inventory/workspace-report/v2",
@@ -163,13 +161,12 @@ test("viewer repository limit includes the synthetic deployments repository",
 
 test("viewer result limit includes each synthetic repository Overview row",
   /**
-   * Exercises the “viewer result limit includes each synthetic repository Overview row” scenario through `from`, `String`, `throws`, `workspaceReportToViewerRequest`.
-   *
-   * Inputs: No callback parameters; it closes over the fixture and imports established for “viewer result limit includes each synthetic repository Overview row”.
-   * Outputs: Normal completion only after the “viewer result limit includes each synthetic repository Overview row” assertions hold; setup, assertion, and awaited-operation failures propagate.
-   * Does not handle: It neither reads code/provisioning sources nor starts a listener; it converts supplied test report data only into a viewer request.
-   * Side effects: Runs assertions through `from`, `String`, `throws`, `workspaceReportToViewerRequest`; assertion failures escape.
-   */
+ * Verifies the callback behavior for “viewer result limit includes each synthetic repository Overview row”.
+ * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `from`, `String`, `throws`, `workspaceReportToViewerRequest`.
+ * Outputs: It returns normally only after 1 throws assertion establish “viewer result limit includes each synthetic repository Overview row”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
+ * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ */
   () => {
   const report: WorkspaceJsonReport = {
     schemaVersion: "secret-reference-inventory/workspace-report/v2",
@@ -228,13 +225,12 @@ test("viewer result limit includes each synthetic repository Overview row",
 
 test("viewer result limit includes each deployment member partition row",
   /**
-   * Exercises the “viewer result limit includes each deployment member partition row” scenario through `from`, `String`, `map`, `throws`, `workspaceReportToViewerRequest`.
-   *
-   * Inputs: No callback parameters; it closes over the fixture and imports established for “viewer result limit includes each deployment member partition row”.
-   * Outputs: Normal completion only after the “viewer result limit includes each deployment member partition row” assertions hold; setup, assertion, and awaited-operation failures propagate.
-   * Does not handle: It neither reads code/provisioning sources nor starts a listener; it converts supplied test report data only into a viewer request.
-   * Side effects: Runs assertions through `from`, `String`, `map`, `throws`, `workspaceReportToViewerRequest`; assertion failures escape.
-   */
+ * Verifies the callback behavior for “viewer result limit includes each deployment member partition row”.
+ * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `from`, `String`, `map`, `throws`, `workspaceReportToViewerRequest`.
+ * Outputs: It returns normally only after 1 throws assertion establish “viewer result limit includes each deployment member partition row”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
+ * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ */
   () => {
   const memberIds = Array.from({ length: 1_000 },
     /**
@@ -298,13 +294,12 @@ test("viewer result limit includes each deployment member partition row",
 
 test("workspace request construction never forwards path-like or structured short credential labels",
   /**
-   * Exercises the “workspace request construction never forwards path-like or structured short credential labels” scenario through `startLocalReportViewer`, `workspaceReportToViewerRequest`, `after`, `close`, `request`.
-   *
-   * Inputs: The Node test context `t` plus the fixture and imports established for “workspace request construction never forwards path-like or structured short credential labels”.
-   * Outputs: Normal completion only after the “workspace request construction never forwards path-like or structured short credential labels” assertions hold; setup, assertion, and awaited-operation failures propagate.
-   * Does not handle: It neither reads code/provisioning sources nor serves an externally reachable address; it converts supplied report data and controls only the test-local viewer.
-   * Side effects: Drives the loopback test resource through `startLocalReportViewer`, `workspaceReportToViewerRequest`, `after`, `close`, `request`.
-   */
+ * Verifies the callback behavior for “workspace request construction never forwards path-like or structured short credential labels”.
+ * Inputs: Receives `t` from its caller. It invokes `startLocalReportViewer`, `workspaceReportToViewerRequest`, `after`, `close`, `request`, `equal`, `includes`, `match`.
+ * Outputs: A promise that resolves only after 2 equal, 2 match assertion groups establish “workspace request construction never forwards path-like or structured short credential labels”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
+ * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ */
   async (t) => {
   const credentialLike = "env:sk_live_short";
   const pathLike = "/private/deployment-config";

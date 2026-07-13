@@ -36,13 +36,12 @@ const diagnostic =
 
 test("workspace reports are deterministic, versioned, and sort independent results",
   /**
-   * Exercises the “workspace reports are deterministic, versioned, and sort independent results” scenario through `id`, `diagnostic`, `renderWorkspaceJson`, `equal`, `buildWorkspaceJsonReport`.
-   *
-   * Inputs: No callback parameters; it closes over the fixture and imports established for “workspace reports are deterministic, versioned, and sort independent results”.
-   * Outputs: Normal completion only after the “workspace reports are deterministic, versioned, and sort independent results” assertions hold; setup, assertion, and awaited-operation failures propagate.
-   * Does not handle: It neither scans a workspace nor writes a report file; it validates pure report construction and serialization from supplied safe facts.
-   * Side effects: Runs assertions through `id`, `diagnostic`, `renderWorkspaceJson`, `equal`, `buildWorkspaceJsonReport`; assertion failures escape.
-   */
+ * Verifies the callback behavior for “workspace reports are deterministic, versioned, and sort independent results”.
+ * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `id`, `diagnostic`, `renderWorkspaceJson`, `equal`, `buildWorkspaceJsonReport`, `deepEqual`, `map`, `renderWorkspaceTerminal`, `match`.
+ * Outputs: It returns normally only after 4 equal, 4 deepEqual, 3 match assertion groups establish “workspace reports are deterministic, versioned, and sort independent results”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
+ * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ */
   () => {
   const input: WorkspaceReportingInput = {
     repositories: [
@@ -124,13 +123,12 @@ test("workspace reports are deterministic, versioned, and sort independent resul
 
 test("workspace reporter rejects contradictory deployment member identities",
   /**
-   * Exercises the “workspace reporter rejects contradictory deployment member identities” scenario through `id`, `throws`, `buildWorkspaceJsonReport`.
-   *
-   * Inputs: No callback parameters; it closes over the fixture and imports established for “workspace reporter rejects contradictory deployment member identities”.
-   * Outputs: Normal completion only after the “workspace reporter rejects contradictory deployment member identities” assertions hold; setup, assertion, and awaited-operation failures propagate.
-   * Does not handle: It neither scans a workspace nor writes a report file; it validates pure report construction and serialization from supplied safe facts.
-   * Side effects: Runs assertions through `id`, `throws`, `buildWorkspaceJsonReport`; assertion failures escape.
-   */
+ * Verifies the callback behavior for “workspace reporter rejects contradictory deployment member identities”.
+ * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `id`, `throws`, `buildWorkspaceJsonReport`.
+ * Outputs: It returns normally only after 1 throws assertion establish “workspace reporter rejects contradictory deployment member identities”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
+ * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ */
   () => {
   const input: WorkspaceReportingInput = {
     repositories: [],
@@ -171,13 +169,12 @@ test("workspace reporter rejects contradictory deployment member identities",
 
 test("workspace reporter rejects duplicate declared deployment repository identities",
   /**
-   * Exercises the “workspace reporter rejects duplicate declared deployment repository identities” scenario through `id`, `throws`, `buildWorkspaceJsonReport`.
-   *
-   * Inputs: No callback parameters; it closes over the fixture and imports established for “workspace reporter rejects duplicate declared deployment repository identities”.
-   * Outputs: Normal completion only after the “workspace reporter rejects duplicate declared deployment repository identities” assertions hold; setup, assertion, and awaited-operation failures propagate.
-   * Does not handle: It neither scans a workspace nor writes a report file; it validates pure report construction and serialization from supplied safe facts.
-   * Side effects: Runs assertions through `id`, `throws`, `buildWorkspaceJsonReport`; assertion failures escape.
-   */
+ * Verifies the callback behavior for “workspace reporter rejects duplicate declared deployment repository identities”.
+ * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `id`, `throws`, `buildWorkspaceJsonReport`.
+ * Outputs: It returns normally only after 1 throws assertion establish “workspace reporter rejects duplicate declared deployment repository identities”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
+ * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ */
   () => {
   const input: WorkspaceReportingInput = {
     repositories: [],
@@ -215,13 +212,12 @@ test("workspace reporter rejects duplicate declared deployment repository identi
 
 test("workspace reporter redacts malformed safe brands instead of serializing a sentinel",
   /**
-   * Exercises the “workspace reporter redacts malformed safe brands instead of serializing a sentinel” scenario through `id`, `renderWorkspaceJson`, `equal`, `includes`, `match`.
-   *
-   * Inputs: No callback parameters; it closes over the fixture and imports established for “workspace reporter redacts malformed safe brands instead of serializing a sentinel”.
-   * Outputs: Normal completion only after the “workspace reporter redacts malformed safe brands instead of serializing a sentinel” assertions hold; setup, assertion, and awaited-operation failures propagate.
-   * Does not handle: It neither scans a workspace nor writes a report file; it validates pure report construction and serialization from supplied safe facts.
-   * Side effects: Runs assertions through `id`, `renderWorkspaceJson`, `equal`, `includes`, `match`; assertion failures escape.
-   */
+ * Verifies the callback behavior for “workspace reporter redacts malformed safe brands instead of serializing a sentinel”.
+ * Inputs: Receives no direct parameters and closes over the enclosing test state. It invokes `id`, `renderWorkspaceJson`, `equal`, `includes`, `match`.
+ * Outputs: It returns normally only after 1 equal, 1 match assertion groups establish “workspace reporter redacts malformed safe brands instead of serializing a sentinel”; setup, assertion, and awaited-operation failures propagate.
+ * Does not handle: Node’s test runner owns registration, timeout policy, and any test-context cleanup hooks.
+ * Side effects: Runs assertions and reads test-local state. Failures are not caught.
+ */
   () => {
   const sentinel = "sk_live_51Jf2QfZxR3AqVbC8NwY";
   const input: WorkspaceReportingInput = {
