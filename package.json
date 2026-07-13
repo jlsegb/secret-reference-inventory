@@ -70,6 +70,7 @@
     "dist/viewer/**/*.d.ts",
     "dist/workspace/**/*.js",
     "dist/workspace/**/*.d.ts",
+    "docs/**/*.md",
     "LICENSE",
     "README.md"
   ],
@@ -78,7 +79,8 @@
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "test": "tsx --test test/*.test.ts",
     "test:coverage": "tsx --test --experimental-test-coverage test/*.test.ts",
-    "verify": "npm run typecheck && npm test && npm run build",
+    "docs:check": "node ./scripts/docs-check.mjs --root .",
+    "verify": "npm run docs:check && npm run typecheck && npm test && npm run build",
     "release:smoke": "npm run build && node ./scripts/smoke-local-package-install.mjs",
     "release:check": "npm run build && node ./scripts/check-release-readiness.mjs && node ./scripts/smoke-local-package-install.mjs"
   },

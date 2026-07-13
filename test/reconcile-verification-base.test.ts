@@ -7,7 +7,14 @@ import test from "node:test";
 import { createLocalCliHandlers } from "../src/app/index.js";
 import { parseCli, runCli } from "../src/cli/index.js";
 
-test("standalone reconcile requires an explicit closed-model verification base", () => {
+test("standalone reconcile requires an explicit closed-model verification base", /**
+ * Asserts CLI parsing requires a base with a closed model, rejects a lone base, and preserves an explicit valid base.
+ *
+ * Inputs: The Node test context with no used arguments.
+ * Outputs: A fulfilled synchronous test when all parse-result assertions pass.
+ * Does not handle: Filesystem canonicalization or reconciliation execution.
+ * Side effects: Parses only in-memory argument arrays.
+ */ () => {
   const missing = parseCli([
     "reconcile",
     "--root",
@@ -53,16 +60,44 @@ test("standalone reconcile requires an explicit closed-model verification base",
   }
 });
 
-test("standalone reconcile canonicalizes only an explicit valid base and never uses cwd", async (t) => {
+test("standalone reconcile canonicalizes only an explicit valid base and never uses cwd", /**
+ * Asserts runtime reconcile accepts only an explicit absolute existing base and does not leak base paths after a CWD change.
+ *
+ * Inputs: The Node test context used to register fixture cleanup.
+ * Outputs: A fulfilled promise when all status/output assertions pass; assertion failure rejects it.
+ * Does not handle: Closed-model schema validation beyond the fixture or direct analysis API behavior.
+ * Side effects: Creates/removes temporary files and temporarily changes/restores process CWD while invoking local handlers.
+ */ async (t) => {
   const fixture = await createFixture();
-  t.after(() => rm(fixture.parent, { recursive: true, force: true }));
+  t.after(/**
+   * Removes the complete temporary reconciliation fixture after the test ends.
+   *
+   * Inputs: None.
+   * Outputs: A promise for recursive deletion.
+   * Does not handle: Process CWD restoration.
+   * Side effects: Deletes the fixture parent tree.
+   */ () => rm(fixture.parent, { recursive: true, force: true }));
   const handlers = createLocalCliHandlers();
 
   const missingStderr: string[] = [];
   const missingStatus = await runCli(
     reconcileArguments(fixture, undefined),
     handlers,
-    { stdout: () => undefined, stderr: (text) => missingStderr.push(text) },
+    { stdout: /**
+      * Ignores stdout for the missing-base usage-error assertion.
+      *
+      * Inputs: An emitted stdout chunk.
+      * Outputs: `undefined`.
+      * Does not handle: Capturing or validating stdout.
+      * Side effects: None.
+      */ () => undefined, stderr: /**
+      * Captures missing-base stderr for exact usage diagnostic comparison.
+      *
+      * Inputs: An emitted stderr chunk.
+      * Outputs: The enclosing array length returned by `push`.
+      * Does not handle: Printing or parsing the diagnostic.
+      * Side effects: Mutates the enclosing missing-stderr array.
+      */ (text) => missingStderr.push(text) },
   );
   assert.equal(missingStatus, 64);
   assert.equal(missingStderr.join(""), "CLI_MISSING_ARGUMENT\n");
@@ -76,8 +111,22 @@ test("standalone reconcile canonicalizes only an explicit valid base and never u
       reconcileArguments(fixture, fixture.workspace),
       handlers,
       {
-        stdout: (text) => stdout.push(text),
-        stderr: (text) => validStderr.push(text),
+        stdout: /**
+         * Captures valid reconcile output to confirm it contains no workspace path.
+         *
+         * Inputs: An emitted stdout chunk.
+         * Outputs: The enclosing array length returned by `push`.
+         * Does not handle: Parsing JSON output.
+         * Side effects: Mutates the enclosing stdout array.
+         */ (text) => stdout.push(text),
+        stderr: /**
+         * Captures valid reconcile stderr to assert it remains empty.
+         *
+         * Inputs: An emitted stderr chunk.
+         * Outputs: The enclosing array length returned by `push`.
+         * Does not handle: Printing or parsing diagnostics.
+         * Side effects: Mutates the enclosing valid-stderr array.
+         */ (text) => validStderr.push(text),
       },
     );
     assert.equal(validStatus, 0);
@@ -91,7 +140,21 @@ test("standalone reconcile canonicalizes only an explicit valid base and never u
   const relativeStatus = await runCli(
     reconcileArguments(fixture, "workspace"),
     handlers,
-    { stdout: () => undefined, stderr: (text) => relativeStderr.push(text) },
+    { stdout: /**
+      * Ignores stdout for the invalid-relative-base case.
+      *
+      * Inputs: An emitted stdout chunk.
+      * Outputs: `undefined`.
+      * Does not handle: Output assertions.
+      * Side effects: None.
+      */ () => undefined, stderr: /**
+      * Captures the relative-base diagnostic for exact comparison.
+      *
+      * Inputs: An emitted stderr chunk.
+      * Outputs: The enclosing array length returned by `push`.
+      * Does not handle: Printing or parsing the diagnostic.
+      * Side effects: Mutates the enclosing relative-stderr array.
+      */ (text) => relativeStderr.push(text) },
   );
   assert.equal(relativeStatus, 65);
   assert.equal(relativeStderr.join(""), "APP_CLOSED_MODEL_VERIFICATION_BASE_INVALID\n");
@@ -101,7 +164,21 @@ test("standalone reconcile canonicalizes only an explicit valid base and never u
   const invalidStatus = await runCli(
     reconcileArguments(fixture, invalidBase),
     handlers,
-    { stdout: () => undefined, stderr: (text) => invalidStderr.push(text) },
+    { stdout: /**
+      * Ignores stdout for the nonexistent-base case.
+      *
+      * Inputs: An emitted stdout chunk.
+      * Outputs: `undefined`.
+      * Does not handle: Output assertions.
+      * Side effects: None.
+      */ () => undefined, stderr: /**
+      * Captures the nonexistent-base diagnostic to verify the supplied path is not leaked.
+      *
+      * Inputs: An emitted stderr chunk.
+      * Outputs: The enclosing array length returned by `push`.
+      * Does not handle: Printing or parsing the diagnostic.
+      * Side effects: Mutates the enclosing invalid-stderr array.
+      */ (text) => invalidStderr.push(text) },
   );
   assert.equal(invalidStatus, 65);
   assert.equal(invalidStderr.join(""), "APP_CLOSED_MODEL_VERIFICATION_BASE_INVALID\n");
@@ -118,6 +195,14 @@ interface ReconcileFixture {
   readonly closedModelPath: string;
 }
 
+/**
+ * Creates the workspace, repository, provisioning documents, and unrelated CWD used by reconcile base tests.
+ *
+ * Inputs: None.
+ * Outputs: A promise for paths describing a fully written temporary reconcile fixture.
+ * Does not handle: Fixture cleanup, invalid JSON, or external provisioning services.
+ * Side effects: Creates directories and writes source/JSON files below a new OS temporary parent.
+ */
 async function createFixture(): Promise<ReconcileFixture> {
   const parent = await mkdtemp(join(tmpdir(), "secret-usage-reconcile-base-"));
   const workspace = join(parent, "workspace");
@@ -162,6 +247,14 @@ async function createFixture(): Promise<ReconcileFixture> {
   };
 }
 
+/**
+ * Builds the parsed-CLI argument list for a fixture reconcile invocation with an optional verification base.
+ *
+ * Inputs: A reconcile fixture and optional base path.
+ * Outputs: An immutable-looking argument array for the JSON require-complete command.
+ * Does not handle: Argument parsing, absolute-path validation, or command execution.
+ * Side effects: Allocates a new string array.
+ */
 function reconcileArguments(
   fixture: ReconcileFixture,
   verificationBase: string | undefined,
@@ -183,10 +276,26 @@ function reconcileArguments(
   ];
 }
 
+/**
+ * Serializes and writes one JSON provisioning fixture document.
+ *
+ * Inputs: Destination path and JSON-serializable fixture value.
+ * Outputs: A fulfilled `undefined` promise or a rejected serialization/write promise.
+ * Does not handle: Parent-directory creation, parse validation, or secret redaction.
+ * Side effects: Writes one local UTF-8 file.
+ */
 async function writeJson(path: string, value: unknown): Promise<void> {
   await writeFile(path, JSON.stringify(value), "utf8");
 }
 
+/**
+ * Builds the explicit closed-model fixture that covers the fixture repository and provisioning inputs.
+ *
+ * Inputs: None.
+ * Outputs: A JSON-serializable single-scope closed-provisioning model.
+ * Does not handle: Multiple environments, adapter failures, or malformed schema variants.
+ * Side effects: Allocates nested fixture objects and arrays.
+ */
 function closedModelDocument(): object {
   return {
     schemaVersion: "closed-provisioning-model/v1",

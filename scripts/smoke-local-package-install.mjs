@@ -9,6 +9,14 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const temporaryRoot = await mkdtemp(join(tmpdir(), "secret-reference-inventory-install-"));
 
+/**
+ * Runs caller-supplied npm arguments and maps synchronous failure to a fixed code.
+ *
+ * Inputs: npm arguments, a working directory, environment variables, and a fixed failure code.
+ * Outputs: Captured standard output from npm.
+ * Does not handle: Preserving npm's raw stderr, retrying, or enforcing offline/cache/network isolation; callers must supply safe arguments and an isolated environment, and arbitrary values can allow npm network access.
+ * Side effects: Starts npm; its arguments, working directory, and environment determine package, filesystem, and network activity.
+ */
 function runNpm(argumentsList, cwd, environment, failureCode) {
   try {
     return execFileSync(npmCommand, argumentsList, {
@@ -22,6 +30,14 @@ function runNpm(argumentsList, cwd, environment, failureCode) {
   }
 }
 
+/**
+ * Runs the packaged executable and translates any child-process failure to a fixed code.
+ *
+ * Inputs: The installed binary path, its arguments, a working directory, and a fixed failure code.
+ * Outputs: Captured standard output from the successful executable.
+ * Does not handle: Retrying, preserving child stderr, or validating arbitrary binary safety.
+ * Side effects: Starts the installed local CLI process.
+ */
 function runInstalledCli(binary, argumentsList, cwd, failureCode) {
   try {
     return execFileSync(binary, argumentsList, {

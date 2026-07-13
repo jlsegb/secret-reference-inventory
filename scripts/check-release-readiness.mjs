@@ -8,7 +8,16 @@ const packagePath = resolve(root, "package.json");
 const packageJson = JSON.parse(readFileSync(packagePath, "utf8"));
 
 const failures = [];
-const fail = (message) => failures.push(message);
+const fail =
+  /**
+   * Records one release-policy violation for aggregated terminal reporting.
+   *
+   * Inputs: A release-check failure message, which callers may form by interpolating local package metadata or package paths.
+   * Outputs: The new numeric length of the failures array.
+   * Does not handle: Throwing immediately, escaping or redacting interpolated text, or emitting output.
+   * Side effects: Mutates the module-local failures array; the accumulated messages are written to standard error at module completion.
+   */
+  (message) => failures.push(message);
 
 if (packageJson.private === true) {
   fail("package must not be private");
@@ -30,6 +39,14 @@ if (
   !Array.isArray(packageJson.bundledDependencies) ||
   packageJson.bundledDependencies.length !== requiredBundledDependencies.length ||
   requiredBundledDependencies.some(
+    /**
+     * Detects a mandatory runtime dependency omitted from package bundling.
+     *
+     * Inputs: One required dependency name.
+     * Outputs: True when the package's bundled-dependencies list does not include it.
+     * Does not handle: Checking transitive dependency contents or package installation.
+     * Side effects: None.
+     */
     (dependency) => !packageJson.bundledDependencies.includes(dependency),
   )
 ) {
@@ -50,9 +67,27 @@ for (const name of Object.keys(directDependencies)) {
 }
 
 const prohibitedConfigKey = /(?:telemetry|analytics|sentry|posthog|segment|amplitude|datadog|newrelic|opentelemetry|proxy|registry)/iu;
+/**
+ * Recursively finds prohibited package configuration keys without executing configuration.
+ *
+ * Inputs: A JSON-derived value and a display trail rooted at package metadata.
+ * Outputs: Nothing; violations are appended to the module-local failure collection.
+ * Does not handle: Schema validation, circular object graphs, or non-enumerable properties.
+ * Side effects: Recurses through JSON-like objects and mutates the failures array.
+ */
 function inspectConfig(value, trail = "package") {
   if (Array.isArray(value)) {
-    value.forEach((item, index) => inspectConfig(item, `${trail}[${index}]`));
+    value.forEach(
+      /**
+       * Inspects one array member while retaining its index in the diagnostic trail.
+       *
+       * Inputs: A JSON-like array member and its numeric index.
+       * Outputs: Nothing after delegating inspection.
+       * Does not handle: Array traversal outside the provided member.
+       * Side effects: May append a failure through the recursive inspector.
+       */
+      (item, index) => inspectConfig(item, `${trail}[${index}]`)
+    );
     return;
   }
   if (value === null || typeof value !== "object") {
@@ -98,7 +133,17 @@ try {
     { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
   );
   const pack = JSON.parse(output);
-  packedFiles = pack[0]?.files?.map((file) => file.path) ?? [];
+  packedFiles = pack[0]?.files?.map(
+    /**
+     * Extracts one dry-run package path from npm's reported file descriptor.
+     *
+     * Inputs: An npm pack file entry.
+     * Outputs: Its path field without validating the field's shape.
+     * Does not handle: Package policy validation or malformed npm output.
+     * Side effects: None.
+     */
+    (file) => file.path
+  ) ?? [];
 } catch {
   fail("npm pack --dry-run --ignore-scripts did not return a package file list");
 }
@@ -114,14 +159,26 @@ for (const dependency of requiredBundledDependencies) {
     fail("a bundled runtime dependency is missing from the package");
   }
 }
+const packagedDocumentationPath = /^docs\/(?:[a-z0-9][a-z0-9.-]*\/)*[a-z0-9][a-z0-9.-]*\.md$/u;
+const explicitlyPackagedDocumentationPaths = new Set(["docs/DOCUMENTATION_CONTRACT.md"]);
 for (const path of packedFiles) {
   const allowed =
     path === "package.json" ||
     path === "README.md" ||
     path === "LICENSE" ||
+    packagedDocumentationPath.test(path) ||
+    explicitlyPackagedDocumentationPaths.has(path) ||
     path.startsWith("dist/") ||
-    requiredBundledDependencies.some((dependency) =>
-      path.startsWith(`node_modules/${dependency}/`),
+    requiredBundledDependencies.some(
+      /**
+       * Recognizes a file belonging to one required bundled dependency.
+       *
+       * Inputs: A required dependency name closed over with the current package path.
+       * Outputs: True when the current path lies beneath that dependency directory.
+       * Does not handle: Validating package archives or matching similarly named dependencies.
+       * Side effects: None.
+       */
+      (dependency) => path.startsWith(`node_modules/${dependency}/`),
     );
   if (!allowed) {
     fail(`unexpected package file: ${path}`);
@@ -145,16 +202,46 @@ const prohibitedRuntimeSyntax = [
   /\bhttps?\.request\s*\(/u,
   /\bfetch\s*\(/u,
 ];
-for (const path of packedFiles.filter((item) => item.endsWith(".js"))) {
+for (const path of packedFiles.filter(
+  /**
+   * Selects JavaScript artifacts for static runtime-syntax inspection.
+   *
+   * Inputs: One package-relative packed-file path.
+   * Outputs: True for paths ending in the JavaScript extension.
+   * Does not handle: Reading the file or recognizing other executable extensions.
+   * Side effects: None.
+   */
+  (item) => item.endsWith(".js")
+)) {
   const text = readFileSync(resolve(root, path), "utf8");
   const isConstrainedLocalViewer =
     path === "dist/viewer/server.js" &&
     text.includes('const LOOPBACK_HOST = "127.0.0.1";') &&
     text.includes("server.listen({ host: LOOPBACK_HOST, port });");
   const applicableSyntax = isConstrainedLocalViewer
-    ? prohibitedRuntimeSyntax.filter((pattern) => !pattern.test('from "node:http"'))
+    ? prohibitedRuntimeSyntax.filter(
+      /**
+       * Retains every prohibited network pattern except the explicitly loopback-reviewed HTTP import.
+       *
+       * Inputs: One runtime-syntax regular expression.
+       * Outputs: True when the pattern remains prohibited for the constrained viewer artifact.
+       * Does not handle: Proving that the viewer code remains loopback-only.
+       * Side effects: Advances mutable regular-expression state only if a future pattern becomes stateful.
+       */
+      (pattern) => !pattern.test('from "node:http"')
+    )
     : prohibitedRuntimeSyntax;
-  if (applicableSyntax.some((pattern) => pattern.test(text))) {
+  if (applicableSyntax.some(
+    /**
+     * Detects a prohibited network-capable syntax pattern in one packaged script.
+     *
+     * Inputs: One regular expression closed over with the file text.
+     * Outputs: True when the expression matches that text.
+     * Does not handle: Dynamic code execution or semantic reachability analysis.
+     * Side effects: Advances mutable regular-expression state only if a future pattern becomes stateful.
+     */
+    (pattern) => pattern.test(text)
+  )) {
     fail(`network-capable runtime syntax found in package file: ${path}`);
   }
   if (path === "dist/viewer/server.js" && !isConstrainedLocalViewer) {

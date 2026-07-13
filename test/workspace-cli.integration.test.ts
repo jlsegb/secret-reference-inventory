@@ -18,13 +18,48 @@ import {
 import { runCli } from "../src/cli/index.js";
 import { startLocalReportViewer, type LocalReportViewer } from "../src/viewer/index.js";
 
-const id = (value: string): SafeIdentifier => value as SafeIdentifier;
-const diagnostic = (value: string): SafeDiagnosticCode => value as SafeDiagnosticCode;
+const id =
+  /**
+   * Brands a fixture repository or deployment identifier for the injected scan port.
+   *
+   * Inputs: `value`.
+   * Outputs: The supplied test string typed as `SafeIdentifier`.
+   * Does not handle: Runtime identifier validation or workspace scanning.
+   * Side effects: None; the TypeScript assertion is erased at runtime.
+   */
+  (value: string): SafeIdentifier => value as SafeIdentifier;
+const diagnostic =
+  /**
+   * Brands a fixture diagnostic code for the injected scan port.
+   *
+   * Inputs: `value`.
+   * Outputs: The supplied test string typed as `SafeDiagnosticCode`.
+   * Does not handle: Runtime diagnostic validation or workspace scanning.
+   * Side effects: None; the TypeScript assertion is erased at runtime.
+   */
+  (value: string): SafeDiagnosticCode => value as SafeDiagnosticCode;
 const emptyReconciliation: ReconciliationResult = { records: [], scopeCoverage: [] };
 
-test("workspace scan writes a deterministic versioned report and returns incomplete status on request", async (t) => {
+test("workspace scan writes a deterministic versioned report and returns incomplete status on request",
+  /**
+ * Runs `workspace scan --format json --require-complete` against an injected incomplete scan port and parses stdout.
+ * Inputs: The Node test context; creates a temporary manifest, local stdout/stderr arrays, and CLI handlers whose workspace scan is explicitly incomplete.
+ * Outputs: Resolves after status is 2, stderr is empty, stdout has workspace report v2 with `summary.incomplete`, one API row, and no manifest path.
+ * Does not handle: Real provider access, report-file output, or recovery from manifest/CLI/JSON/assertion failure.
+ * Side effects: Writes a manifest, appends emitted text, and registers `rmParent(manifestPath)` with `t.after`; cleanup and failures propagate.
+ */
+  async (t) => {
   const manifestPath = await writeManifest();
-  t.after(() => rmParent(manifestPath));
+  t.after(
+    /**
+     * Deletes the temporary manifest directory after the deterministic report test.
+     *
+     * Inputs: no arguments.
+     * Outputs: the cleanup promise returned by `rmParent(manifestPath)`, registered with `t.after`.
+     * Does not handle: Creating the directory, removing sibling fixtures, or deciding test status.
+     * Side effects: Recursively removes the test-owned manifest parent directory.
+     */
+    () => rmParent(manifestPath));
   const stdout: string[] = [];
   const stderr: string[] = [];
 
@@ -40,8 +75,26 @@ test("workspace scan writes a deterministic versioned report and returns incompl
     ],
     createLocalCliHandlers({ workspaceScan: scanPort("incomplete") }),
     {
-      stdout: (text) => stdout.push(text),
-      stderr: (text) => stderr.push(text),
+      stdout:
+        /**
+         * Captures one CLI output fragment.
+         *
+         * Inputs: `text`.
+         * Outputs: the numeric `Array#push` length, which `runCli` ignores.
+         * Does not handle: format, await, route, or recover emitted text; a synchronous push failure escapes `runCli`.
+         * Side effects: appends `text` to `stdout`.
+         */
+        (text) => stdout.push(text),
+      stderr:
+        /**
+         * Captures one CLI output fragment.
+         *
+         * Inputs: `text`.
+         * Outputs: the numeric `Array#push` length, which `runCli` ignores.
+         * Does not handle: format, await, route, or recover emitted text; a synchronous push failure escapes `runCli`.
+         * Side effects: appends `text` to `stderr`.
+         */
+        (text) => stderr.push(text),
     },
   );
 
@@ -54,13 +107,39 @@ test("workspace scan writes a deterministic versioned report and returns incompl
   };
   assert.equal(report.schemaVersion, "secret-reference-inventory/workspace-report/v2");
   assert.equal(report.summary.incomplete, true);
-  assert.deepEqual(report.repositories.map((repository) => repository.id), ["api"]);
+  assert.deepEqual(report.repositories.map(
+    /**
+     * Extracts the sole serialized repository ID for the JSON report assertion.
+     *
+     * Inputs: `repository`.
+     * Outputs: The current serialized repository's `id`.
+     * Does not handle: Sorting records, inspecting diagnostics, or evaluating the outer assertion.
+     * Side effects: Reads the record ID without mutation or I/O.
+     */
+    (repository) => repository.id), ["api"]);
   assert.equal(stdout.join("").includes(manifestPath), false);
 });
 
-test("workspace scan uses the default N3 local port when no test port is injected", async (t) => {
+test("workspace scan uses the default N3 local port when no test port is injected",
+  /**
+ * Invokes the normal local CLI handler without injecting a workspace scan port and inspects its JSON report.
+ * Inputs: The Node test context; writes one temporary manifest and captures stdout/stderr fragments in local arrays.
+ * Outputs: Resolves after scan status is 0, stderr is empty, and the default N3 scan reports complete API output using report schema v1.
+ * Does not handle: External service discovery, non-JSON formats, or retrying failed local scan operations.
+ * Side effects: Writes/removes the manifest directory through `t.after` and appends emitted text; CLI or assertion failure propagates.
+ */
+  async (t) => {
   const manifestPath = await writeManifest();
-  t.after(() => rmParent(manifestPath));
+  t.after(
+    /**
+     * Deletes the temporary manifest directory after the default-port scan test.
+     *
+     * Inputs: no arguments.
+     * Outputs: the cleanup promise returned by `rmParent(manifestPath)`, registered with `t.after`.
+     * Does not handle: Creating the fixture, deleting unrelated paths, or choosing test status.
+     * Side effects: Recursively removes the test-owned manifest parent directory.
+     */
+    () => rmParent(manifestPath));
   const stdout: string[] = [];
   const stderr: string[] = [];
 
@@ -68,8 +147,26 @@ test("workspace scan uses the default N3 local port when no test port is injecte
     ["workspace", "scan", "--manifest", manifestPath, "--format", "json"],
     createLocalCliHandlers(),
     {
-      stdout: (text) => stdout.push(text),
-      stderr: (text) => stderr.push(text),
+      stdout:
+        /**
+         * Captures one CLI output fragment.
+         *
+         * Inputs: `text`.
+         * Outputs: the numeric `Array#push` length, which `runCli` ignores.
+         * Does not handle: format, await, route, or recover emitted text; a synchronous push failure escapes `runCli`.
+         * Side effects: appends `text` to `stdout`.
+         */
+        (text) => stdout.push(text),
+      stderr:
+        /**
+         * Captures one CLI output fragment.
+         *
+         * Inputs: `text`.
+         * Outputs: the numeric `Array#push` length, which `runCli` ignores.
+         * Does not handle: format, await, route, or recover emitted text; a synchronous push failure escapes `runCli`.
+         * Side effects: appends `text` to `stderr`.
+         */
+        (text) => stderr.push(text),
     },
   );
 
@@ -90,25 +187,87 @@ test("workspace scan uses the default N3 local port when no test port is injecte
   );
 });
 
-test("workspace UI launches a loopback-only viewer from derived report data", async (t) => {
+test("workspace UI launches a loopback-only viewer from derived report data",
+  /**
+ * Runs `ui` with a complete injected scan and a real local viewer factory, then fetches the emitted URL.
+ * Inputs: The Node test context; creates a manifest, captures stdout, and keeps every started `LocalReportViewer` in `launched`.
+ * Outputs: Resolves after CLI status is 0, the URL host is `127.0.0.1`, the page is 200 with repository/API labels, and it excludes the manifest path.
+ * Does not handle: Browser interaction beyond one HTTP GET, non-loopback listeners, or suppression of startup/request/assertion errors.
+ * Side effects: Writes the manifest, pushes viewer handles/output, and registers both manifest removal and `viewer.close()` cleanup with `t.after`.
+ */
+  async (t) => {
   const manifestPath = await writeManifest();
-  t.after(() => rmParent(manifestPath));
+  t.after(
+    /**
+     * Deletes the temporary manifest directory after the loopback UI test.
+     *
+     * Inputs: no arguments.
+     * Outputs: the cleanup promise returned by `rmParent(manifestPath)`, registered with `t.after`.
+     * Does not handle: Creating the fixture, deleting other paths, or closing the viewer server.
+     * Side effects: Recursively removes the test-owned manifest parent directory.
+     */
+    () => rmParent(manifestPath));
   const launched: LocalReportViewer[] = [];
   const stdout: string[] = [];
   const status = await runCli(
     ["ui", "--manifest", manifestPath, "--port", "0"],
     createLocalCliHandlers({
       workspaceScan: scanPort("complete"),
-      startViewer: async (request) => {
+      startViewer:
+        /**
+         * Starts the injected loopback viewer and records its handle for subsequent server shutdown.
+         *
+         * Inputs: `request`.
+         * Outputs: The started `LocalReportViewer` expected by the CLI handler.
+         * Does not handle: Validating rendered content, closing the server, or exposing a non-loopback host.
+         * Side effects: Starts a local viewer and appends its handle to `launched`.
+         */
+        async (request) => {
         const viewer = await startLocalReportViewer(request);
         launched.push(viewer);
         return viewer;
       },
     }),
-    { stdout: (text) => stdout.push(text), stderr: () => undefined },
+    { stdout:
+      /**
+       * Captures one CLI output fragment.
+       *
+       * Inputs: `text`.
+       * Outputs: the numeric `Array#push` length, which `runCli` ignores.
+       * Does not handle: format, await, route, or recover emitted text; a synchronous push failure escapes `runCli`.
+       * Side effects: appends `text` to `stdout`.
+       */
+      (text) => stdout.push(text), stderr:
+      /**
+       * Discards one CLI output fragment.
+       *
+       * Inputs: The emitted stderr text, deliberately not bound by this test hook.
+       * Outputs: `undefined`, which `runCli` ignores.
+       * Does not handle: inspect, format, retain, or recover emitted text.
+       * Side effects: None; the emitted text is intentionally discarded.
+       */
+      () => undefined },
   );
-  t.after(async () => {
-    await Promise.all(launched.map((viewer) => viewer.close()));
+  t.after(
+    /**
+     * Closes every viewer server started by the loopback UI test.
+     *
+     * Inputs: no arguments.
+     * Outputs: A promise that resolves after all recorded `LocalReportViewer` servers close.
+     * Does not handle: Deleting the manifest directory, creating a viewer, or determining test status.
+     * Side effects: Calls each viewer's HTTP-server close method.
+     */
+    async () => {
+    await Promise.all(launched.map(
+      /**
+       * Starts shutdown of one viewer server during the aggregate cleanup.
+       *
+       * Inputs: `viewer`.
+       * Outputs: This viewer's close promise.
+       * Does not handle: Closing another viewer, deleting fixture files, or swallowing close failures.
+       * Side effects: Begins closing the current viewer's HTTP server.
+       */
+      (viewer) => viewer.close()));
   });
 
   assert.equal(status, 0);
@@ -121,41 +280,129 @@ test("workspace UI launches a loopback-only viewer from derived report data", as
   assert.equal(page.body.includes(manifestPath), false);
 });
 
-test("workspace invalid input and required-complete UI return nonzero without launching", async (t) => {
+test("workspace invalid input and required-complete UI return nonzero without launching",
+  /**
+ * Exercises missing-manifest handling and `ui --require-complete` handling with a launch hook that must remain unused.
+ * Inputs: The Node test context; creates an empty temp root/missing path, then a valid manifest with an injected incomplete scan and `launched` flag.
+ * Outputs: Resolves after the missing scan returns 65 with fixed nonleaking stderr, and incomplete UI returns 2 while `launched` remains false.
+ * Does not handle: Actual viewer startup, recovery from filesystem failures, or rendering a partial UI.
+ * Side effects: Creates two temp roots, captures stderr, registers both cleanup operations with `t.after`, and mutates the launch flag only if an incorrect path runs.
+ */
+  async (t) => {
   const root = await mkdtemp(join(tmpdir(), "secret-usage-workspace-cli-invalid-"));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(
+    /**
+     * Removes the invalid-input test's temporary root directory.
+     *
+     * Inputs: no arguments.
+     * Outputs: the cleanup promise returned by `rm(root, { recursive: true, force: true })`, registered with `t.after`.
+     * Does not handle: Creating the root, deleting outside the test root, or deciding test status.
+     * Side effects: Recursively deletes the test-owned root with force enabled.
+     */
+    () => rm(root, { recursive: true, force: true }));
   const invalidPath = join(root, "missing.json");
   const invalidErr: string[] = [];
   const invalid = await runCli(
     ["workspace", "scan", "--manifest", invalidPath],
     createLocalCliHandlers({ workspaceScan: scanPort("complete") }),
-    { stdout: () => undefined, stderr: (text) => invalidErr.push(text) },
+    { stdout:
+      /**
+       * Discards one CLI output fragment.
+       *
+       * Inputs: The emitted stdout text, deliberately not bound by this test hook.
+       * Outputs: `undefined`, which `runCli` ignores.
+       * Does not handle: inspect, format, retain, or recover emitted text.
+       * Side effects: None; the emitted text is deliberately discarded.
+       */
+      () => undefined, stderr:
+      /**
+       * Captures one CLI output fragment.
+       *
+       * Inputs: `text`.
+       * Outputs: the numeric `Array#push` length, which `runCli` ignores.
+       * Does not handle: format, await, route, or recover emitted text; a synchronous push failure escapes `runCli`.
+       * Side effects: appends `text` to `invalidErr`.
+       */
+      (text) => invalidErr.push(text) },
   );
   assert.equal(invalid, 65);
   assert.equal(invalidErr.join(""), "APP_WORKSPACE_MANIFEST_READ_FAILED\n");
   assert.equal(invalidErr.join("").includes(invalidPath), false);
 
   const manifestPath = await writeManifest();
-  t.after(() => rmParent(manifestPath));
+  t.after(
+    /**
+     * Removes the manifest fixture created for the require-complete UI case.
+     *
+     * Inputs: no arguments.
+     * Outputs: the cleanup promise returned by `rmParent(manifestPath)`, registered with `t.after`.
+     * Does not handle: Creating the fixture, removing an unrelated root, or deciding test status.
+     * Side effects: Recursively removes the test-owned manifest parent directory.
+     */
+    () => rmParent(manifestPath));
   let launched = false;
   const incomplete = await runCli(
     ["ui", "--manifest", manifestPath, "--require-complete"],
     createLocalCliHandlers({
       workspaceScan: scanPort("incomplete"),
-      startViewer: async () => {
+      startViewer:
+        /**
+         * Fails the test if an incomplete workspace reaches viewer launch.
+         *
+         * Inputs: No arguments; the injected handler calls it only after its own UI preflight.
+         * Outputs: A rejected promise carrying the deliberate viewer-launch error.
+         * Does not handle: Starting, closing, or recovering a viewer; the expected CLI path must not invoke this handler.
+         * Side effects: Sets `launched` and throws the test error.
+         */
+        async () => {
         launched = true;
         throw new Error("Viewer should not start");
       },
     }),
-    { stdout: () => undefined, stderr: () => undefined },
+    { stdout:
+      /**
+       * Discards one CLI output fragment.
+       *
+       * Inputs: The emitted stdout text, deliberately not bound by this test hook.
+       * Outputs: `undefined`, which `runCli` ignores.
+       * Does not handle: inspect, format, retain, or recover emitted text.
+       * Side effects: None; the emitted text is deliberately discarded.
+       */
+      () => undefined, stderr:
+      /**
+       * Discards one CLI output fragment.
+       *
+       * Inputs: The emitted stderr text, deliberately not bound by this test hook.
+       * Outputs: `undefined`, which `runCli` ignores.
+       * Does not handle: inspect, format, retain, or recover emitted text.
+       * Side effects: None; the emitted text is deliberately discarded.
+       */
+      () => undefined },
   );
   assert.equal(incomplete, 2);
   assert.equal(launched, false);
 });
 
-test("workspace UI rejects synthetic-row viewer overflow before starting a listener", async (t) => {
+test("workspace UI rejects synthetic-row viewer overflow before starting a listener",
+  /**
+ * Sends an oversized synthetic scan result through `ui` with a viewer hook that deliberately fails if materialization reaches it.
+ * Inputs: The Node test context; creates a manifest, an overflowing scan port, stderr capture, and a `launched` sentinel flag.
+ * Outputs: Resolves after UI returns 70 with `APP_WORKSPACE_VIEWER_LIMIT_EXCEEDED` and the viewer flag is still false.
+ * Does not handle: Starting a listener, truncating the synthetic report, or converting the overflow into a successful UI.
+ * Side effects: Writes/removes the manifest directory, appends stderr, and would mutate `launched` only on the invalid launch path; failures propagate.
+ */
+  async (t) => {
   const manifestPath = await writeManifest();
-  t.after(() => rmParent(manifestPath));
+  t.after(
+    /**
+     * Deletes the temporary manifest directory after the viewer-overflow test.
+     *
+     * Inputs: no arguments.
+     * Outputs: the cleanup promise returned by `rmParent(manifestPath)`, registered with `t.after`.
+     * Does not handle: Creating the fixture, deleting unrelated paths, or deciding test status.
+     * Side effects: Recursively removes the test-owned manifest parent directory.
+     */
+    () => rmParent(manifestPath));
   let launched = false;
   const stderr: string[] = [];
 
@@ -163,12 +410,39 @@ test("workspace UI rejects synthetic-row viewer overflow before starting a liste
     ["ui", "--manifest", manifestPath],
     createLocalCliHandlers({
       workspaceScan: overflowingScanPort(),
-      startViewer: async () => {
+      startViewer:
+        /**
+         * Fails the test if viewer materialization proceeds after row-limit rejection.
+         *
+         * Inputs: No arguments; the injected handler would receive no viewer request in this test.
+         * Outputs: A rejected promise carrying the deliberate preflight-failure error.
+         * Does not handle: Starting a listener, normal viewer construction, or error recovery.
+         * Side effects: Sets `launched` and throws the test error.
+         */
+        async () => {
         launched = true;
         throw new Error("viewer must not start after model preflight failure");
       },
     }),
-    { stdout: () => undefined, stderr: (text) => stderr.push(text) },
+    { stdout:
+      /**
+       * Discards one CLI output fragment.
+       *
+       * Inputs: The emitted stdout text, deliberately not bound by this test hook.
+       * Outputs: `undefined`, which `runCli` ignores.
+       * Does not handle: inspect, format, retain, or recover emitted text.
+       * Side effects: None; the emitted text is deliberately discarded.
+       */
+      () => undefined, stderr:
+      /**
+       * Captures one CLI output fragment.
+       *
+       * Inputs: `text`.
+       * Outputs: the numeric `Array#push` length, which `runCli` ignores.
+       * Does not handle: format, await, route, or recover emitted text; a synchronous push failure escapes `runCli`.
+       * Side effects: appends `text` to `stderr`.
+       */
+      (text) => stderr.push(text) },
   );
 
   assert.equal(status, 70);
@@ -176,9 +450,26 @@ test("workspace UI rejects synthetic-row viewer overflow before starting a liste
   assert.equal(launched, false);
 });
 
-test("workspace UI closes a started viewer when writing its URL fails", async (t) => {
+test("workspace UI closes a started viewer when writing its URL fails",
+  /**
+ * Starts a synthetic complete UI viewer whose `close` counter is observable, then makes synchronous stdout output throw.
+ * Inputs: The Node test context; creates a manifest, injected complete scan/viewer handle, stderr collector, and `closeCalls` counter.
+ * Outputs: Resolves after UI returns 70 with `APP_WORKSPACE_VIEWER_FAILED` and the started viewer's `close` has run exactly once.
+ * Does not handle: Binding a real server, retrying URL output, or suppressing the stdout failure internally.
+ * Side effects: Writes/removes the manifest directory, appends stderr, and increments `closeCalls` through the CLI cleanup path.
+ */
+  async (t) => {
   const manifestPath = await writeManifest();
-  t.after(() => rmParent(manifestPath));
+  t.after(
+    /**
+     * Deletes the temporary manifest directory after the stdout-failure viewer test.
+     *
+     * Inputs: no arguments.
+     * Outputs: the cleanup promise returned by `rmParent(manifestPath)`, registered with `t.after`.
+     * Does not handle: Creating the fixture, deleting unrelated paths, or deciding test status.
+     * Side effects: Recursively removes the test-owned manifest parent directory.
+     */
+    () => rmParent(manifestPath));
   const stderr: string[] = [];
   let closeCalls = 0;
 
@@ -186,19 +477,54 @@ test("workspace UI closes a started viewer when writing its URL fails", async (t
     ["ui", "--manifest", manifestPath],
     createLocalCliHandlers({
       workspaceScan: scanPort("complete"),
-      startViewer: async () => ({
+      startViewer:
+        /**
+         * Supplies a started loopback viewer whose close operation is observable by this test.
+         *
+         * Inputs: The viewer request, which this synthetic implementation does not inspect.
+         * Outputs: A `LocalReportViewer`-shaped object at the fixed loopback URL.
+         * Does not handle: Binding a real server, materializing viewer HTML, or closing the viewer.
+         * Side effects: Allocates a `URL` object for the synthetic viewer handle.
+         */
+        async () => ({
         address: { host: "127.0.0.1", port: 12345 },
         url: new URL("http://127.0.0.1:12345/"),
+        /**
+         * Records that the CLI invoked shutdown on the synthetic viewer after stdout failed.
+         *
+         * Inputs: no arguments.
+         * Outputs: A fulfilled promise after incrementing the close-call counter.
+         * Does not handle: Closing a real server, retrying output, or translating the stdout failure.
+         * Side effects: Increments the test-local `closeCalls` counter.
+         */
         async close(): Promise<void> {
           closeCalls += 1;
         },
       }),
     }),
     {
-      stdout: () => {
+      stdout:
+        /**
+         * Simulates a synchronous stdout write failure after viewer startup.
+         *
+         * Inputs: No declared arguments; the emitted viewer URL text is intentionally ignored.
+         * Outputs: Never returns normally because it throws the configured stdout error.
+         * Does not handle: Capturing output, closing the viewer, or converting the failure to an exit status.
+         * Side effects: Throws `stdout unavailable`, causing the surrounding CLI path to close its started viewer.
+         */
+        () => {
         throw new Error("stdout unavailable");
       },
-      stderr: (text) => stderr.push(text),
+      stderr:
+        /**
+         * Captures one CLI output fragment.
+         *
+         * Inputs: `text`.
+         * Outputs: the numeric `Array#push` length, which `runCli` ignores.
+         * Does not handle: format, await, route, or recover emitted text; a synchronous push failure escapes `runCli`.
+         * Side effects: appends `text` to `stderr`.
+         */
+        (text) => stderr.push(text),
     },
   );
 
@@ -207,15 +533,40 @@ test("workspace UI closes a started viewer when writing its URL fails", async (t
   assert.equal(closeCalls, 1);
 });
 
-test("workspace UI collapses adversarial report getters to a fixed error before viewer launch", async (t) => {
+test("workspace UI collapses adversarial report getters to a fixed error before viewer launch",
+  /**
+ * Gives the UI a null-prototype report whose `repositories` getter increments a counter and throws a private sentinel.
+ * Inputs: The Node test context; creates a manifest, hostile scan result, stdout/stderr collectors, getter-read counter, and a viewer hook that must not launch.
+ * Outputs: Resolves after UI returns the fixed viewer failure, stderr omits the sentinel/path, the getter was read once, and `launched` remains false.
+ * Does not handle: Recovering hostile report data, exposing getter errors, or starting a viewer after view-model materialization fails.
+ * Side effects: Writes/removes the manifest directory, installs a throwing getter, captures stderr, and updates local counters; unexpected failures propagate.
+ */
+  async (t) => {
   const manifestPath = await writeManifest();
-  t.after(() => rmParent(manifestPath));
+  t.after(
+    /**
+     * Deletes the adversarial-getter test's temporary manifest directory.
+     *
+     * Inputs: no arguments.
+     * Outputs: the cleanup promise returned by `rmParent(manifestPath)`, registered with `t.after`.
+     * Does not handle: Creating the fixture, deleting outside its parent, or deciding test status.
+     * Side effects: Recursively removes the test-owned manifest parent directory.
+     */
+    () => rmParent(manifestPath));
   const sentinel = "/private/sk_live_WORKSPACE_REPORT_TRAP_123456789";
   let getterReads = 0;
   let launched = false;
   const stderr: string[] = [];
   const hostileResult = Object.create(null) as WorkspaceScanReportSource;
   Object.defineProperty(hostileResult, "repositories", {
+    /**
+     * Implements the hostile `repositories` getter installed on the synthetic workspace result.
+     *
+     * Inputs: A later property read supplies the receiver; this getter has no positional parameters.
+     * Outputs: Never returns: it throws the test sentinel when `repositories` is read.
+     * Does not handle: It neither installs the property nor chooses when it runs; property access invokes this test getter, which only throws the deliberate sentinel.
+     * Side effects: Increments `getterReads` and throws the deliberate sentinel error.
+     */
     get(): never {
       getterReads += 1;
       throw new Error(sentinel);
@@ -226,16 +577,51 @@ test("workspace UI collapses adversarial report getters to a fixed error before 
     ["ui", "--manifest", manifestPath],
     createLocalCliHandlers({
       workspaceScan: {
+        /**
+         * Returns the hostile report object so CLI materialization triggers its `repositories` getter.
+         *
+         * Inputs: no arguments.
+         * Outputs: The exact `hostileResult` object, without reading its getter.
+         * Does not handle: Materializing viewer data, catching the getter error, or starting a viewer.
+         * Side effects: Returns the already allocated hostile object; property access happens only later.
+         */
         async scan() {
           return hostileResult;
         },
       },
-      startViewer: async () => {
+      startViewer:
+        /**
+         * Fails the test if hostile report material reaches viewer launch.
+         *
+         * Inputs: No arguments; valid report material is required before this injected handler runs.
+         * Outputs: A rejected promise carrying the deliberate no-launch error.
+         * Does not handle: Starting a viewer, converting hostile data, or recovering the rejected launch.
+         * Side effects: Sets `launched` and throws the test error.
+         */
+        async () => {
         launched = true;
         throw new Error("viewer must not launch");
       },
     }),
-    { stdout: () => undefined, stderr: (text) => stderr.push(text) },
+    { stdout:
+      /**
+       * Discards one CLI output fragment.
+       *
+       * Inputs: The emitted stdout text, deliberately not bound by this test hook.
+       * Outputs: `undefined`, which `runCli` ignores.
+       * Does not handle: inspect, format, retain, or recover emitted text.
+       * Side effects: None; the emitted text is deliberately discarded.
+       */
+      () => undefined, stderr:
+      /**
+       * Captures one CLI output fragment.
+       *
+       * Inputs: `text`.
+       * Outputs: the numeric `Array#push` length, which `runCli` ignores.
+       * Does not handle: format, await, route, or recover emitted text; a synchronous push failure escapes `runCli`.
+       * Side effects: appends `text` to `stderr`.
+       */
+      (text) => stderr.push(text) },
   );
 
   assert.equal(status, 70);
@@ -245,10 +631,26 @@ test("workspace UI collapses adversarial report getters to a fixed error before 
   assert.equal(launched, false);
 });
 
+/**
+ * Builds an injected workspace scan port that returns one repository at the requested status.
+ *
+ * Inputs: `status`.
+ * Outputs: A scan port whose `scan` method returns the deterministic fixture report.
+ * Does not handle: Reading a manifest, running static analysis, or emitting CLI output.
+ * Side effects: Allocates the port object and closes over the requested status.
+ */
 function scanPort(
   status: "complete" | "incomplete",
 ): WorkspaceScanPort<WorkspaceScanReportSource> {
   return {
+    /**
+     * Returns the one-repository fixture report for this injected scan request.
+     *
+     * Inputs: No arguments; the port interface supplies no request payload here.
+     * Outputs: A fulfilled promise containing the requested complete/incomplete repository report.
+     * Does not handle: Inspecting a manifest, creating deployments, or retrying a scan.
+     * Side effects: Calls the local fixture-brand helpers and allocates the report object.
+     */
     async scan() {
       return {
         repositories: [
@@ -271,8 +673,25 @@ function scanPort(
   };
 }
 
+/**
+ * Builds an injected scan port with enough synthetic rows to exceed the viewer model's limit.
+ *
+ * Inputs: no arguments.
+ * Outputs: A port whose scan result contains 100 repositories and their synthetic deployment.
+ * Does not handle: Materializing a viewer, scanning files, or emitting a CLI response.
+ * Side effects: Generates in-memory repository and member fixture arrays.
+ */
 function overflowingScanPort(): WorkspaceScanPort<WorkspaceScanReportSource> {
-  const repositories = Array.from({ length: 100 }, (_, index) => ({
+  const repositories = Array.from({ length: 100 },
+    /**
+     * Builds one complete repository fact to force the synthetic viewer-row limit.
+     *
+     * Inputs: `_`, `index`.
+     * Outputs: An in-memory complete scan result with a unique branded repository ID.
+     * Does not handle: Building deployments, invoking the scanner, or checking viewer limits.
+     * Side effects: Allocates the fixture result object and its empty fact arrays.
+     */
+    (_, index) => ({
     id: id("repository-" + String(index + 1)),
     status: "complete" as const,
     diagnostics: [],
@@ -282,6 +701,14 @@ function overflowingScanPort(): WorkspaceScanPort<WorkspaceScanReportSource> {
     dynamicLookupEdges: [],
   }));
   return {
+    /**
+     * Returns the prebuilt overflowing report to the injected CLI scan handler.
+     *
+     * Inputs: No arguments; this fixture ignores the scan request.
+     * Outputs: A fulfilled promise containing the synthetic repository/deployment report.
+     * Does not handle: Scanning a manifest, recomputing rows, or checking the viewer limit.
+     * Side effects: Allocates the report wrapper while reusing the prebuilt repositories.
+     */
     async scan() {
       return {
         repositories,
@@ -289,9 +716,27 @@ function overflowingScanPort(): WorkspaceScanPort<WorkspaceScanReportSource> {
           id: id("production"),
           status: "complete",
           diagnostics: [],
-          repositoryIds: repositories.map((repository) => repository.id),
+          repositoryIds: repositories.map(
+            /**
+             * Extracts every generated repository ID for the synthetic deployment declaration.
+             *
+             * Inputs: `repository`.
+             * Outputs: The current generated repository's branded `id`.
+             * Does not handle: Constructing member partitions, mutating repositories, or running a scan.
+             * Side effects: Reads the repository ID without mutation or I/O.
+             */
+            (repository) => repository.id),
           sharedKeys: [],
-          members: repositories.map((repository) => ({
+          members: repositories.map(
+            /**
+             * Clones one repository's scan facts into the matching deployment-member partition.
+             *
+             * Inputs: `repository`.
+             * Outputs: A member record sharing the current repository's immutable scan fact references.
+             * Does not handle: Deep cloning facts, adding shared keys, or changing source repository objects.
+             * Side effects: Allocates the member wrapper object.
+             */
+            (repository) => ({
             repositoryId: repository.id,
             status: repository.status,
             diagnostics: repository.diagnostics,
@@ -306,6 +751,14 @@ function overflowingScanPort(): WorkspaceScanPort<WorkspaceScanReportSource> {
   };
 }
 
+/**
+ * Creates a minimal v2 workspace manifest in a new test-owned temporary directory.
+ *
+ * Inputs: no arguments.
+ * Outputs: A path to the written `workspace.jsonc` fixture.
+ * Does not handle: Parsing the manifest, registering cleanup, or writing a production workspace.
+ * Side effects: Creates a temporary directory and writes a manifest file beneath it.
+ */
 async function writeManifest(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "secret-usage-workspace-cli-"));
   const manifestPath = join(root, "workspace.jsonc");
@@ -324,17 +777,69 @@ async function writeManifest(): Promise<string> {
   return manifestPath;
 }
 
+/**
+ * Recursively removes the parent directory of a test-created manifest file.
+ *
+ * Inputs: `file`.
+ * Outputs: A promise fulfilled after forced recursive deletion completes.
+ * Does not handle: Checking ownership, deleting an arbitrary sibling, or suppressing deletion failures.
+ * Side effects: Deletes the filesystem directory returned by `dirname(file)`.
+ */
 async function rmParent(file: string): Promise<void> {
   await rm(dirname(file), { recursive: true, force: true });
 }
 
+/**
+ * Fetches a loopback CLI viewer URL and buffers its status and UTF-8 page body.
+ *
+ * Inputs: `url`.
+ * Outputs: A promise resolving to the HTTP response status and complete page body.
+ * Does not handle: Redirects, request timeout policy, response-size limits, or page-content validation.
+ * Side effects: Starts a loopback HTTP GET and registers response/error listeners.
+ */
 async function request(url: URL): Promise<{ readonly status: number; readonly body: string }> {
-  return new Promise((resolve, reject) => {
-    const request = get(url, (response) => {
+  return new Promise(
+    /**
+     * Connects one local HTTP request to a promise.
+     *
+     * Inputs: `resolve`, `reject`.
+     * Outputs: `void`; the enclosing promise settles only through its supplied `resolve` or `reject`.
+     * Does not handle: return a response value itself or decode response chunks.
+     * Side effects: starts the request, installs listeners, and invokes the promise settlement functions.
+     */
+    (resolve, reject) => {
+    const request = get(url,
+      /**
+       * Installs listeners that accumulate one CLI viewer HTTP response and settle the enclosing promise.
+       *
+       * Inputs: `response`.
+       * Outputs: `void`; data/end listeners later resolve status and UTF-8 body, while error rejects.
+ * Does not handle: Issuing a second request, checking page content, imposing a response-size limit, or retaining chunks after settlement.
+       * Side effects: Registers response event handlers and captures received buffers in a local array.
+       */
+      (response) => {
       const chunks: Buffer[] = [];
-      response.on("data", (chunk: Buffer) => chunks.push(chunk));
+      response.on("data",
+        /**
+         * Stores one response chunk.
+         *
+         * Inputs: `chunk`.
+         * Outputs: the numeric `Array#push` length, ignored by EventEmitter listener dispatch.
+         * Does not handle: decode the chunk, concatenate the body, or settle the request promise.
+         * Side effects: appends the received chunk to `chunks`.
+         */
+        (chunk: Buffer) => chunks.push(chunk));
       response.on("error", reject);
-      response.on("end", () => {
+      response.on("end",
+        /**
+         * Completes one local HTTP response.
+         *
+         * Inputs: no arguments.
+         * Outputs: `void`; `resolve` settles the request promise with the assembled response.
+         * Does not handle: open another request or retain the response beyond this assembly.
+         * Side effects: concatenates captured chunks and invokes `resolve`.
+         */
+        () => {
         resolve({
           status: response.statusCode ?? 0,
           body: Buffer.concat(chunks).toString("utf8"),

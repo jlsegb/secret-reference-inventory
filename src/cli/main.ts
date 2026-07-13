@@ -6,6 +6,14 @@ import { resolve } from "node:path";
 
 import { runCli } from "./run.js";
 
+/**
+ * Runs the public command-line entry point with production-local application handlers.
+ *
+ * Inputs: Optional argv tokens, defaulting to the current process arguments after the executable.
+ * Outputs: The numeric status returned by the CLI runner.
+ * Does not handle: Catching startup/import errors or replacing process exit-code assignment when invoked directly.
+ * Side effects: Creates local handlers and may cause the runner to emit terminal output or access local files.
+ */
 export async function main(argv = process.argv.slice(2)): Promise<number> {
   return runCli(argv, createLocalCliHandlers());
 }

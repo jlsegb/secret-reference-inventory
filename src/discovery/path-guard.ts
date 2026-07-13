@@ -14,11 +14,27 @@ export class PathGuard {
   readonly #roots: readonly ApprovedRoot[];
   readonly #safety: SafeFactFactory;
 
+  /**
+   * Creates a guard from roots that have already passed real-path validation.
+   *
+   * Inputs: An immutable approved-root list and the factory used to derive display-safe paths.
+   * Outputs: An initialized PathGuard instance.
+   * Does not handle: Root validation, deduplication, or public construction from user input.
+   * Side effects: Retains references to the supplied roots and safety factory.
+   */
   private constructor(roots: readonly ApprovedRoot[], safety: SafeFactFactory) {
     this.#roots = roots;
     this.#safety = safety;
   }
 
+  /**
+   * Validates requested root directories and builds a containment guard for them.
+   *
+   * Inputs: User-supplied root strings and a factory for safe root identifiers and display paths.
+   * Outputs: A guard containing distinct canonical directory roots ordered deepest first.
+   * Does not handle: Creating roots, recovering unreadable paths, or traversing their contents.
+   * Side effects: Resolves and stats each supplied path; throws PathGuardError for invalid input or filesystem access failures.
+   */
   public static async create(
     rootInputs: readonly string[],
     safety: SafeFactFactory,
@@ -68,17 +84,39 @@ export class PathGuard {
     }
 
     // Choose the deepest root when roots overlap so report paths stay local.
-    roots.sort((left, right) => right.canonicalPath.length - left.canonicalPath.length);
+    roots.sort(
+      /**
+       * Orders overlapping roots from deepest to shallowest for containment selection.
+       *
+       * Inputs: Two approved-root descriptors.
+       * Outputs: A descending canonical-path-length comparator result.
+       * Does not handle: Lexical path ordering, containment validation, or a total order for equal-length roots; equal lengths retain their prior root-input order under stable Array.sort.
+       * Side effects: None.
+       */
+      (left, right) => right.canonicalPath.length - left.canonicalPath.length,
+    );
     return new PathGuard(Object.freeze(roots), safety);
   }
 
+  /**
+   * Exposes the guard's frozen canonical root descriptors for trusted traversal.
+   *
+   * Inputs: None.
+   * Outputs: The ordered immutable approved-root list.
+   * Does not handle: Hiding root identifiers or copying the individual descriptors.
+   * Side effects: None.
+   */
   public get roots(): readonly ApprovedRoot[] {
     return this.#roots;
   }
 
   /**
-   * Resolves an existing candidate and returns it only when its canonical real
-   * path remains under an approved root.
+   * Resolves an existing candidate and returns it only when its real path remains contained.
+   *
+   * Inputs: One nonempty filesystem candidate string.
+   * Outputs: A guarded path with a safe display path, or undefined when resolution fails or escapes every root.
+   * Does not handle: Creating missing paths, preserving a path snapshot after realpath, or explaining rejection.
+   * Side effects: Reads filesystem real-path metadata; a caller can observe replacement after this point-in-time containment check.
    */
   public async resolveExisting(candidate: string): Promise<GuardedPath | undefined> {
     if (typeof candidate !== "string" || candidate.length === 0) {
@@ -96,12 +134,24 @@ export class PathGuard {
   }
 
   /**
-   * Returns a safe result for a canonical path already obtained by trusted
-   * traversal code. It still checks every approved root before exposing it.
+   * Wraps an already-canonical traversal path only when it is contained by an approved root.
+   *
+   * Inputs: A canonical path supplied by trusted traversal code.
+   * Outputs: A guarded descriptor for the deepest containing root, or undefined when outside all roots.
+   * Does not handle: Resolving relative paths, validating filesystem existence, or making the canonical path reportable.
+   * Side effects: Delegates display-path materialization to the retained SafeFactFactory.
    */
   public fromCanonicalPath(canonicalPath: string): GuardedPath | undefined {
-    const root = this.#roots.find((candidateRoot) =>
-      isSegmentDescendant(candidateRoot.canonicalPath, canonicalPath),
+    const root = this.#roots.find(
+      /**
+       * Selects a root containing the supplied trusted canonical path.
+       *
+       * Inputs: One approved root from the guard's depth-ordered roots.
+       * Outputs: True when that root segment-contains the requested path.
+       * Does not handle: Real-path resolution or choosing among later roots.
+       * Side effects: None.
+       */
+      (candidateRoot) => isSegmentDescendant(candidateRoot.canonicalPath, canonicalPath),
     );
 
     if (root === undefined) {
@@ -118,7 +168,14 @@ export class PathGuard {
     );
   }
 
-  /** A non-following check used by source discovery before it calls realpath. */
+  /**
+   * Checks whether a candidate is a symbolic link without resolving its target.
+   *
+   * Inputs: One filesystem candidate path.
+   * Outputs: True or false for a readable directory entry, or undefined when metadata cannot be read.
+   * Does not handle: Target containment, symlink resolution, error reporting, or a race-free guarantee for later filesystem use.
+   * Side effects: Reads point-in-time lstat metadata from the local filesystem.
+   */
   public async isSymlink(candidate: string): Promise<boolean | undefined> {
     try {
       return (await lstat(candidate)).isSymbolicLink();
@@ -131,6 +188,14 @@ export class PathGuard {
 export class PathGuardError extends Error {
   readonly code: SafeDiagnosticCode;
 
+  /**
+   * Constructs the stable error used for approved-root validation failures.
+   *
+   * Inputs: One allowlisted root-validation diagnostic code.
+   * Outputs: A PathGuardError whose name, message, and safe code equal that code.
+   * Does not handle: Wrapping arbitrary errors or retaining the rejected filesystem path.
+   * Side effects: Initializes the Error base object.
+   */
   public constructor(
     code:
       | "NO_APPROVED_ROOT"
@@ -144,6 +209,14 @@ export class PathGuardError extends Error {
   }
 }
 
+/**
+ * Tests ancestry using path segments rather than a vulnerable string prefix.
+ *
+ * Inputs: A root path and a candidate path in the host platform's path syntax.
+ * Outputs: True when the candidate is the root itself or lies below it.
+ * Does not handle: Real-path resolution, filesystem existence, or case-folding policy.
+ * Side effects: None.
+ */
 export function isSegmentDescendant(root: string, candidate: string): boolean {
   const relativePath = relative(root, candidate);
   return (
@@ -154,11 +227,26 @@ export function isSegmentDescendant(root: string, candidate: string): boolean {
   );
 }
 
-/** Explicit escape hatch for trusted adapters; never pass this to reporters. */
+/**
+ * Returns the non-enumerable canonical path for trusted internal adapters.
+ *
+ * Inputs: A previously guarded path descriptor.
+ * Outputs: Its InternalPath canonical path.
+ * Does not handle: Safe display conversion, authorization, or reporter-facing serialization.
+ * Side effects: None.
+ */
 export function internalPathOf(path: GuardedPath): InternalPath {
   return path.canonicalPath;
 }
 
+/**
+ * Creates an immutable root descriptor while keeping its canonical path non-enumerable.
+ *
+ * Inputs: A safe root identifier and canonical internal path.
+ * Outputs: A frozen ApprovedRoot whose canonical path is available only to typed internal consumers.
+ * Does not handle: Validating either input or deriving a display path.
+ * Side effects: Defines a non-enumerable property on the returned object.
+ */
 function createApprovedRoot(id: ApprovedRoot["id"], canonicalPath: InternalPath): ApprovedRoot {
   const root = { id } as ApprovedRoot;
   Object.defineProperty(root, "canonicalPath", {
@@ -170,6 +258,14 @@ function createApprovedRoot(id: ApprovedRoot["id"], canonicalPath: InternalPath)
   return Object.freeze(root);
 }
 
+/**
+ * Builds an immutable path descriptor that pairs trusted canonical data with its safe display form.
+ *
+ * Inputs: An approved root, a canonical internal path beneath it, and a SafePath display value.
+ * Outputs: A frozen GuardedPath with a non-enumerable canonical path.
+ * Does not handle: Checking containment, validating display safety, or resolving symlinks.
+ * Side effects: Defines a non-enumerable property on the returned object.
+ */
 export function createGuardedPath(
   root: ApprovedRoot,
   canonicalPath: InternalPath,

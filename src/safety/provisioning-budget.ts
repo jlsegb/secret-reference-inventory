@@ -13,6 +13,14 @@ export interface ProvisioningBudget {
   overflowed: boolean;
 }
 
+/**
+ * Starts independent raw-input and retained-fact quotas for one provisioning parse.
+ *
+ * Inputs: No explicit parameters.
+ * Outputs: A mutable budget at both module limits with no overflow latched.
+ * Does not handle: Sharing limits across operations, parsing inputs, or materializing facts.
+ * Side effects: Allocates and returns a new object; it does not touch caller-owned state.
+ */
 export function createProvisioningBudget(): ProvisioningBudget {
   return {
     rawRemaining: MAX_PROVISIONING_RAW_ENTRIES,
@@ -21,7 +29,14 @@ export function createProvisioningBudget(): ProvisioningBudget {
   };
 }
 
-/** Reserve parser-observed structural entries before indexing an input array. */
+/**
+ * Claims raw traversal capacity and permanently marks this budget unusable after an invalid or excessive claim.
+ *
+ * Inputs: A mutable per-operation budget and requested raw-entry count.
+ * Outputs: True after subtracting a valid count; false after latching `overflowed`.
+ * Does not handle: Validating individual entries or reserving normalized output capacity.
+ * Side effects: Mutates `rawRemaining` or `overflowed` on the supplied budget.
+ */
 export function reserveProvisioningRawEntries(
   budget: ProvisioningBudget,
   count: number,
@@ -39,7 +54,14 @@ export function reserveProvisioningRawEntries(
   return true;
 }
 
-/** Reserve every retained fact, selector, diagnostic, or coverage gap. */
+/**
+ * Claims capacity for normalized facts and latches the supplied budget on an invalid or excessive claim.
+ *
+ * Inputs: A mutable per-operation budget and requested normalized-entry count.
+ * Outputs: True after subtracting `count` (one by default); false after latching `overflowed`.
+ * Does not handle: Building the normalized facts or reserving raw traversal capacity.
+ * Side effects: Mutates `normalizedRemaining` or `overflowed` on the supplied budget.
+ */
 export function reserveProvisioningNormalizedEntries(
   budget: ProvisioningBudget,
   count = 1,
@@ -58,9 +80,12 @@ export function reserveProvisioningNormalizedEntries(
 }
 
 /**
- * Do not use iteration helpers on repository-controlled arrays. Reading a
- * bounded length first means an oversized sparse array cannot invoke a getter
- * at the first out-of-budget index.
+ * Admits an array only after reserving its declared length, before any indexed element is read.
+ *
+ * Inputs: An unknown potential array and the operation's mutable budget.
+ * Outputs: The original array when its length fits the raw quota, otherwise undefined.
+ * Does not handle: Traversing array elements, validating contents, or defending a later getter read.
+ * Side effects: Reads `Array.isArray`/length and mutates the supplied raw-budget counters.
  */
 export function reserveProvisioningArray(
   input: unknown,
@@ -73,9 +98,12 @@ export function reserveProvisioningArray(
 }
 
 /**
- * A non-materializing structural preflight for public fact builders and
- * attested JSON. It uses an explicit stack and indexed arrays, never
- * `Object.values`, spread, `entries`, or `every` over repository data.
+ * Performs a structural preflight with bounded arrays and recursively reachable enumerable own string-keyed object values in one provisioning value.
+ *
+ * Inputs: An unknown provisioning value rooted at an array, object, or primitive.
+ * Outputs: True when traversal finishes, every encountered array fits the shared raw-array quota, and every encountered object has at most the own-field cap; false for a rejected array, overlarge individual object, or thrown property access.
+ * Does not handle: Non-enumerable, symbol-keyed, or inherited object fields: only enumerable own string keys are traversed. A later consumer can read such a skipped field, so a non-enumerable `items` array can bypass this preflight's array cap. It also has no whole-graph object-field quota or cycle detection; object field counts reset per object and a cyclic object graph may not terminate. This function does not validate schema/normalized output or create a stable getter-backed snapshot.
+ * Side effects: Allocates a work stack, enumerates own enumerable string keys, and reads array/object values, which can invoke getters; it mutates only its private budget.
  */
 export function provisioningInputFitsBudget(input: unknown): boolean {
   const budget = createProvisioningBudget();

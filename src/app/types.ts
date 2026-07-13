@@ -25,10 +25,25 @@ export type AppErrorCode =
   | "APP_WORKSPACE_VIEWER_LIMIT_EXCEEDED"
   | "APP_WORKSPACE_VIEWER_FAILED";
 
-/** Error text is always a fixed code; never attach a path, parser message, or value. */
+/**
+ * Creates a value-free application error whose message and name are safe for CLI normalization.
+ *
+ * Inputs: One allowed fixed `AppErrorCode`.
+ * Outputs: An initialized `AppError` instance with matching `message` and readonly `code`.
+ * Does not handle: Arbitrary Error causes, paths, parser messages, secret values, or exit-status emission.
+ * Side effects: Initializes the inherited `Error` stack/message state and assigns the error name/code fields.
+ */
 export class AppError extends Error {
   readonly code: AppErrorCode;
 
+  /**
+   * Initializes a value-free application error from one fixed code.
+   *
+   * Inputs: One allowed application error code.
+   * Outputs: A fully initialized `AppError` instance with matching `code`, `message`, and name.
+   * Does not handle: Error causes, dynamic messages, path attachment, or CLI emission.
+   * Side effects: Initializes inherited `Error` state and assigns instance fields.
+   */
   public constructor(code: AppErrorCode) {
     super(code);
     this.name = "AppError";

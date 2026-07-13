@@ -23,8 +23,12 @@ export type LocalWorkspaceManifestReadResult =
   | LocalWorkspaceManifestReadFailure;
 
 /**
- * Reads only the explicit local manifest selected by the CLI. JSONC parsing is
- * data-only and parser failures are represented by fixed codes.
+ * Reads the explicit local JSONC manifest and mints request capabilities tied to that exact bounded read.
+ *
+ * Inputs: A caller-selected manifest path.
+ * Outputs: Frozen manifest/request capabilities, or fixed manifest read, size, or parse failure codes.
+ * Does not handle: Scanning repositories, accepting network manifests, exposing canonical paths, or recovering parser details.
+ * Side effects: Opens, stats, reads, and closes the bounded manifest file; parses local JSONC and populates private capability state.
  */
 export async function readLocalWorkspaceManifest(
   path: string,

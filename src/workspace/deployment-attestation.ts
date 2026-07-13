@@ -87,9 +87,12 @@ const ATTESTATIONS = new WeakMap<object, DeploymentAttestationContext>();
 const MEMBER_ATTESTATIONS = new WeakMap<object, DeploymentMemberAttestationContext>();
 
 /**
- * First phase: derive exact deployment member handles and declarative mode
- * from an invocation-bound verified request. No deployment documents are read
- * here, so runtime can reserve source/shared-key work first.
+ * Issues exact request-scoped deployment member handles before any provisioning document is read.
+ *
+ * Inputs: An issued invocation, a string deployment ID, and the matching issued repository-member set.
+ * Outputs: A deployment-preparation token, or undefined for provenance, lookup, scope, member, or capability failures.
+ * Does not handle: Provisioning-file I/O, reconciliation, user-provided member identities, or partial member issuance.
+ * Side effects: Looks up private indexes, creates opaque handles, and stores a member-only attestation in a WeakMap.
  */
 export async function attestVerifiedWorkspaceDeploymentMembers(
   invocation: unknown,
@@ -121,7 +124,17 @@ export async function attestVerifiedWorkspaceDeploymentMembers(
     if (members === undefined) {
       return undefined;
     }
-    const token = issueDeploymentPreparation(members.map((member) => member.repositoryId));
+    const token = issueDeploymentPreparation(members.map(
+      /**
+       * Projects the validated repository identity required by the opaque deployment-capability issuer.
+       *
+       * Inputs: One attested deployment member.
+       * Outputs: Its safe repository ID.
+       * Does not handle: Scope validation or member-handle issuance.
+       * Side effects: None.
+       */
+      (member) => member.repositoryId
+    ));
     if (token === undefined) {
       return undefined;
     }
@@ -141,9 +154,12 @@ export async function attestVerifiedWorkspaceDeploymentMembers(
 }
 
 /**
- * Second phase: read parsed provisioning documents only after runtime has
- * accepted the source/shared-key preflight. Scan-only deployments attach no
- * documents and therefore perform no local-input I/O.
+ * Attests a provisioning deployment's declared documents once, then reuses that invocation-local attestation.
+ *
+ * Inputs: A preparation capability previously issued for one deployment.
+ * Outputs: The same token after a scan-only fast path, a cached provisioning-attestation hit, or first full attestation; declared document read/parse/budget failures remain as AttestedJsonReadResult entries, while an unknown token, failed first-attestation provenance check, or unexpected failure returns undefined.
+ * Does not handle: Source scanning, provider calls, per-document adapter interpretation, retrying a failed local read, or revalidating provenance on a cached-attestation hit.
+ * Side effects: On the first provisioning attestation only, revalidates request provenance, performs bounded local I/O, caches document-result failures as well as successes, and writes the full WeakMap attestation; scan-only and cached hits return before filesystem I/O or revalidation.
  */
 export async function attestVerifiedWorkspaceDeploymentInputs(
   input: unknown,
@@ -184,8 +200,12 @@ export async function attestVerifiedWorkspaceDeploymentInputs(
 }
 
 /**
- * Identity-only consumption lookup. It deliberately dereferences no caller
- * value before the private WeakMap membership check.
+ * Retrieves a fully usable deployment attestation, including the scan-only member-only case, by opaque identity.
+ *
+ * Inputs: Any preparation-token candidate.
+ * Outputs: Full document context, scan-only member context, or undefined for an unissued/nonattested provisioning token.
+ * Does not handle: Property inspection, request revalidation, document reads, or capability forgery.
+ * Side effects: None; reads private WeakMaps only.
  */
 export function deploymentAttestationContext(
   input: unknown,
@@ -198,13 +218,28 @@ export function deploymentAttestationContext(
   return memberOnly?.mode === "scan-only" ? memberOnly : undefined;
 }
 
-/** Identity-only preflight lookup; documents are deliberately absent here. */
+/**
+ * Retrieves preflight member context without implying provisioning documents were read.
+ *
+ * Inputs: Any deployment-preparation token candidate.
+ * Outputs: The member-only attestation context, or undefined for an unissued identity.
+ * Does not handle: Document attestation, reconciliation, or a public capability view.
+ * Side effects: None; reads the private member-attestation WeakMap.
+ */
 export function deploymentMemberAttestationContext(
   input: unknown,
 ): DeploymentMemberAttestationContext | undefined {
   return MEMBER_ATTESTATIONS.get(input as object);
 }
 
+/**
+ * Connects one indexed deployment declaration to already attested repository handles and snapshots its explicit scopes.
+ *
+ * Inputs: A parser deployment, issued repository-member set/context, and the provenance request identity.
+ * Outputs: Frozen attested members in declaration order, or undefined for mismatched handles, duplicate IDs, or incomplete scopes.
+ * Does not handle: Filesystem document reads, source analysis, root resolution, or repair of a malformed scope map.
+ * Side effects: Allocates local Map/Set/array structures and frozen member/scope snapshots.
+ */
 async function attestMembers(
   deployment: WorkspaceDeployment,
   repositoryMembers: unknown,
@@ -213,7 +248,17 @@ async function attestMembers(
 ): Promise<readonly AttestedDeploymentMember[] | undefined> {
   const scopes = deployment.inputs === undefined
     ? undefined
-    : new Map(deployment.inputs.memberScopes.map((member) => [member.repositoryId, member]));
+    : new Map(deployment.inputs.memberScopes.map(
+      /**
+       * Keys one parser-authored member-scope record by its repository identity for exact lookup.
+       *
+       * Inputs: One validated deployment member-scope declaration.
+       * Outputs: Its repository-ID/map-entry pair.
+       * Does not handle: Duplicate detection or scope snapshotting.
+       * Side effects: Allocates the pair array consumed by the new Map constructor.
+       */
+      (member) => [member.repositoryId, member]
+    ));
   if (scopes !== undefined && scopes.size !== deployment.repositories.length) {
     return undefined;
   }
@@ -245,6 +290,14 @@ async function attestMembers(
   return Object.freeze(members);
 }
 
+/**
+ * Reads the declared binding, inventory, and optional closed-model documents concurrently through invocation-local attestation caches.
+ *
+ * Inputs: A verified invocation context, canonical manifest base, and parser-authored provisioning descriptors.
+ * Outputs: Frozen per-document read results and the same verification base.
+ * Does not handle: Interpreting JSON adapter schemas, retrying failures, or scan-only deployments.
+ * Side effects: Schedules up to three cached local read/parse operations and allocates a frozen document bundle.
+ */
 async function attestDocuments(
   invocation: WorkspaceInvocationContext,
   manifestBase: InternalPath,
@@ -265,15 +318,25 @@ async function attestDocuments(
   });
 }
 
+/**
+ * Rechecks the manifest request snapshot associated with an invocation before provisioning input access.
+ *
+ * Inputs: An invocation context containing its trusted request context.
+ * Outputs: A promise resolving true only while the manifest file/base identity still matches.
+ * Does not handle: Document descriptor validation, source snapshots, or diagnostic construction.
+ * Side effects: Delegates asynchronous filesystem stat I/O to request verification.
+ */
 function verifyInvocationRequest(invocation: WorkspaceInvocationContext): Promise<boolean> {
   return verifyWorkspaceScanRequestContext(invocation.requestContext);
 }
 
 /**
- * Cache immutable checked JSON results under normalized descriptor semantics
- * and canonical file version inside one invocation. Equivalent declarations
- * share a payload and first-observed file identity; neither kind of cache hit
- * consumes input-byte budget.
+ * Resolves one manifest-relative provisioning descriptor through bounded snapshot, payload, and descriptor caches.
+ *
+ * Inputs: An invocation context, its canonical manifest base, and a trusted parser-authored descriptor, which may retain leading `..` and resolve outside that base.
+ * Outputs: A promise for checked immutable JSON or a fixed nonleaking read/budget/snapshot failure.
+ * Does not handle: External/untrusted descriptor validation, manifest-base containment, adapter parsing, cache persistence across invocations, or error-detail propagation.
+ * Side effects: May resolve paths, mutate LRU/cache indexes and byte budget, and begin local filesystem I/O.
  */
 function readCachedAttestedJson(
   invocation: WorkspaceInvocationContext,
@@ -297,6 +360,14 @@ function readCachedAttestedJson(
   );
 }
 
+/**
+ * Canonicalizes, stats, snapshot-checks, budget-admits, and caches a descriptor cache miss before starting its checked read.
+ *
+ * Inputs: Invocation context, manifest base, an already resolved candidate path (which may be outside the base), and normalized descriptor key.
+ * Outputs: A cached/new attested read promise or fixed failed/too-large/budget/snapshot result.
+ * Does not handle: JSON schema adaptation, retry policy, path disclosure, or evicted payload recovery without re-attestation.
+ * Side effects: Performs realpath/stat I/O and mutates semantic/payload/descriptor cache state; only a newly admitted payload decrements byte budget and starts a file read, while a matching live payload hit only refreshes cache state.
+ */
 async function resolveAndReadCachedAttestedJson(
   invocation: WorkspaceInvocationContext,
   manifestBase: InternalPath,
@@ -344,6 +415,14 @@ async function resolveAndReadCachedAttestedJson(
   }
 }
 
+/**
+ * Reads exactly a previously statted local JSON file, verifies its post-read identity, bounds its structure, and deep-freezes success.
+ *
+ * Inputs: A canonical internal path and a caller-proven regular-file stat snapshot with a safe nonnegative size no greater than the five-MiB per-document cap; the caller has already admitted and charged those bytes.
+ * Outputs: Frozen JSON plus canonical path, or fixed read/invalid-json/entry-limit failure without platform details.
+ * Does not handle: Enforcing the byte cap or invocation budget itself, streaming large files, JSON schema validation, value redaction, or retrying short/changed reads.
+ * Side effects: Attempts to open, read, stat, and close a file descriptor; after a successful open it allocates a byte buffer no larger than the caller-proven cap and freezes every parsed JSON object/array.
+ */
 async function readAttestedJson(
   canonicalPath: InternalPath,
   before: NumericFileStat,
@@ -388,6 +467,14 @@ async function readAttestedJson(
   }
 }
 
+/**
+ * Serializes the file version attributes that uniquely key one cached attested payload within an invocation.
+ *
+ * Inputs: A canonical path and filesystem stat metadata.
+ * Outputs: A NUL-delimited path/device/inode/size/mtime/ctime identity string.
+ * Does not handle: Cross-host identity, semantic JSON equality, or display-safe formatting.
+ * Side effects: Allocates strings and the joined key.
+ */
 function documentReadIdentity(
   canonicalPath: string,
   metadata: Awaited<ReturnType<typeof stat>>,
@@ -402,6 +489,14 @@ function documentReadIdentity(
   ].join("\u0000");
 }
 
+/**
+ * Inserts a pending attested read into the bounded payload LRU and attaches its descriptor alias.
+ *
+ * Inputs: Invocation cache context, version/semantic/descriptor keys, and pending read promise.
+ * Outputs: No value; the read becomes reusable through payload and descriptor indexes.
+ * Does not handle: Promise failure recovery, cross-invocation caching, or entry-limit diagnostics.
+ * Side effects: May evict the oldest payload entry, increments the LRU clock, and mutates cache Maps.
+ */
 function cacheAttestedRead(
   invocation: WorkspaceInvocationContext,
   key: string,
@@ -422,6 +517,14 @@ function cacheAttestedRead(
   cacheDescriptorRead(invocation, descriptorKey, semanticKey, entry);
 }
 
+/**
+ * Returns a live descriptor alias hit only while its backing payload remains in the bounded cache.
+ *
+ * Inputs: Invocation context and normalized descriptor key.
+ * Outputs: The cached attested-read promise, or undefined for absent/stale aliases.
+ * Does not handle: Restoring evicted payloads, semantic identity validation, or reading files.
+ * Side effects: Deletes stale aliases or updates payload/alias LRU access timestamps.
+ */
 function cachedDescriptorRead(
   invocation: WorkspaceInvocationContext,
   descriptorKey: string,
@@ -444,9 +547,12 @@ function cachedDescriptorRead(
 }
 
 /**
- * Keep compact semantic-file observations after the parsed payload LRU evicts
- * an entry. Different declarations and normalized path aliases of the same
- * canonical file therefore cannot fabricate a mixed-time provisioning view.
+ * Records or verifies the first semantic-file/version identity so aliases and later declarations cannot mix snapshots after LRU eviction.
+ *
+ * Inputs: Invocation context plus normalized descriptor, canonical semantic-file, and version-identity keys.
+ * Outputs: True when the observation is consistent and retained, false for path substitution, version change, or descriptor-observation cap.
+ * Does not handle: Payload retention, filesystem re-stat, diagnostic rendering, or cache eviction of semantic observations.
+ * Side effects: Mutates bounded semantic descriptor/observation Maps on accepted first observations.
  */
 function observeSemanticFileIdentity(
   invocation: WorkspaceInvocationContext,
@@ -494,6 +600,14 @@ function observeSemanticFileIdentity(
   return true;
 }
 
+/**
+ * Marks one live payload cache entry as most recently accessed.
+ *
+ * Inputs: Invocation context and an entry already in its payload cache.
+ * Outputs: No value.
+ * Does not handle: Cache membership validation, alias updates, or eviction.
+ * Side effects: Increments the invocation LRU clock and mutates entry.lastAccess.
+ */
 function touchDocumentRead(
   invocation: WorkspaceInvocationContext,
   entry: WorkspaceDocumentCacheEntry,
@@ -501,6 +615,14 @@ function touchDocumentRead(
   entry.lastAccess = ++invocation.documentReadClock;
 }
 
+/**
+ * Associates a normalized descriptor with a live payload entry under the bounded descriptor-alias LRU.
+ *
+ * Inputs: Invocation context, descriptor/semantic keys, and a live payload entry.
+ * Outputs: No value; the alias is refreshed or installed.
+ * Does not handle: Semantic snapshot validation, payload insertion, or durable cache persistence.
+ * Side effects: May evict the least-recent descriptor alias, increments LRU clock, and mutates alias/payload timestamps and Map entries.
+ */
 function cacheDescriptorRead(
   invocation: WorkspaceInvocationContext,
   descriptorKey: string,
@@ -532,6 +654,14 @@ function cacheDescriptorRead(
   invocation.documentDescriptorReads.set(descriptorKey, { entry, semanticKey, lastAccess: access });
 }
 
+/**
+ * Evicts the least-recently-used payload cache entry and every descriptor alias that points to it.
+ *
+ * Inputs: An invocation context with zero or more live payload entries.
+ * Outputs: No value.
+ * Does not handle: Evicting semantic snapshot observations, cancelling an in-flight promise, or retaining aliases to evicted values.
+ * Side effects: Iterates cache Maps and deletes one payload plus its matching aliases.
+ */
 function evictOldestDocumentRead(invocation: WorkspaceInvocationContext): void {
   let oldestKey: string | undefined;
   let oldestEntry: WorkspaceDocumentCacheEntry | undefined;
@@ -554,14 +684,38 @@ function evictOldestDocumentRead(invocation: WorkspaceInvocationContext): void {
   }
 }
 
+/**
+ * Builds the descriptor-cache key for one normalized candidate under a specific manifest base.
+ *
+ * Inputs: A canonical manifest-base string and resolved candidate string.
+ * Outputs: A NUL-delimited manifest-relative descriptor key.
+ * Does not handle: Canonicalizing the candidate, checking file existence, or redacting paths.
+ * Side effects: Allocates the joined key string.
+ */
 function normalizedDescriptorKey(manifestBase: string, candidate: string): string {
   return ["manifest-relative", manifestBase, candidate].join("\u0000");
 }
 
+/**
+ * Builds the semantic-file key shared by normalized aliases resolving to one canonical document under a manifest base.
+ *
+ * Inputs: A canonical manifest base and canonical local file path.
+ * Outputs: A NUL-delimited semantic cache key.
+ * Does not handle: File stat identity, descriptor-path normalization, or safe display serialization.
+ * Side effects: Allocates the joined key string.
+ */
 function canonicalSemanticFileKey(manifestBase: string, canonicalPath: string): string {
   return ["manifest-relative", manifestBase, canonicalPath].join("\u0000");
 }
 
+/**
+ * Resolves a trusted parser-produced descriptor against the attested manifest base without imposing containment.
+ *
+ * Inputs: Manifest-base string and a trusted parser-produced descriptor; it is not a hostile Proxy/getter-bearing caller object.
+ * Outputs: A resolved local candidate path, potentially outside the manifest base when a leading `..` is retained, or undefined for ordinary null, wrong-kind, empty, backslash, or absolute values.
+ * Does not handle: Hostile-object/property-access safety, filesystem containment, canonicalization, descriptor normalization, or error diagnostics.
+ * Side effects: Allocates a resolved path string on accepted descriptors; property access may throw if a future caller bypasses the parser trust boundary.
+ */
 function resolveManifestRelative(
   manifestBase: string,
   descriptor: ManifestRelativeDescriptor,
@@ -580,6 +734,14 @@ function resolveManifestRelative(
   return resolve(manifestBase, descriptor.path);
 }
 
+/**
+ * Copies an execution scope into a frozen attestation snapshot, including exact-stage array isolation.
+ *
+ * Inputs: A parser-authored validated execution scope.
+ * Outputs: A deeply frozen scope shape suitable for a request-scoped member attestation.
+ * Does not handle: Scope validation, stage overlap reasoning, or mutation tracking after the caller changes its original object.
+ * Side effects: Allocates frozen stage/object/array snapshots.
+ */
 function snapshotScope(scope: ExecutionScope): ExecutionScope {
   const stage = scope.stage.kind === "exact"
     ? Object.freeze({ kind: "exact" as const, values: Object.freeze([...scope.stage.values]) })
@@ -593,6 +755,14 @@ function snapshotScope(scope: ExecutionScope): ExecutionScope {
   });
 }
 
+/**
+ * Iteratively freezes every reachable own object and array in a parsed provisioning JSON tree.
+ *
+ * Inputs: A JSON.parse-produced value already admitted by the provisioning entry budget.
+ * Outputs: The same root value with all reachable own JSON containers frozen.
+ * Does not handle: Cycles/proxies/accessors, arbitrary JavaScript objects, JSON schema validation, or clone isolation.
+ * Side effects: Allocates a traversal stack and mutates object extensibility by calling Object.freeze on each visited container.
+ */
 function deepFreezeJson(value: unknown): unknown {
   const pending: unknown[] = [value];
   while (pending.length > 0) {
@@ -616,6 +786,14 @@ function deepFreezeJson(value: unknown): unknown {
   return value;
 }
 
+/**
+ * Tests whether two stat snapshots describe the same regular-file identity and version.
+ *
+ * Inputs: Two filesystem stat results.
+ * Outputs: True only when both are files with equal device, inode, size, mtime, and ctime.
+ * Does not handle: Content hashing, symlink target equivalence, permissions, or cross-platform timestamp precision gaps.
+ * Side effects: None.
+ */
 function sameFileVersion(
   left: Awaited<ReturnType<typeof stat>>,
   right: Awaited<ReturnType<typeof stat>>,
@@ -631,26 +809,74 @@ function sameFileVersion(
   );
 }
 
+/**
+ * Builds the fixed opaque result for local provisioning input read/identity failures.
+ *
+ * Inputs: None.
+ * Outputs: A frozen APP_LOCAL_INPUT_READ_FAILED result.
+ * Does not handle: Error detail, retry policy, or source-path disclosure.
+ * Side effects: Allocates a frozen result object.
+ */
 function failedInput(): AttestedJsonReadResult {
   return Object.freeze({ ok: false, code: "APP_LOCAL_INPUT_READ_FAILED" });
 }
 
+/**
+ * Builds the fixed opaque result for one provisioning document exceeding the per-document byte cap.
+ *
+ * Inputs: None.
+ * Outputs: A frozen APP_LOCAL_INPUT_TOO_LARGE result.
+ * Does not handle: Byte-budget aggregation, streaming, or path disclosure.
+ * Side effects: Allocates a frozen result object.
+ */
 function tooLargeInput(): AttestedJsonReadResult {
   return Object.freeze({ ok: false, code: "APP_LOCAL_INPUT_TOO_LARGE" });
 }
 
+/**
+ * Builds the fixed opaque result for invalid JSON after a checked local read.
+ *
+ * Inputs: None.
+ * Outputs: A frozen APP_LOCAL_INPUT_INVALID_JSON result.
+ * Does not handle: Parser details, JSON recovery, or source-content reporting.
+ * Side effects: Allocates a frozen result object.
+ */
 function invalidJsonInput(): AttestedJsonReadResult {
   return Object.freeze({ ok: false, code: "APP_LOCAL_INPUT_INVALID_JSON" });
 }
 
+/**
+ * Builds the fixed opaque result when the invocation-wide provisioning input byte budget lacks capacity.
+ *
+ * Inputs: None.
+ * Outputs: A frozen APP_LOCAL_INPUT_BUDGET_EXCEEDED result.
+ * Does not handle: Budget borrowing, document eviction, or partial read admission.
+ * Side effects: Allocates a frozen result object.
+ */
 function inputBudgetExceeded(): AttestedJsonReadResult {
   return Object.freeze({ ok: false, code: "APP_LOCAL_INPUT_BUDGET_EXCEEDED" });
 }
 
+/**
+ * Builds the fixed opaque result for descriptor alias substitution or changed first-observed file version.
+ *
+ * Inputs: None.
+ * Outputs: A frozen APP_LOCAL_INPUT_SNAPSHOT_CHANGED result.
+ * Does not handle: Reattesting a new snapshot, error detail, or path disclosure.
+ * Side effects: Allocates a frozen result object.
+ */
 function snapshotChangedInput(): AttestedJsonReadResult {
   return Object.freeze({ ok: false, code: "APP_LOCAL_INPUT_SNAPSHOT_CHANGED" });
 }
 
+/**
+ * Builds the fixed opaque result for JSON that exceeds the provisioning structural entry limit.
+ *
+ * Inputs: None.
+ * Outputs: A frozen APP_PROVISIONING_INPUT_ENTRY_LIMIT_EXCEEDED result.
+ * Does not handle: Partial parser output, document-specific entry reporting, or source-content disclosure.
+ * Side effects: Allocates a frozen result object.
+ */
 function provisioningInputEntryLimitExceeded(): AttestedJsonReadResult {
   return Object.freeze({ ok: false, code: "APP_PROVISIONING_INPUT_ENTRY_LIMIT_EXCEEDED" });
 }

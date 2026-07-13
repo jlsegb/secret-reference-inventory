@@ -74,9 +74,12 @@ export interface VerifiedBoundedReadContext {
 const VERIFIED_READS = new WeakMap<object, VerifiedBoundedReadContext>();
 
 /**
- * Internal capability lookup. Membership is checked without reading any
- * caller-controlled properties, so cloned or forged result objects fail
- * closed without invoking Proxy traps.
+ * Retrieves the private provenance for an exact successful bounded-read result.
+ *
+ * Inputs: An unknown value that may be the frozen success object returned by `readBoundedLocalText`.
+ * Outputs: Its private stable-read context, or `undefined` for primitives, failures, clones, proxies, and forged objects.
+ * Does not handle: Re-reading a file or validating a structurally similar result.
+ * Side effects: Reads the module-private WeakMap without invoking caller-owned properties.
  */
 export function verifiedBoundedReadContext(
   input: unknown,
@@ -87,16 +90,39 @@ export function verifiedBoundedReadContext(
 }
 
 const nodeOperations: BoundedLocalFileOperations = {
-  realpath: (path) => realpath(path),
-  stat: async (path) => stat(path),
-  open: async (path, flags) => open(path, flags) as unknown as BoundedFileHandle,
+  realpath: /**
+   * Resolves a supplied local path to Node's canonical filesystem path.
+   *
+   * Inputs: One local path string.
+   * Outputs: A promise for the canonical path, or a rejected filesystem promise.
+   * Does not handle: Path containment, stability checks, or error redaction.
+   * Side effects: Queries local filesystem metadata.
+   */ (path) => realpath(path),
+  stat: /**
+   * Obtains Node metadata for a local filesystem path.
+   *
+   * Inputs: One local path string.
+   * Outputs: A promise for the path's stat structure, or a rejected filesystem promise.
+   * Does not handle: File-type policy or stable identity comparison.
+   * Side effects: Reads local filesystem metadata.
+   */ async (path) => stat(path),
+  open: /**
+   * Opens one canonical local path with the requested Node flags.
+   *
+   * Inputs: A local path and Node open-mode string.
+   * Outputs: A promise for the narrowed file-handle surface, or a rejected filesystem promise.
+   * Does not handle: Byte limits, handle closure, or content validation.
+   * Side effects: Opens a local file descriptor that the caller must close.
+   */ async (path, flags) => open(path, flags) as unknown as BoundedFileHandle,
 };
 
 /**
- * Opens a user-selected local file once, reads no more than `maxBytes`, and
- * rejects a result if the opened file or the canonical path changes while it
- * is being read. No filesystem error, path, or source text escapes this
- * boundary.
+ * Reads a stable local UTF-8 file through one descriptor while enforcing an exact byte cap.
+ *
+ * Inputs: A requested path, a nonnegative safe-integer maximum byte count, and optional filesystem operations.
+ * Outputs: A frozen `{ ok: true, canonicalPath, text }` result, or a fixed `read-failed` or `too-large` failure.
+ * Does not handle: JSON parsing, caller-provided path authorization, decoding errors beyond Node's UTF-8 conversion, or retries.
+ * Side effects: Resolves and stats paths, opens, stats, reads, and closes one local file descriptor; records success provenance in a WeakMap.
  */
 export async function readBoundedLocalText(
   path: string,
@@ -184,6 +210,14 @@ export async function readBoundedLocalText(
   return result;
 }
 
+/**
+ * Fills a buffer from an already-opened file without reading beyond its verified initial size.
+ *
+ * Inputs: An open handle, expected safe file size, and caller-established maximum byte count.
+ * Outputs: A buffer of exactly `expectedSize` bytes, or `undefined` for invalid sizes or short/invalid reads.
+ * Does not handle: File/path stability checks, UTF-8 decoding, descriptor closure, or retries.
+ * Side effects: Allocates one unsafe buffer and issues positional reads against the supplied open descriptor.
+ */
 async function readExactBounded(
   handle: BoundedFileHandle,
   expectedSize: number,
@@ -212,6 +246,14 @@ async function readExactBounded(
   return buffer;
 }
 
+/**
+ * Checks whether a stat value can support a bounded regular-file read.
+ *
+ * Inputs: The narrowed metadata returned from `stat` or `handle.stat`.
+ * Outputs: `true` only for a regular file with a valid nonnegative size and stable identity/version fields.
+ * Does not handle: Path containment, permissions, or comparison with another stat result.
+ * Side effects: Calls the supplied stat object's type predicate methods.
+ */
 function isReadableFile(value: BoundedFileStat): boolean {
   return (
     value.isFile() &&
@@ -224,6 +266,14 @@ function isReadableFile(value: BoundedFileStat): boolean {
   );
 }
 
+/**
+ * Checks whether a stat value can anchor the parent-directory stability proof.
+ *
+ * Inputs: The narrowed metadata returned from a parent-directory stat.
+ * Outputs: `true` only for a directory with valid device, inode, and timestamp identity fields.
+ * Does not handle: Recursive parent containment or permission repair.
+ * Side effects: Calls the supplied stat object's directory predicate method.
+ */
 function isReadableDirectory(value: BoundedFileStat): boolean {
   return (
     value.isDirectory() &&
@@ -234,6 +284,14 @@ function isReadableDirectory(value: BoundedFileStat): boolean {
   );
 }
 
+/**
+ * Compares two regular-file stats for device-and-inode identity.
+ *
+ * Inputs: Two candidate file stat values.
+ * Outputs: `true` when both are readable files with identical device and inode values.
+ * Does not handle: Size or timestamp version comparison.
+ * Side effects: Calls each stat object's file predicate through `isReadableFile`.
+ */
 function sameStableIdentity(
   left: BoundedFileStat,
   right: BoundedFileStat,
@@ -246,6 +304,14 @@ function sameStableIdentity(
   );
 }
 
+/**
+ * Compares two regular-file stats for unchanged identity and content version markers.
+ *
+ * Inputs: Two candidate file stat values.
+ * Outputs: `true` when identity, size, modification time, and change time all match.
+ * Does not handle: Content hashing or filesystem guarantees beyond the reported stat fields.
+ * Side effects: Calls file type predicates while validating both metadata values.
+ */
 function sameStableVersion(
   left: BoundedFileStat,
   right: BoundedFileStat,
@@ -258,6 +324,14 @@ function sameStableVersion(
   );
 }
 
+/**
+ * Compares parent-directory stats to detect a directory replacement during a file read.
+ *
+ * Inputs: The directory metadata observed before and after the descriptor read.
+ * Outputs: `true` when both readable directories retain the same device, inode, mtime, and ctime.
+ * Does not handle: Ancestor-directory changes or file content comparison.
+ * Side effects: Calls directory type predicates while validating both metadata values.
+ */
 function sameStableDirectoryIdentity(
   left: BoundedFileStat,
   right: BoundedFileStat,
@@ -272,6 +346,14 @@ function sameStableDirectoryIdentity(
   );
 }
 
+/**
+ * Copies the file fields that form a successful read's private stability identity.
+ *
+ * Inputs: A previously validated regular-file stat value.
+ * Outputs: A frozen object containing size, device, inode, mtime, and ctime.
+ * Does not handle: Validation of malformed stat values or future change detection.
+ * Side effects: Allocates and freezes a small identity object.
+ */
 function stableFileIdentity(value: BoundedFileStat): StableFileIdentity {
   return Object.freeze({
     size: value.size,
@@ -282,6 +364,14 @@ function stableFileIdentity(value: BoundedFileStat): StableFileIdentity {
   });
 }
 
+/**
+ * Copies the parent-directory fields retained for later stable-base verification.
+ *
+ * Inputs: A previously validated directory stat value.
+ * Outputs: A frozen object containing device, inode, mtime, and ctime.
+ * Does not handle: Validation of malformed stat values or traversal above that directory.
+ * Side effects: Allocates and freezes a small identity object.
+ */
 function stableDirectoryIdentity(value: BoundedFileStat): StableDirectoryIdentity {
   return Object.freeze({
     dev: value.dev,
@@ -291,14 +381,38 @@ function stableDirectoryIdentity(value: BoundedFileStat): StableDirectoryIdentit
   });
 }
 
+/**
+ * Recognizes numeric metadata values that can safely participate in identity checks.
+ *
+ * Inputs: A device or inode value represented as a number or bigint.
+ * Outputs: `true` for any bigint or safe-integer number.
+ * Does not handle: Positivity, ordering, or cross-platform identity semantics.
+ * Side effects: None.
+ */
 function isIdentityPart(value: number | bigint): boolean {
   return typeof value === "bigint" || Number.isSafeInteger(value);
 }
 
+/**
+ * Constructs the opaque failure returned for any unstable or unreadable local input.
+ *
+ * Inputs: None.
+ * Outputs: A `BoundedLocalTextReadResult` with `ok: false` and code `read-failed`.
+ * Does not handle: Preserving filesystem error details, paths, or partial content.
+ * Side effects: Allocates a new small result object.
+ */
 function failedRead(): BoundedLocalTextReadResult {
   return { ok: false, code: "read-failed" };
 }
 
+/**
+ * Constructs the opaque failure returned when a verified file exceeds its configured byte cap.
+ *
+ * Inputs: None.
+ * Outputs: A `BoundedLocalTextReadResult` with `ok: false` and code `too-large`.
+ * Does not handle: Returning partial file content or disclosing the observed size.
+ * Side effects: Allocates a new small result object.
+ */
 function tooLarge(): BoundedLocalTextReadResult {
   return { ok: false, code: "too-large" };
 }

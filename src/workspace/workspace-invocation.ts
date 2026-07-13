@@ -115,9 +115,15 @@ export interface WorkspaceInvocationContext {
 
 const INVOCATIONS = new WeakMap<object, WorkspaceInvocationContext>();
 
+// Invocation minting accepts only issued, still-verified provenance; callers
+// cannot supply a counter, cache, path, or descriptor collection.
 /**
- * Mint an invocation only from an issued, still-verified request. A caller
- * cannot supply a counter, cache, path, or descriptor collection.
+ * Mints one bounded workspace-scan invocation from a currently verified opaque request.
+ *
+ * Inputs: An issued scan request that still attests to its manifest file and base directory.
+ * Outputs: An invocation token, or undefined for unissued, changed, malformed, duplicate-deployment, or over-budget manifests.
+ * Does not handle: Parsing manifests, accepting caller-owned caches/counters, or emitting diagnostics for rejected invocation setup.
+ * Side effects: Re-stats the manifest/base through request verification, allocates declaration indexes and cache Maps, and registers one WeakMap context.
  */
 export async function beginVerifiedWorkspaceInvocation(
   request: unknown,
@@ -185,14 +191,28 @@ export async function beginVerifiedWorkspaceInvocation(
   return token;
 }
 
-/** Identity-only lookup; it never reflects on a caller-owned object. */
+/**
+ * Retrieves invocation-local state by opaque identity without examining caller-owned properties.
+ *
+ * Inputs: Any invocation candidate.
+ * Outputs: The private invocation context, or undefined for an unissued identity.
+ * Does not handle: Invocation validation, capability reconstruction, or data serialization.
+ * Side effects: None; reads the private invocation WeakMap.
+ */
 export function workspaceInvocationContext(
   input: unknown,
 ): WorkspaceInvocationContext | undefined {
   return INVOCATIONS.get(input as object);
 }
 
-/** Identity-only indexed declaration lookup; no manifest walk is repeated. */
+/**
+ * Finds one parser-declared deployment through the invocation's prebuilt ID index.
+ *
+ * Inputs: An invocation capability and a string deployment ID.
+ * Outputs: The declaration/opaque-handle pair, or undefined for unknown invocations or IDs.
+ * Does not handle: Structural declaration matching, request verification, or exposing the full deployment collection.
+ * Side effects: Increments the invocation's count-only deployment lookup metric for valid invocation contexts.
+ */
 export function workspaceInvocationDeployment(
   invocation: unknown,
   deploymentId: unknown,
@@ -205,7 +225,14 @@ export function workspaceInvocationDeployment(
   return context.deploymentsById.get(deploymentId);
 }
 
-/** Identity-only count metrics; no declaration IDs, paths, or values escape. */
+/**
+ * Reports count-only instrumentation for an issued invocation.
+ *
+ * Inputs: An invocation candidate.
+ * Outputs: Frozen declaration and lookup counts, or undefined for an unissued identity.
+ * Does not handle: Per-deployment identities, paths, cache contents, or user-facing diagnostics.
+ * Side effects: Allocates the frozen metrics result; it does not mutate invocation state.
+ */
 export function workspaceInvocationMetrics(
   invocation: unknown,
 ): { readonly deploymentDeclarationCount: number; readonly deploymentLookupCount: number } | undefined {
