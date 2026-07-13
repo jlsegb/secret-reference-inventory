@@ -272,12 +272,12 @@ export function appendLocalViewerFact(
 }
 
 /**
- * Validates the requested loopback port, then snapshots and seals an active builder into the sole opaque request accepted by the local server.
+ * Resolves an active builder before validating its requested loopback port, then snapshots and seals it into the sole opaque request accepted by the local server.
  *
  * Inputs: A builder token and an optional numeric loopback port.
- * Outputs: A frozen non-enumerable request token whose document and normalized port remain in a WeakMap, or a fixed invalid-port error before snapshotting when the port is invalid.
- * Does not handle: Starting the server, reopening a sealed builder, or accepting raw document records.
- * Side effects: Only after successful port normalization, freezes a snapshot, marks builder state sealed, and registers the request token. An invalid port throws before those mutations, leaving the active builder reusable.
+ * Outputs: A frozen non-enumerable request token whose document and normalized port remain in a WeakMap; an invalid or sealed builder produces the fixed invalid-request error before port normalization, while an invalid port produces the fixed invalid-port error before snapshotting.
+ * Does not handle: Starting the server, reopening a sealed builder, accepting raw document records, or validating a port when the builder is invalid.
+ * Side effects: For an active builder and valid port, freezes a snapshot, marks builder state sealed, and registers the request token. Either rejection path leaves an active builder unsealed.
  */
 export function issueLocalReportViewerRequest(
   builder: unknown,

@@ -497,31 +497,73 @@ const DOCUMENT_TEMPLATE = String.raw`<!doctype html>
   </div>
   <script id="viewer-model" type="application/json" nonce="__NONCE__">__MODEL__</script>
   <script nonce="__NONCE__">
-    (() => {
+    (/**
+     * Initializes the isolated browser-side viewer.
+     *
+     * Inputs: The embedded JSON model and fixed document mount elements.
+     * Outputs: No return value after registering local rendering helpers and painting the initial view.
+     * Does not handle: Network requests, repository access, or arbitrary user data.
+     * Side effects: Reads the embedded model and mutates the local document through rendering helpers.
+     */ () => {
       const modelNode = document.getElementById("viewer-model");
       const model = JSON.parse(modelNode?.textContent || '{"repositories":[]}');
       const repositoryNav = document.getElementById("repository-nav");
       const content = document.getElementById("viewer-content");
       const state = { repositoryIndex: 0, resultIndex: 0 };
 
-      const element = (tag, className, text) => {
+      const element = /**
+       * Creates one document element for a local viewer row.
+       *
+       * Inputs: An element tag plus optional class name and text content.
+       * Outputs: A newly created document element.
+       * Does not handle: HTML parsing, arbitrary attribute assignment, or input validation.
+       * Side effects: Allocates an element and may set its class name and text content.
+       */ (tag, className, text) => {
         const node = document.createElement(tag);
         if (className) node.className = className;
         if (text !== undefined) node.textContent = text;
         return node;
       };
 
-      const toneForDisposition = (disposition) =>
+      const toneForDisposition = /**
+       * Selects the display tone for a normalized result disposition.
+       *
+       * Inputs: One normalized result disposition.
+       * Outputs: The warning tone for review or inconclusive and the positive tone otherwise.
+       * Does not handle: Validating the disposition or selecting application state.
+       * Side effects: None.
+       */ (disposition) =>
         disposition === "inconclusive" || disposition === "review" ? "warning" : "positive";
 
-      const renderRepositories = () => {
+      const renderRepositories = /**
+       * Renders repository navigation from the current local selection state.
+       *
+       * Inputs: The parsed model, navigation mount, and mutable selection state.
+       * Outputs: No return value after replacing the repository navigation content.
+       * Does not handle: Rendering result panes or validating model records.
+       * Side effects: Clears the navigation mount, appends buttons, and registers click listeners.
+       */ () => {
         repositoryNav.replaceChildren();
-        model.repositories.forEach((repository, index) => {
+        model.repositories.forEach(/**
+         * Builds one repository navigation item at its model position.
+         *
+         * Inputs: A normalized repository record and its numeric model index.
+         * Outputs: No return value after appending one navigation item to the mount.
+         * Does not handle: Rendering result details or validating repository fields.
+         * Side effects: Allocates document nodes and registers one click listener.
+         */ (repository, index) => {
           const item = element("li");
           const button = element("button", "nav-button", repository.label);
           button.type = "button";
           button.setAttribute("aria-current", index === state.repositoryIndex ? "page" : "false");
-          button.addEventListener("click", () => {
+          button.addEventListener("click", /**
+           * Selects the captured repository and refreshes the local view.
+           *
+           * Inputs: The captured repository index; the click event argument is ignored.
+           * Outputs: No return value after rendering the new repository selection.
+           * Does not handle: Validating the repository index or fetching repository data.
+           * Side effects: Mutates local selection state and replaces rendered document content.
+           */ () => {
             state.repositoryIndex = index;
             state.resultIndex = 0;
             render();
@@ -531,13 +573,27 @@ const DOCUMENT_TEMPLATE = String.raw`<!doctype html>
         });
       };
 
-      const renderResultList = (repository) => {
+      const renderResultList = /**
+       * Builds the result-list panel for one selected repository.
+       *
+       * Inputs: A normalized repository record and the current local selection state.
+       * Outputs: A panel element containing result buttons for the repository.
+       * Does not handle: Rendering result detail or validating result records.
+       * Side effects: Allocates document nodes and registers nested click listeners.
+       */ (repository) => {
         const panel = element("section", "panel");
         const heading = element("h2", "panel-heading", "Results");
         const nav = element("nav");
         nav.setAttribute("aria-label", "Results");
         const list = element("div", "result-list");
-        repository.results.forEach((result, index) => {
+        repository.results.forEach(/**
+         * Builds one selectable result button at its repository position.
+         *
+         * Inputs: A normalized result record and its numeric repository index.
+         * Outputs: No return value after appending one result button to the list.
+         * Does not handle: Rendering the detail panel or validating result fields.
+         * Side effects: Allocates document nodes and registers one click listener.
+         */ (result, index) => {
           const button = element("button", "result-button");
           button.type = "button";
           button.setAttribute("aria-current", index === state.resultIndex ? "true" : "false");
@@ -545,7 +601,14 @@ const DOCUMENT_TEMPLATE = String.raw`<!doctype html>
             element("span", "", result.label),
             element("span", "result-meta", result.disposition),
           );
-          button.addEventListener("click", () => {
+          button.addEventListener("click", /**
+           * Selects the captured result and refreshes the local view.
+           *
+           * Inputs: The captured result index; the click event argument is ignored.
+           * Outputs: No return value after rendering the new result selection.
+           * Does not handle: Validating the result index or fetching result data.
+           * Side effects: Mutates local selection state and replaces rendered document content.
+           */ () => {
             state.resultIndex = index;
             render();
           });
@@ -556,7 +619,14 @@ const DOCUMENT_TEMPLATE = String.raw`<!doctype html>
         return panel;
       };
 
-      const renderDetail = (result) => {
+      const renderDetail = /**
+       * Builds the detail panel for one selected result.
+       *
+       * Inputs: A normalized selected result record.
+       * Outputs: A panel element containing its label, disposition, summary, and facts.
+       * Does not handle: Validating result fields or selecting another result.
+       * Side effects: Allocates document nodes and appends fact elements.
+       */ (result) => {
         const panel = element("section", "panel");
         const detail = element("div", "detail");
         detail.append(element("h2", "", result.label));
@@ -570,7 +640,14 @@ const DOCUMENT_TEMPLATE = String.raw`<!doctype html>
         if (result.summary) detail.append(element("p", "detail-summary", result.summary));
         if (result.facts.length > 0) {
           const facts = element("dl", "facts");
-          result.facts.forEach((fact) => {
+          result.facts.forEach(/**
+           * Appends one display-safe fact label and value pair to the detail list.
+           *
+           * Inputs: One normalized fact record from the selected result.
+           * Outputs: No return value after appending its term and description nodes.
+           * Does not handle: Validating fact text, choosing tones, or rendering other facts.
+           * Side effects: Allocates and appends document nodes to the current fact list.
+           */ (fact) => {
             facts.append(element("dt", "", fact.label), element("dd", "", fact.value));
           });
           detail.append(facts);
@@ -579,7 +656,14 @@ const DOCUMENT_TEMPLATE = String.raw`<!doctype html>
         return panel;
       };
 
-      const renderContent = () => {
+      const renderContent = /**
+       * Renders the selected repository content or the local empty-state message.
+       *
+       * Inputs: The parsed model, content mount, mutable selection state, and rendering helpers.
+       * Outputs: No return value after replacing the content mount with the current view.
+       * Does not handle: Fetching data, validating model records, or changing selection state.
+       * Side effects: Clears and appends document nodes in the content mount.
+       */ () => {
         content.replaceChildren();
         const repository = model.repositories[state.repositoryIndex];
         if (!repository) {
@@ -606,7 +690,14 @@ const DOCUMENT_TEMPLATE = String.raw`<!doctype html>
         content.append(grid);
       };
 
-      const render = () => {
+      const render = /**
+       * Refreshes repository navigation and selected content from local state.
+       *
+       * Inputs: The current local selection state and rendering helpers.
+       * Outputs: No return value after both viewer regions are refreshed.
+       * Does not handle: Loading data, validating model records, or changing selection state.
+       * Side effects: Delegates document mutations and listener registration to rendering helpers.
+       */ () => {
         renderRepositories();
         renderContent();
       };

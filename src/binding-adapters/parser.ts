@@ -2067,11 +2067,11 @@ function isIsoTimestamp(value: string): boolean {
 }
 
 /**
- * Produces an internal collision key for closed-model scopes from their exact scope dimensions.
+ * Produces a lossy internal duplicate-detection key for closed-model scopes from their scope dimensions.
  *
  * Inputs: A normalized closed-model scope.
- * Outputs: A delimiter-joined identity key covering scope ID, phase, channel, and stage predicate.
- * Does not handle: Condition, roots, authorities, or semantic selector equivalence.
+ * Outputs: A delimiter-joined string covering scope ID, phase, channel, and stage predicate; distinct values containing its delimiter characters can collide.
+ * Does not handle: Injective serialization, delimiter escaping, condition, roots, authorities, or semantic selector equivalence.
  * Side effects: Allocates the returned string.
  */
 function closedScopeKey(scope: RawClosedModelScope): string {
