@@ -187,7 +187,7 @@ function emittedReconciliationGraphFacts(
     * Counts this record node together with its retained reasons, direct references, and dynamic lookup contribution.
     *
     * Inputs: `total`, `record`.
-    * Outputs: the next accumulator value `{ const reasons = record.reasons.reduce( (reasonTotal, reason) => reasonTotal + 1 + (reason.gapIds?.length ?? 0) + (reason.candidateIds?.length ?? 0), 0, ); const references = record.kind ==`.
+    * Outputs: The next graph-fact total after adding this record, its retained reasons, its demand references, and any dynamic-lookup contribution.
      * Does not handle: Controlling collection traversal, iteration order, or mutation of the source facts.
      * Side effects: Computes an in-memory total from callback inputs without mutating records or performing I/O.
      */
@@ -853,10 +853,10 @@ test("workspace runtime rejects equal and nested canonical root aliases before s
     assert.equal(
       result.repositories.every(
         /**
-        * Evaluates predicate repository_diagnostics_some( (diagnostic) => diagnostic equals "WORKSPACE_REPOSITORY_ROOT_CONFLICT", ).
+        * Retains only repository results that carry the fixed root-conflict diagnostic.
         *
         * Inputs: `repository`.
-        * Outputs: the `repository.diagnostics.some( (diagnostic) => diagnostic === "WORKSPACE_REPOSITORY_ROOT_CONFLICT", )` result consumed by `result.repositories.every`.
+        * Outputs: True when this repository contains `WORKSPACE_REPOSITORY_ROOT_CONFLICT` in its diagnostics.
          * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
          * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
          */
@@ -3016,7 +3016,7 @@ test("runtime deployment preparation bounds broad binding and inventory fanout",
        * Writes the binding or inventory fanout documents for one declared deployment.
        *
        * Inputs: `deployment`.
-       * Outputs: the `{ const directory = join(fixture.infraRoot, deployment.id); await mkdir(directory, { recursive: true }); const bindingCandidates = deployment.id === "binding-fanout" ? Array.from({ length: c` result consumed by `deployments.map`.
+       * Outputs: A promise resolving after this deployment's bindings and inventory fixture files are written.
        * Does not handle: Updating the workspace manifest, scanning the deployment, or writing another deployment's documents.
        * Side effects: Creates the deployment input directory and writes its bounded JSON fixture files.
        */
@@ -3153,7 +3153,7 @@ test("runtime projection budget bounds source-rich member output deterministical
        * Creates one source tree containing the repeated environment reads for projection-budget testing.
        *
        * Inputs: `id`.
-       * Outputs: the `{ const root = join(fixture.root, id, "src"); await mkdir(root, { recursive: true }); await writeFile(join(root, "index.ts"), source, "utf8"); }` result consumed by `repositoryIds.map`.
+       * Outputs: A promise resolving after this repository's generated TypeScript source file is written.
        * Does not handle: Declaring manifest entries, scanning the repository, or creating sibling source trees.
        * Side effects: Recursively creates the source directory and writes its generated TypeScript file.
        */
@@ -3341,7 +3341,7 @@ test("repository-only admission shares the invocation graph ledger",
        * Creates one source tree containing the repeated environment reads for repository-budget testing.
        *
        * Inputs: `id`.
-       * Outputs: the `{ const root = join(fixture.root, id, "src"); await mkdir(root, { recursive: true }); await writeFile(join(root, "index.ts"), source, "utf8"); }` result consumed by `repositoryIds.map`.
+       * Outputs: A promise resolving after this repository's generated TypeScript source file is written.
        * Does not handle: Writing the manifest, scanning the repository, or creating sibling source trees.
        * Side effects: Recursively creates the source directory and writes its generated TypeScript file.
        */
@@ -3804,10 +3804,10 @@ test("shared-key output is withheld when source graph budget is exhausted",
     const result = await scanWorkspace(document.request);
     const budgetExhausted = result.deployments.filter(
       /**
-      * Evaluates predicate entry_diagnostics_some( (diagnostic) => String(diagnostic) equals "WORKSPACE_DEPLOYMENT_SHARED_KEY_BUDGET_EXCEEDED" or String(diagnostic) equals "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED",.
+      * Retains deployment results that exhausted either the shared-key or projection budget.
       *
       * Inputs: `entry`.
-      * Outputs: the `entry.diagnostics.some( (diagnostic) => String(diagnostic) === "WORKSPACE_DEPLOYMENT_SHARED_KEY_BUDGET_EXCEEDED" || String(diagnostic) === "WORKSPACE_DEPLOYMENT_PROJECTION_BUDGET_EXCEEDED", ` result consumed by `result.deployments.filter`.
+      * Outputs: True when this deployment reports either fixed budget-exhaustion diagnostic.
        * Does not handle: Interpreting sibling entries or mutating the result; enclosing collection logic controls iteration.
        * Side effects: Reads the supplied entry only; it does not perform I/O or mutate test state.
        */
@@ -4549,7 +4549,7 @@ test("an evicted descriptor payload cannot silently mix a later input snapshot",
          * Writes one pair of descriptor-filler provisioning documents for the current batch offset.
          *
          * Inputs: `_`, `localIndex`.
-         * Outputs: the `{ const index = offset + localIndex; await Promise.all([ writeFile(join(inputRoot, "filler-" + String(index) + "-bindings.json"), bindingsText, "utf8"), writeFile(join(inputRoot, "filler-" +` result consumed by `Array.from`.
+         * Outputs: A promise resolving after the binding and inventory documents for `offset + localIndex` are written.
          * Does not handle: Updating the workspace manifest, scanning input files, or writing another batch index.
          * Side effects: Starts two asynchronous JSON writes for this filler's bindings and inventory files.
          */
@@ -4712,7 +4712,7 @@ test("coverage-gap fanout is budgeted without retaining a partial member gap gra
        * Creates one repository source tree that contains the coverage-gap environment read.
        *
        * Inputs: `id`.
-       * Outputs: the `{ const sourceRoot = join(fixture.root, id, "src"); await mkdir(sourceRoot, { recursive: true }); await writeFile(join(sourceRoot, "index.ts"), "export const value = process.env.GAP_FANOUT_K` result consumed by `repositoryIds.map`.
+       * Outputs: A promise resolving after this repository's coverage-gap TypeScript source fixture is written.
        * Does not handle: Declaring the deployment, writing provisioning data, or creating other repository source trees.
        * Side effects: Recursively creates the source directory and writes its TypeScript fixture file.
        */
@@ -4953,12 +4953,12 @@ test("runtime deployment attestations bind sources and reject hostile capabiliti
     );
     assert.throws(
       /**
-       * Triggers the expected assertion failure.
+       * Attempts reconciliation preparation with a standalone attestation and an unrelated preflight capability.
        *
        * Inputs: no arguments.
-       * Outputs: the operation result if it unexpectedly succeeds; the assertion receives any failure.
-       * Does not handle: decide whether the captured failure matches the assertion.
-       * Side effects: executes `prepareIssuedLocalDeploymentReconciliation(standaloneAttestation, attestationPreflight)`.
+       * Outputs: Does not normally return because preparation rejects the mismatched capability pair; an unexpected prepared value is returned to `assert.throws`.
+       * Does not handle: Matching the thrown error, repairing capability provenance, or reconciling a member.
+       * Side effects: Calls local deployment preparation with deliberately mismatched opaque capabilities.
        */
       () => prepareIssuedLocalDeploymentReconciliation(standaloneAttestation, attestationPreflight),
       fixedFailure,
@@ -4976,12 +4976,12 @@ test("runtime deployment attestations bind sources and reject hostile capabiliti
     );
     assert.throws(
       /**
-       * Triggers the expected assertion failure.
+       * Attempts reconciliation preparation with the API attestation and a standalone preflight capability.
        *
        * Inputs: no arguments.
-       * Outputs: the operation result if it unexpectedly succeeds; the assertion receives any failure.
-       * Does not handle: decide whether the captured failure matches the assertion.
-       * Side effects: executes `prepareIssuedLocalDeploymentReconciliation(attestation, standalonePreflight)`.
+       * Outputs: Does not normally return because preparation rejects the mismatched capability pair; an unexpected prepared value is returned to `assert.throws`.
+       * Does not handle: Matching the thrown error, repairing capability provenance, or reconciling a member.
+       * Side effects: Calls local deployment preparation with deliberately mismatched opaque capabilities.
        */
       () => prepareIssuedLocalDeploymentReconciliation(attestation, standalonePreflight),
       fixedFailure,
@@ -5056,12 +5056,12 @@ test("runtime deployment attestations bind sources and reject hostile capabiliti
     const publicReference = apiAnalysis.reconciliationInput.references[0] as { requested: unknown };
     assert.throws(
       /**
-       * Triggers the expected assertion failure.
+       * Attempts to replace a field on the frozen public reference with a hostile proxy.
        *
        * Inputs: no arguments.
-       * Outputs: the operation result if it unexpectedly succeeds; the assertion receives any failure.
-       * Does not handle: decide whether the captured failure matches the assertion.
-       * Side effects: executes `{ publicReference.requested = new Proxy(Object.create(null), hostileTraps); }`.
+       * Outputs: Returns undefined only if the frozen-field mutation unexpectedly succeeds; otherwise throws for `assert.throws`.
+       * Does not handle: Mutating the private source snapshot, matching the thrown error, or invoking proxy traps.
+       * Side effects: Attempts a write to the frozen public reference.
        */
       () => {
       publicReference.requested = new Proxy(Object.create(null), hostileTraps);
@@ -5153,12 +5153,12 @@ test("runtime deployment attestations bind sources and reject hostile capabiliti
     ]) {
       assert.throws(
         /**
-         * Triggers the expected assertion failure.
+         * Attempts reconciliation preparation with one forged, cloned, or hostile capability candidate.
          *
          * Inputs: no arguments.
-         * Outputs: the operation result if it unexpectedly succeeds; the assertion receives any failure.
-         * Does not handle: decide whether the captured failure matches the assertion.
-         * Side effects: executes `prepareIssuedLocalDeploymentReconciliation(hostile, attestationPreflight)`.
+         * Outputs: Does not normally return because preparation rejects the candidate; an unexpected prepared value is returned to `assert.throws`.
+         * Does not handle: Matching the thrown error, inspecting hostile properties, or reconciling a member.
+         * Side effects: Calls local deployment preparation with the current hostile candidate.
          */
         () => prepareIssuedLocalDeploymentReconciliation(hostile, attestationPreflight),
         fixedFailure,
@@ -5199,12 +5199,12 @@ test("runtime deployment attestations bind sources and reject hostile capabiliti
     const candidate = rewritten.reconciliationInput.bindingCandidates[0] as { destination: unknown };
     assert.throws(
       /**
-       * Triggers the expected assertion failure.
+       * Attempts to replace the frozen rewritten binding destination with a hostile proxy.
        *
        * Inputs: no arguments.
-       * Outputs: the operation result if it unexpectedly succeeds; the assertion receives any failure.
-       * Does not handle: decide whether the captured failure matches the assertion.
-       * Side effects: executes `{ candidate.destination = new Proxy(Object.create(null), hostileTraps); }`.
+       * Outputs: Returns undefined only if the frozen-field mutation unexpectedly succeeds; otherwise throws for `assert.throws`.
+       * Does not handle: Mutating the private prepared facts, matching the thrown error, or invoking proxy traps.
+       * Side effects: Attempts a write to the frozen public binding candidate.
        */
       () => {
       candidate.destination = new Proxy(Object.create(null), hostileTraps);
@@ -5216,24 +5216,24 @@ test("runtime deployment attestations bind sources and reject hostile capabiliti
     assert.equal("issueLocalDeploymentPreparation" in analysisModule, false);
     assert.throws(
       /**
-       * Triggers the expected assertion failure.
+       * Attempts reconciliation preparation with the raw hostile provisioning-document proxy.
        *
        * Inputs: no arguments.
-       * Outputs: the operation result if it unexpectedly succeeds; the assertion receives any failure.
-       * Does not handle: decide whether the captured failure matches the assertion.
-       * Side effects: executes `prepareIssuedLocalDeploymentReconciliation(rawDocumentProxy, attestationPreflight)`.
+       * Outputs: Does not normally return because preparation rejects the raw proxy; an unexpected prepared value is returned to `assert.throws`.
+       * Does not handle: Matching the thrown error, reflecting on the proxy, or reconciling a member.
+       * Side effects: Calls local deployment preparation with the hostile raw-document proxy.
        */
       () => prepareIssuedLocalDeploymentReconciliation(rawDocumentProxy, attestationPreflight),
       fixedFailure,
     );
     assert.throws(
       /**
-       * Triggers the expected assertion failure.
+       * Attempts reconciliation preparation with the raw hostile deployment-member array proxy.
        *
        * Inputs: no arguments.
-       * Outputs: the operation result if it unexpectedly succeeds; the assertion receives any failure.
-       * Does not handle: decide whether the captured failure matches the assertion.
-       * Side effects: executes `prepareIssuedLocalDeploymentReconciliation(rawMemberArrayProxy, attestationPreflight)`.
+       * Outputs: Does not normally return because preparation rejects the raw proxy; an unexpected prepared value is returned to `assert.throws`.
+       * Does not handle: Matching the thrown error, reflecting on the proxy, or reconciling a member.
+       * Side effects: Calls local deployment preparation with the hostile raw-member-array proxy.
        */
       () => prepareIssuedLocalDeploymentReconciliation(rawMemberArrayProxy, attestationPreflight),
       fixedFailure,

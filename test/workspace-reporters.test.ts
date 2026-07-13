@@ -146,12 +146,12 @@ test("workspace reporter rejects contradictory deployment member identities",
 
   assert.throws(
     /**
-     * Triggers the expected assertion failure.
+     * Invokes the reporter with duplicate deployment-member identities to exercise its duplicate-member rejection.
      *
      * Inputs: no arguments.
-     * Outputs: the operation result if it unexpectedly succeeds; the assertion receives any failure.
-     * Does not handle: decide whether the captured failure matches the assertion.
-     * Side effects: executes `buildWorkspaceJsonReport(input)`.
+     * Outputs: Does not normally return because the reporter rejects the duplicate members; an unexpected report is returned to `assert.throws`.
+     * Does not handle: Matching the thrown error, repairing the invalid input, or rendering a report.
+     * Side effects: Calls the reporter with the local invalid input; it performs no I/O.
      */
     () => buildWorkspaceJsonReport(input),
     /**
@@ -189,12 +189,12 @@ test("workspace reporter rejects duplicate declared deployment repository identi
 
   assert.throws(
     /**
-     * Triggers the expected assertion failure.
+     * Invokes the reporter with duplicate declared repository identities to exercise its invalid-input rejection.
      *
      * Inputs: no arguments.
-     * Outputs: the operation result if it unexpectedly succeeds; the assertion receives any failure.
-     * Does not handle: decide whether the captured failure matches the assertion.
-     * Side effects: executes `buildWorkspaceJsonReport(input)`.
+     * Outputs: Does not normally return because the reporter rejects the duplicate declarations; an unexpected report is returned to `assert.throws`.
+     * Does not handle: Matching the thrown error, deduplicating declarations, or rendering a report.
+     * Side effects: Calls the reporter with the local invalid input; it performs no I/O.
      */
     () => buildWorkspaceJsonReport(input),
     /**

@@ -138,12 +138,12 @@ test("viewer repository limit includes the synthetic deployments repository",
 
   assert.throws(
     /**
-     * Triggers the expected assertion failure.
+     * Converts the over-cap repository report so the view-model builder rejects its synthetic repository row.
      *
      * Inputs: no arguments.
-     * Outputs: the operation result if it unexpectedly succeeds; the assertion receives any failure.
-     * Does not handle: decide whether the captured failure matches the assertion.
-     * Side effects: executes `workspaceReportToViewerRequest(report, undefined)`.
+     * Outputs: Does not normally return because conversion exceeds the repository limit; an unexpected viewer request is returned to `assert.throws`.
+     * Does not handle: Matching the thrown error, starting a viewer, or reducing the report.
+     * Side effects: Calls the in-memory view-model converter; it performs no I/O.
      */
     () => workspaceReportToViewerRequest(report, undefined),
     /**
@@ -202,12 +202,12 @@ test("viewer result limit includes each synthetic repository Overview row",
 
   assert.throws(
     /**
-     * Triggers the expected assertion failure.
+     * Converts the over-cap key-group report so the view-model builder rejects its synthetic overview rows.
      *
      * Inputs: no arguments.
-     * Outputs: the operation result if it unexpectedly succeeds; the assertion receives any failure.
-     * Does not handle: decide whether the captured failure matches the assertion.
-     * Side effects: executes `workspaceReportToViewerRequest(report, undefined)`.
+     * Outputs: Does not normally return because conversion exceeds the result limit; an unexpected viewer request is returned to `assert.throws`.
+     * Does not handle: Matching the thrown error, rendering HTML, or reducing the report.
+     * Side effects: Calls the in-memory view-model converter; it performs no I/O.
      */
     () => workspaceReportToViewerRequest(report, undefined),
     /**
@@ -271,12 +271,12 @@ test("viewer result limit includes each deployment member partition row",
 
   assert.throws(
     /**
-     * Triggers the expected assertion failure.
+     * Converts the over-cap deployment-member report so the view-model builder rejects its synthetic member rows.
      *
      * Inputs: no arguments.
-     * Outputs: the operation result if it unexpectedly succeeds; the assertion receives any failure.
-     * Does not handle: decide whether the captured failure matches the assertion.
-     * Side effects: executes `workspaceReportToViewerRequest(report, undefined)`.
+     * Outputs: Does not normally return because conversion exceeds the result limit; an unexpected viewer request is returned to `assert.throws`.
+     * Does not handle: Matching the thrown error, starting a viewer, or reducing member cardinality.
+     * Side effects: Calls the in-memory view-model converter; it performs no I/O.
      */
     () => workspaceReportToViewerRequest(report, undefined),
     /**
