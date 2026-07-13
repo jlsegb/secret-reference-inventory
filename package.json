@@ -79,7 +79,7 @@
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "test": "tsx --test test/*.test.ts",
     "test:coverage": "tsx --test --experimental-test-coverage test/*.test.ts",
-    "docs:check": "node ./scripts/docs-check.mjs",
+    "docs:check": "node ./scripts/docs-check.mjs --root .",
     "verify": "npm run typecheck && npm test && npm run build",
     "release:smoke": "npm run build && node ./scripts/smoke-local-package-install.mjs",
     "release:check": "npm run build && node ./scripts/check-release-readiness.mjs && node ./scripts/smoke-local-package-install.mjs"

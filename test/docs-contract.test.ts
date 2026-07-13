@@ -20,9 +20,13 @@ type DocumentationResult = {
 };
 
 type DocumentationChecker = {
-  checkDocumentationContract(rootDirectory: string): DocumentationResult;
+  checkDocumentationContract(rootDirectory: string, requestedFiles?: readonly string[]): DocumentationResult;
   formatDiagnostics(result: DocumentationResult): string;
   listImplementationFiles(rootDirectory: string): readonly string[];
+  documentationIssues(jsDoc: string): readonly string[];
+  parseCheckerArguments(argumentsList: readonly string[]):
+    | { readonly ok: true; readonly rootDirectory: string; readonly requestedFiles: readonly string[] }
+    | { readonly ok: false; readonly message: string };
 };
 
 const testDirectory = dirname(fileURLToPath(import.meta.url));
@@ -91,6 +95,168 @@ test(
   assert.equal(report.includes("intentionally-private-function-name"), false);
   assert.equal(report.includes("do-not-report-this-source-text"), false);
   assert.equal(report.includes("types.d.ts"), false);
+  },
+);
+
+test(
+  "documentation contract rejects observed hollow templates while accepting concrete contracts",
+  /**
+   * Verifies the explicit template denylist catches prior migration placeholders without judging unrelated prose.
+   *
+   * Inputs: Complete static JSDoc blocks containing one known placeholder or concrete equivalent language.
+   * Outputs: Assertion success for each stable rejection code and no issue for the concrete block.
+   * Does not handle: Semantic verification of documentation beyond the fixed structural and template rules.
+   * Side effects: None.
+   */
+  () => {
+    const concrete = [
+      "/**",
+      " * Records a normalized result for the current test assertion.",
+      " *",
+      " * Inputs: A normalized record selected by the assertion callback.",
+      " * Outputs: A boolean indicating whether the record has the expected status.",
+      " * Does not handle: Setup or cleanup outside this assertion callback.",
+      " * Side effects: Reads the supplied record without mutation.",
+      " */",
+    ].join("\n");
+    const templates = [
+      {
+        text: concrete.replace(
+          "Does not handle: Setup or cleanup outside this assertion callback.",
+          "Does not handle: Scenarios other than this test, including production workspace execution.",
+        ),
+        code: "REJECTED_TEMPLATE_SCENARIO_SCOPE",
+        nearMiss: concrete.replace(
+          "Does not handle: Setup or cleanup outside this assertion callback.",
+          "Does not handle: Scenarios other than this test, including production workspace execution with a real deployment manifest.",
+        ),
+      },
+      {
+        text: concrete.replace(
+          "Inputs: A normalized record selected by the assertion callback.",
+          "Inputs: Parameters supplied by helper callers.",
+        ),
+        code: "REJECTED_TEMPLATE_HELPER_INPUT",
+        nearMiss: concrete.replace(
+          "Inputs: A normalized record selected by the assertion callback.",
+          "Inputs: Parameters from helper callers that describe the request scope.",
+        ),
+      },
+      {
+        text: concrete.replace(
+          "Outputs: A boolean indicating whether the record has the expected status.",
+          "Outputs: The helper result defined by its body (boolean).",
+        ),
+        code: "REJECTED_TEMPLATE_HELPER_OUTPUT",
+        nearMiss: concrete.replace(
+          "Outputs: A boolean indicating whether the record has the expected status.",
+          "Outputs: The helper result defined by its body after it validates the requested record.",
+        ),
+      },
+      {
+        text: concrete.replace(
+          "Side effects: Reads the supplied record without mutation.",
+          "Side effects: Mutates the captured test-local collection/cache named in its body.",
+        ),
+        code: "REJECTED_TEMPLATE_TEST_MUTATION",
+        nearMiss: concrete.replace(
+          "Side effects: Reads the supplied record without mutation.",
+          "Side effects: Mutates the captured test-local cache named in its body after validation.",
+        ),
+      },
+      {
+        text: concrete.replace(
+          "Records a normalized result for the current test assertion.",
+          "Derives the callback result.",
+        ),
+        code: "REJECTED_TEMPLATE_CALLBACK_PURPOSE",
+        nearMiss: concrete.replace(
+          "Records a normalized result for the current test assertion.",
+          "Derives the callback result count for the requested deployment status.",
+        ),
+      },
+      {
+        text: concrete.replace(
+          "Outputs: A boolean indicating whether the record has the expected status.",
+          "Outputs: The callback result or completion consumed by the enclosing test call.",
+        ),
+        code: "REJECTED_TEMPLATE_CALLBACK_OUTPUT",
+        nearMiss: concrete.replace(
+          "Outputs: A boolean indicating whether the record has the expected status.",
+          "Outputs: The callback result consumed by the enclosing deployment mapper.",
+        ),
+      },
+    ];
+
+    assert.deepEqual(checker.documentationIssues(concrete), []);
+    for (const template of templates) {
+      assert.equal(checker.documentationIssues(template.text).includes(template.code), true);
+      assert.deepEqual(checker.documentationIssues(template.nearMiss), []);
+    }
+  },
+);
+
+test(
+  "documentation contract supports safe repeated file lanes without a scope escape hatch",
+  /**
+   * Verifies repeated logical --file selection is deterministic, inventory-bound, and does not expose invalid input.
+   *
+   * Inputs: The valid static fixture root, valid selected paths, and invalid command-line path forms.
+   * Outputs: Assertion success for one selected file, fixed unavailable diagnostics, and rejected invalid arguments.
+   * Does not handle: Source-wide migration completeness or file-system repairs for unavailable candidates.
+   * Side effects: Reads local fixture files through the checker.
+   */
+  () => {
+    const selected = checker.checkDocumentationContract(resolve(fixtureRoot, "valid"), ["src/functions.ts"]);
+    const unavailable = checker.checkDocumentationContract(resolve(fixtureRoot, "valid"), ["src/missing.ts"]);
+    const invalidSelection = checker.checkDocumentationContract(resolve(fixtureRoot, "valid"), ["src/../private-token.ts"]);
+    const parsed = checker.parseCheckerArguments([
+      "--root",
+      resolve(fixtureRoot, "valid"),
+      "--file",
+      "scripts/tool.mjs",
+      "--file",
+      "src/functions.ts",
+      "--file",
+      "src/functions.ts",
+    ]);
+    const invalidScope = checker.parseCheckerArguments(["--scope", "src"]);
+    const invalidPath = checker.parseCheckerArguments(["--file", "src/../private-token.ts"]);
+    const unavailableReport = checker.formatDiagnostics(unavailable);
+    const invalidSelectionReport = checker.formatDiagnostics(invalidSelection);
+
+    assert.equal(selected.fileInventory, "filesystem-fallback");
+    assert.equal(selected.filesChecked, 1);
+    assert.deepEqual(selected.diagnostics, []);
+    assert.deepEqual(unavailable.diagnostics, [
+      {
+        file: "<discovery>",
+        line: 0,
+        category: "discovery",
+        code: "SOURCE_DISCOVERY_REQUESTED_FILE_UNAVAILABLE",
+      },
+    ]);
+    assert.equal(unavailableReport.includes("src/missing.ts"), false);
+    assert.deepEqual(invalidSelection.diagnostics, [
+      {
+        file: "<discovery>",
+        line: 0,
+        category: "discovery",
+        code: "SOURCE_DISCOVERY_REQUESTED_FILE_INVALID",
+      },
+    ]);
+    assert.equal(unavailableReport.includes("private-token"), false);
+    assert.equal(invalidSelectionReport.includes("private-token"), false);
+    assert.deepEqual(parsed, {
+      ok: true,
+      rootDirectory: resolve(fixtureRoot, "valid"),
+      requestedFiles: ["scripts/tool.mjs", "src/functions.ts"],
+    });
+    assert.equal(invalidScope.ok, false);
+    assert.equal(invalidPath.ok, false);
+    if (!invalidPath.ok) {
+      assert.equal(invalidPath.message.includes("private-token"), false);
+    }
   },
 );
 

@@ -82,6 +82,25 @@ case-sensitive sections `Inputs:`, `Outputs:`, `Does not handle:`, and `Side eff
 must each have nonempty content. State `None.` explicitly when a section has no
 applicable behavior.
 
+## Template guard and review requirement
+
+The checker also rejects a small, explicit list of hollow templates found during
+the initial documentation migration. These are mechanical rejection rules, not
+natural-language understanding. Each rule compares one complete purpose or
+named section value after trimming, collapsing internal whitespace, and
+lowercasing it; it never rejects a phrase merely because it starts similarly.
+The strictly bounded values cover scenario-only exclusions for production
+workspace execution, helper input/output text that defers only to a caller or
+body, generic callback-result prose, and test-local collection/cache mutation
+phrased only as "named in its body". The stable diagnostic identifies the
+rejected template family but never prints the documentation text.
+
+Passing this check is necessary but not sufficient. It proves only direct
+attachment, required structure, and the absence of those known templates. It
+does not prove that a block accurately describes its function, that an omission
+is appropriate, or that a side effect is complete. Every documentation change
+therefore still requires fresh semantic review against the implementation.
+
 ## Diagnostics and adoption
 
 Diagnostics contain only a privacy-safe logical path, line, function category,
@@ -95,8 +114,8 @@ The command is expected to report missing blocks until every existing source,
 script, and test implementation has been documented. This is deliberate: the
 fixture suite verifies the checker independently, while documentation migration
 lands in separate implementation-owned changes. It intentionally stays outside
-`verify` until DOC3 and DOC4 reach zero diagnostics; DOC5 will wire it into the
-required CI command at that point.
+`verify` until the repository-wide migration reaches zero diagnostics; the
+dedicated integration task will wire it into the required CI command only then.
 
 ## Local usage
 
@@ -106,8 +125,19 @@ Run the repository check:
 npm run docs:check
 ```
 
+Run an explicit local lane by repeating `--file` after npm's argument separator.
+Each value must be a canonical, repository-relative implementation path under
+`src`, `scripts`, or `test`; it is selected from the same tracked inventory as a
+full run. An invalid, ignored, untracked, missing, unreadable, or unsafe
+requested target fails closed with a fixed discovery diagnostic. The checker
+never supports `--scope`.
+
+```sh
+npm run docs:check -- --file src/workspace/runtime.ts --file test/workspace-runtime.test.ts
+```
+
 Run the same checker against another local checkout or a fixture root:
 
 ```sh
-node scripts/docs-check.mjs --root /absolute/path/to/repository
+node scripts/docs-check.mjs --root /absolute/path/to/repository --file src/core.ts
 ```

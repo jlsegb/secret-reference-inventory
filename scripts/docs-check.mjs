@@ -12,7 +12,43 @@ const ROOT_DISCOVERY_FAILURE = "SOURCE_DISCOVERY_ROOT_UNAVAILABLE";
 const CANDIDATE_DISCOVERY_FAILURE = "SOURCE_DISCOVERY_CANDIDATE_UNAVAILABLE";
 const READ_DISCOVERY_FAILURE = "SOURCE_DISCOVERY_READ_UNAVAILABLE";
 const GIT_LOGICAL_PATH_FAILURE = "SOURCE_DISCOVERY_TRACKED_LOGICAL_PATH_INVALID";
+const REQUESTED_FILE_INVALID_FAILURE = "SOURCE_DISCOVERY_REQUESTED_FILE_INVALID";
+const REQUESTED_FILE_UNAVAILABLE_FAILURE = "SOURCE_DISCOVERY_REQUESTED_FILE_UNAVAILABLE";
 const OPAQUE_DIAGNOSTIC_FILE = "<opaque-file>";
+const CLI_USAGE =
+  "usage: node scripts/docs-check.mjs [--root <repository-root>] [--file <logical-implementation-file>]...";
+const REJECTED_TEMPLATE_RULES = [
+  {
+    code: "REJECTED_TEMPLATE_SCENARIO_SCOPE",
+    field: "Does not handle",
+    values: new Set(["scenarios other than this test, including production workspace execution."]),
+  },
+  {
+    code: "REJECTED_TEMPLATE_HELPER_INPUT",
+    field: "Inputs",
+    values: new Set(["parameters supplied by helper callers."]),
+  },
+  {
+    code: "REJECTED_TEMPLATE_HELPER_OUTPUT",
+    field: "Outputs",
+    values: new Set(["the helper result defined by its body (boolean)."]),
+  },
+  {
+    code: "REJECTED_TEMPLATE_TEST_MUTATION",
+    field: "Side effects",
+    values: new Set(["mutates the captured test-local collection/cache named in its body."]),
+  },
+  {
+    code: "REJECTED_TEMPLATE_CALLBACK_PURPOSE",
+    field: "purpose",
+    values: new Set(["derives the callback result.", "derives callback result."]),
+  },
+  {
+    code: "REJECTED_TEMPLATE_CALLBACK_OUTPUT",
+    field: "Outputs",
+    values: new Set(["the callback result or completion consumed by the enclosing test call."]),
+  },
+];
 
 /**
  * Determines whether a tracked logical path is an implementation file in the documented scope.
@@ -39,6 +75,44 @@ export function isImplementationFile(logicalPath) {
  */
 export function isDocumentationCheckerFixture(logicalPath) {
   return logicalPath.startsWith("test/fixtures/docs-contract/");
+}
+
+/**
+ * Determines whether a caller-supplied lane file is a canonical eligible logical implementation path.
+ *
+ * Inputs: A candidate logical path supplied through the programmatic or command-line lane selector.
+ * Outputs: True only when the path is canonical, in the documented implementation scope, and not a checker fixture.
+ * Does not handle: Verifying that the path is tracked or safely resolvable; discovery performs those checks.
+ * Side effects: None.
+ */
+export function isRequestedImplementationFile(logicalPath) {
+  return (
+    normalizeLogicalPath(logicalPath) === logicalPath &&
+    isImplementationFile(logicalPath) &&
+    !isDocumentationCheckerFixture(logicalPath)
+  );
+}
+
+/**
+ * Validates and deterministically deduplicates requested lane file paths without retaining invalid input.
+ *
+ * Inputs: An array of logical implementation paths requested by a caller.
+ * Outputs: A success object with sorted canonical paths, or a fixed invalid result with no supplied path.
+ * Does not handle: Root resolution, Git inventory lookup, or file-system containment checks.
+ * Side effects: None.
+ */
+export function normalizeRequestedImplementationFiles(requestedFiles) {
+  if (!Array.isArray(requestedFiles)) {
+    return { ok: false, paths: [] };
+  }
+  const paths = new Set();
+  for (const requestedFile of requestedFiles) {
+    if (!isRequestedImplementationFile(requestedFile)) {
+      return { ok: false, paths: [] };
+    }
+    paths.add(requestedFile);
+  }
+  return { ok: true, paths: Array.from(paths).sort(compareStrings) };
 }
 
 /**
@@ -316,13 +390,22 @@ export function compareDirectoryEntries(left, right) {
 /**
  * Discovers implementation candidates and source-inventory state for a local repository root.
  *
- * Inputs: A repository root directory.
+ * Inputs: A repository root directory and optional canonical requested logical file paths.
  * Outputs: Eligible logical/canonical candidates, fixed discovery failures, and the inventory mode used.
  * Does not handle: Repairing source links, Git metadata, or documentation gaps.
  * Side effects: Reads filesystem metadata and invokes local Git only for exact repository roots.
  */
-export function discoverImplementationFiles(rootDirectory) {
+export function discoverImplementationFiles(rootDirectory, requestedFiles = []) {
   const failures = new Set();
+  const requestedSelection = normalizeRequestedImplementationFiles(requestedFiles);
+  if (!requestedSelection.ok) {
+    failures.add(REQUESTED_FILE_INVALID_FAILURE);
+    return {
+      candidates: [],
+      failures: Array.from(failures).sort(compareStrings),
+      fileInventory: "unavailable",
+    };
+  }
   const canonicalRoot = canonicalizeScanRoot(rootDirectory, failures);
   if (canonicalRoot === undefined) {
     return {
@@ -367,12 +450,41 @@ export function discoverImplementationFiles(rootDirectory) {
     }
   }
   result.sort(compareCandidates);
+  const selected = selectRequestedCandidates(result, requestedSelection.paths, failures);
   return {
-    candidates: result,
+    candidates: selected,
     failures: Array.from(failures).sort(compareStrings),
     fileInventory: inventory.mode,
     canonicalRoot,
   };
+}
+
+/**
+ * Restricts discovered candidates to an explicit lane while failing closed for absent requested files.
+ *
+ * Inputs: Sorted resolved candidates, sorted canonical requested paths, and a mutable fixed-failure collection.
+ * Outputs: All candidates for an empty selection, otherwise only candidates named by every requested path.
+ * Does not handle: Recovering an untracked, missing, unreadable, or unsafe requested target.
+ * Side effects: May add one fixed unavailable-request failure without retaining requested path text.
+ */
+export function selectRequestedCandidates(candidates, requestedPaths, failures) {
+  if (requestedPaths.length === 0) {
+    return candidates;
+  }
+  const candidatesByLogicalPath = new Map();
+  for (const candidate of candidates) {
+    candidatesByLogicalPath.set(candidate.logicalPath, candidate);
+  }
+  const selected = [];
+  for (const requestedPath of requestedPaths) {
+    const candidate = candidatesByLogicalPath.get(requestedPath);
+    if (candidate === undefined) {
+      failures.add(REQUESTED_FILE_UNAVAILABLE_FAILURE);
+      continue;
+    }
+    selected.push(candidate);
+  }
+  return selected;
 }
 
 /**
@@ -598,7 +710,43 @@ export function documentationIssues(jsDoc) {
       issues.push(`MISSING_${sectionName.toUpperCase().replace(/\s+/gu, "_")}`);
     }
   }
+  for (const issue of rejectedTemplateIssues(purpose, sectionContents)) {
+    issues.push(issue);
+  }
   return issues;
+}
+
+/**
+ * Rejects a small, versioned set of previously observed hollow documentation templates.
+ *
+ * Inputs: The parsed purpose sentence and structured-section content for one JSDoc block.
+ * Outputs: Stable rejection codes for exact prohibited template families, or an empty list.
+ * Does not handle: Determining whether other prose is semantically complete, true, or useful.
+ * Side effects: None.
+ */
+export function rejectedTemplateIssues(purpose, sectionContents) {
+  const issues = [];
+  for (const rule of REJECTED_TEMPLATE_RULES) {
+    const documentedValue = rule.field === "purpose"
+      ? purpose
+      : sectionContents.get(rule.field) ?? "";
+    if (rule.values.has(normalizeDocumentationValue(documentedValue))) {
+      issues.push(rule.code);
+    }
+  }
+  return issues;
+}
+
+/**
+ * Canonicalizes one complete documentation field before it is compared to a known hollow template.
+ *
+ * Inputs: One purpose or structured-section value from a parsed JSDoc block.
+ * Outputs: A trimmed, whitespace-collapsed, lowercase value suitable only for exact template comparison.
+ * Does not handle: Semantic equivalence, punctuation rewriting, or partial phrase matching.
+ * Side effects: None.
+ */
+export function normalizeDocumentationValue(documentedValue) {
+  return documentedValue.trim().replace(/\s+/gu, " ").toLocaleLowerCase("en-US");
 }
 
 /**
@@ -749,13 +897,13 @@ export function compareDiagnostics(left, right) {
 /**
  * Evaluates the full documented implementation scope for a repository root.
  *
- * Inputs: A repository root directory.
+ * Inputs: A repository root directory and optional canonical requested logical file paths.
  * Outputs: Checked-file count and deterministic documentation-contract diagnostics.
  * Does not handle: Files outside src, scripts, and test; dependencies; generated output; and checker fixtures.
  * Side effects: Reads filesystem metadata and source files.
  */
-export function checkDocumentationContract(rootDirectory = process.cwd()) {
-  const discovery = discoverImplementationFiles(rootDirectory);
+export function checkDocumentationContract(rootDirectory = process.cwd(), requestedFiles = []) {
+  const discovery = discoverImplementationFiles(rootDirectory, requestedFiles);
   const diagnostics = [];
   for (const failure of discovery.failures) {
     diagnostics.push(createDiscoveryDiagnostic(failure));
@@ -800,7 +948,7 @@ export function formatDiagnostics(result) {
 }
 
 /**
- * Parses the optional checker root argument without accepting unrelated flags.
+ * Parses the legacy root-only checker arguments without accepting lane selectors or unrelated flags.
  *
  * Inputs: Command-line argument strings after the Node executable and script path.
  * Outputs: A root directory string or an error message string.
@@ -808,13 +956,46 @@ export function formatDiagnostics(result) {
  * Side effects: None.
  */
 export function parseRootArgument(argumentsList) {
-  if (argumentsList.length === 0) {
-    return { ok: true, rootDirectory: process.cwd() };
+  const parsed = parseCheckerArguments(argumentsList);
+  if (!parsed.ok || parsed.requestedFiles.length !== 0) {
+    return { ok: false, message: CLI_USAGE };
   }
-  if (argumentsList.length === 2 && argumentsList[0] === "--root" && argumentsList[1] !== undefined) {
-    return { ok: true, rootDirectory: argumentsList[1] };
+  return { ok: true, rootDirectory: parsed.rootDirectory };
+}
+
+/**
+ * Parses checker arguments for a repository-wide run or an explicit local documentation lane.
+ *
+ * Inputs: Command-line argument strings after the checker script path.
+ * Outputs: A root and sorted repeated --file selection, or a fixed usage error without supplied values.
+ * Does not handle: Shell expansion, configuration files, multiple roots, or noncanonical requested paths.
+ * Side effects: None.
+ */
+export function parseCheckerArguments(argumentsList) {
+  let rootDirectory = process.cwd();
+  let sawRoot = false;
+  const requestedFiles = [];
+  for (let index = 0; index < argumentsList.length; index += 1) {
+    const argument = argumentsList[index];
+    const value = argumentsList[index + 1];
+    if (argument === "--root" && !sawRoot && value !== undefined) {
+      rootDirectory = value;
+      sawRoot = true;
+      index += 1;
+      continue;
+    }
+    if (argument === "--file" && value !== undefined) {
+      requestedFiles.push(value);
+      index += 1;
+      continue;
+    }
+    return { ok: false, message: CLI_USAGE };
   }
-  return { ok: false, message: "usage: node scripts/docs-check.mjs [--root <repository-root>]" };
+  const selection = normalizeRequestedImplementationFiles(requestedFiles);
+  if (!selection.ok) {
+    return { ok: false, message: CLI_USAGE };
+  }
+  return { ok: true, rootDirectory, requestedFiles: selection.paths };
 }
 
 /**
@@ -826,12 +1007,12 @@ export function parseRootArgument(argumentsList) {
  * Side effects: Reads local files and writes a diagnostics report to stdout or stderr.
  */
 export function main(argumentsList = process.argv.slice(2)) {
-  const parsed = parseRootArgument(argumentsList);
+  const parsed = parseCheckerArguments(argumentsList);
   if (!parsed.ok) {
     process.stderr.write(`${parsed.message}\n`);
     return 1;
   }
-  const result = checkDocumentationContract(parsed.rootDirectory);
+  const result = checkDocumentationContract(parsed.rootDirectory, parsed.requestedFiles);
   const output = `${formatDiagnostics(result)}\n`;
   if (result.diagnostics.length === 0) {
     process.stdout.write(output);
