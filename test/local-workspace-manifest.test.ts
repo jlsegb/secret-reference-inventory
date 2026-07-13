@@ -8,9 +8,23 @@ import { readLocalWorkspaceManifest } from "../src/app/index.js";
 
 const SENTINEL = "sk_live_SENTINEL_DO_NOT_EMIT_123456789";
 
-test("local workspace manifest reader accepts explicit JSONC without serializing its path", async (t) => {
+test("local workspace manifest reader accepts explicit JSONC without serializing its path", /**
+ * Asserts JSONC manifest parsing issues opaque request state without exposing its canonical path.
+ *
+ * Inputs: The Node test context used to register cleanup.
+ * Outputs: A fulfilled promise when request/serialization assertions pass; assertion failure rejects it.
+ * Does not handle: Workspace scanning or invalid manifest parsing.
+ * Side effects: Creates/writes/removes a temporary manifest file.
+ */ async (t) => {
   const root = await mkdtemp(join(tmpdir(), "secret-usage-workspace-manifest-"));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(/**
+   * Removes the temporary valid-manifest directory after the test completes.
+   *
+   * Inputs: None.
+   * Outputs: A promise for recursive removal.
+   * Does not handle: Manifest parsing or assertion failures.
+   * Side effects: Deletes the temporary directory tree.
+   */ () => rm(root, { recursive: true, force: true }));
   const manifestPath = join(root, "workspace.jsonc");
   await writeFile(
     manifestPath,
@@ -37,9 +51,23 @@ test("local workspace manifest reader accepts explicit JSONC without serializing
   }
 });
 
-test("invalid manifest input yields a fixed error without retaining source text", async (t) => {
+test("invalid manifest input yields a fixed error without retaining source text", /**
+ * Asserts malformed JSON returns a fixed code and does not serialize the sentinel source text.
+ *
+ * Inputs: The Node test context used to register cleanup.
+ * Outputs: A fulfilled promise when fixed-code and no-retention assertions pass; assertion failure rejects it.
+ * Does not handle: Valid JSONC capability issuance.
+ * Side effects: Creates/writes/removes a temporary invalid-manifest file.
+ */ async (t) => {
   const root = await mkdtemp(join(tmpdir(), "secret-usage-workspace-invalid-"));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(/**
+   * Removes the temporary invalid-manifest directory after the test completes.
+   *
+   * Inputs: None.
+   * Outputs: A promise for recursive removal.
+   * Does not handle: Sentinel redaction assertions.
+   * Side effects: Deletes the temporary directory tree.
+   */ () => rm(root, { recursive: true, force: true }));
   const manifestPath = join(root, "workspace.json");
   await writeFile(manifestPath, "{ " + SENTINEL, "utf8");
 
